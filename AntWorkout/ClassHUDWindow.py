@@ -219,6 +219,8 @@ class HUDWindow(QWidget):
             self.remainingWorkoutHeader.setStyleSheet(xlTextStyleSheet)
             self.upNextLayout.addWidget(self.remainingWorkoutHeader, 4,0)
             self.remainingWorkoutList = LongVLabels(True, AppState.ftp, AppState.ftpRanges)
+            #a ramp test's blocks are added as they're ridden, so its list is always empty, not almost done
+            self.remainingWorkoutList.ui.widget.showAlmostDone = not self.rampTest
             self.remainingWorkoutList.setMinimumWidth(490)
             self.remainingWorkoutList.setFixedHeight(560)
             # self.remainingWorkoutList.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)

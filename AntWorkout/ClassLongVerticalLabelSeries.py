@@ -20,6 +20,7 @@ class LongVLabelSerial(QWidget):
         self.ftpRanges = ftpRanges
         self.fullText = ""
         self.moreText = "more..."
+        self.showAlmostDone = True #an empty list shows an "Almost done!" block
         self.scrollOffset = 0 #index of the first line shown
         self.wheelRemainder = 0
         self.dragStartY = None
@@ -65,7 +66,7 @@ class LongVLabelSerial(QWidget):
         maxLines = min(int(self.geometry().height()/self.row_height()), self.widgetCount)
         lines = [line for line in self.fullText.split("\n") if line.strip() != ""]
         if self.fullText == "":
-            shown = ["Almost done!"]
+            shown = ["Almost done!"] if self.showAlmostDone else []
         elif self.fullText == "DONE":
             geo = self.geometry()
             self.setFixedSize(geo.width(), geo.height())
