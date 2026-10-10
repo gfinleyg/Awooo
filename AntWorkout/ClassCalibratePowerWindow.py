@@ -358,10 +358,14 @@ class CalibratePowerWindow(QWidget):
         self.reviewStatus.setText("Saved calibration removed; readings are used as the meter reports them.")
 
     def close_window(self):
+        self.close()
+
+    def closeEvent(self, event):
+        #Cancel, Save, the title bar's X and Esc all end up here
         self.timer.stop()
         self.bridge.cancel_power_calibration()
         try:
             self.bridge.calibrationUpdate.disconnect(self.on_calibration_update)
         except (TypeError, RuntimeError):
             pass
-        self.close()
+        super().closeEvent(event)

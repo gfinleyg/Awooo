@@ -2187,6 +2187,10 @@ class HUDWindow(QWidget):
                 self.targetGauge.ui.widget.arcCenterValue = 0
                 self.targetGauge.ui.widget.setEnableDrawNewArc()
 
+    def end_available(self):
+        #the START/END button reads END: a free ride, or a workout once it's started (finished or not)
+        return self.startEndButton.text() == "END"
+
     #End Workout handler
     def confirm_end_workout(self):
         self.w = ConfirmEndWorkoutWindow(self)

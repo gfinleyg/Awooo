@@ -1,7 +1,7 @@
 import os
 
 from PyQt6.QtCore import QSize, Qt, QEvent
-from PyQt6.QtGui import QGuiApplication, QMouseEvent
+from PyQt6.QtGui import QGuiApplication, QKeySequence, QMouseEvent, QShortcut
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -122,6 +122,9 @@ class CustomTitleBar(QWidget):
         )
         self.close_button.setIcon(close_icon)
         self.close_button.clicked.connect(self.window().close)
+        #Esc doubles as the X on the popup windows (the main window's X asks to exit the app, so it's left off there)
+        if not mainWindow:
+            QShortcut(QKeySequence(Qt.Key.Key_Escape), self.window(), activated=self.close_button.click)
 
         # Normal button
         self.normal_button = QToolButton(self)

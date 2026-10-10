@@ -251,8 +251,16 @@ class SelectDevicesWindow(QWidget):
         WriteSelectedDeviceLines([line for line in ReadSelectedDeviceLines() if line != devTypeId.strip()])
 
     def exit_selection(self):
+        self.stop_blinking()
+        self.hide()
+
+    def closeEvent(self, event):
+        #the title bar's X and Esc
+        self.stop_blinking()
+        super().closeEvent(event)
+
+    def stop_blinking(self):
         if hasattr(self, "blinkTimer"):
             self.blinkTimer.stop()
         for button in self.buttonList:
             button.setStyleSheet("")
-        self.hide()

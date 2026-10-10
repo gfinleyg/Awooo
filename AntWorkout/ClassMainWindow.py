@@ -1,5 +1,6 @@
 
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 
 from ClassAnalogGauge import *
@@ -88,6 +89,9 @@ class MainWindow(QMainWindow):
 
         #fit the window to this screen's size (the theme's layout for it, see AppLayout.py)
         AppLayout.layout_window(self)
+
+        #Esc: the End Workout prompt during a ride (it pauses the ride), otherwise the same as the X (the exit prompt)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, activated=self.escape_pressed)
 
         #HUD will be set up once we're sure that FTP and Max HR are set
 
@@ -196,6 +200,24 @@ class MainWindow(QMainWindow):
         self.synopsisWidget.show()
         self.showMaximized()
    
+
+    def escape_pressed(self):
+        hud = getattr(self, "workoutHudWidget", None)
+        if hud is not None and hud.isVisible() and hud.end_available():
+            prompt = getattr(hud, "w", None)
+            if prompt is not None and prompt.isVisible():
+                #already up: bring it back rather than stacking a second one
+                prompt.raise_()
+                prompt.activateWindow()
+            else:
+                hud.confirm_end_workout()
+            return
+        prompt = getattr(self, "w", None)
+        if prompt is not None and prompt.isVisible():
+            prompt.raise_()
+            prompt.activateWindow()
+        else:
+            self.close()
 
     ###Generic close function
     def closeEvent(self, event):
