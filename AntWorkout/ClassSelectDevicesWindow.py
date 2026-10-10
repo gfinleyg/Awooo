@@ -3,6 +3,8 @@ import os
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QButtonGroup, QPushButton, QVBoxLayout, QWidget
 
+import AppLayout
+
 from ClassAnalogGauge import *
 from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
@@ -121,6 +123,9 @@ class SelectDevicesWindow(QWidget):
         self.selectDevicesButton.clicked.connect(self.exit_selection)
         selectionLayout.addWidget(self.selectDevicesButton)
         self.setLayout(selectionLayout)
+
+        #scaled for this screen, its text fitted to it (see AppLayout.py)
+        AppLayout.fit_dialog(self)
 
         # Don't change the selted devices files on initialization of this window
         self.windowInitDoneBool = False

@@ -3,6 +3,8 @@ import sys
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
 
+import AppLayout
+
 from ClassAnalogGauge import *
 from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
@@ -47,6 +49,9 @@ class ConfirmExitWindow(QWidget):
         exitLayout.addWidget(self.exitSynopsisConfirmButton)
         exitLayout.addWidget(self.exitSynopsisCancelButton)
         self.setLayout(exitLayout)
+
+        #scaled for this screen, its text fitted to it (see AppLayout.py)
+        AppLayout.fit_dialog(self)
 
     def exit_program(self):
         # Hide every window first so the app disappears the moment Yes is

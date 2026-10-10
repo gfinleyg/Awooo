@@ -4,6 +4,8 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                              QStackedWidget, QVBoxLayout, QWidget)
 
+import AppLayout
+
 from ClassCustomTitleBar import CustomTitleBar
 from ClassAntDevices import ROLE_POWER
 import ClassAntLogger
@@ -80,6 +82,12 @@ class CalibratePowerWindow(QWidget):
         nav.addWidget(self.nextButton)
         layout.addLayout(nav)
         self.setLayout(layout)
+
+        #scaled for this screen, its text fitted to it (see AppLayout.py)
+        AppLayout.fit_dialog(self)
+        #(each page's text fitted as it's shown too)
+        for i in range(self.pages.count()):
+            AppLayout.watch_screen(self.pages.widget(i))
 
         self.bridge.calibrationUpdate.connect(self.on_calibration_update)
         self.timer = QTimer()

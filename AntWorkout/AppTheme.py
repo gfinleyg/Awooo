@@ -212,14 +212,25 @@ _origSetBarColors = _origSpbLineColor = _origRescale = _origPlotLabelSetFont = N
 ui_scale = 1.0
 
 
+def layout_shrink(widget):
+    """How much smaller than the layout scale a popup window (and everything in it) is drawn so it fits the
+    screen (AppLayout.fit_dialog sets it on the window; 1: not shrunk)"""
+    shrink = 1.0
+    while widget is not None:
+        shrink *= getattr(widget, "_layoutShrink", 1.0)
+        widget = widget.parentWidget()
+    return shrink
+
+
 def widget_scale(widget):
     """The layout scale, for widgets but those marked _layoutExempt (and everything in them, e.g.
-    LayoutViewer's controls), which are never scaled"""
+    LayoutViewer's controls), which are never scaled; less in a popup window shrunk to fit the screen"""
+    start = widget
     while widget is not None:
         if getattr(widget, "_layoutExempt", False):
             return 1.0
         widget = widget.parentWidget()
-    return ui_scale
+    return ui_scale*layout_shrink(start)
 
 
 def sheet_source(widget):
@@ -430,6 +441,10 @@ def theme_graph(graph):
         titlePoints = float(str(size).rstrip("pt"))*factor
         title.item.setFont(THEME.map_font(QFont("Orbitron"), scale))
         title.setText(text, color=THEME.map_color(color), size=f"{titlePoints:.1f}pt")
+        #the title's row as tall as the title (pyqtgraph pins it at 30px, which cuts off a bigger one)
+        height = math.ceil(title.itemRect().height())
+        title.setMaximumHeight(height)
+        graph.plotScreen.layout.setRowFixedHeight(0, height)
     #the tick numbers: pyqtgraph's own grey unless the theme changes black, then that
     black = THEME.colors.get("#000000")
     for name in ("left", "right", "bottom"):

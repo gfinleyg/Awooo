@@ -1,6 +1,8 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QGridLayout, QPushButton, QWidget
 
+import AppLayout
+
 from ClassAnalogGauge import *
 from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
@@ -57,6 +59,9 @@ class ConfirmEndWorkoutWindow(QWidget):
         endLayout.addWidget(self.endWorkoutConfirmButton,3,0)
         endLayout.addWidget(self.endWorkoutCancelButton,3,1)
         self.setLayout(endLayout)
+
+        #scaled for this screen, its text fitted to it (see AppLayout.py)
+        AppLayout.fit_dialog(self)
 
     def restart_workout(self):
         self.pausedHere = False

@@ -1,6 +1,8 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QButtonGroup, QDialog, QGridLayout, QLabel, QPushButton, QRadioButton, QVBoxLayout
 
+import AppLayout
+
 from ClassCustomTitleBar import CustomTitleBar
 import Units
 
@@ -54,3 +56,6 @@ class MeasurementsWindow(QDialog):
         doneButton = QPushButton("Done")
         doneButton.clicked.connect(self.accept)
         layout.addWidget(doneButton, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        #scaled for this screen, its text fitted to it (see AppLayout.py)
+        AppLayout.fit_dialog(self)

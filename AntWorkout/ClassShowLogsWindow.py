@@ -1,6 +1,8 @@
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication, QHBoxLayout, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
+import AppLayout
+
 from ClassAnalogGauge import *
 from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
@@ -70,6 +72,9 @@ class ShowLogsWindow(QWidget):
         logsWindowLayout.addWidget(self.logTextEdit)
         logsWindowLayout.addLayout(buttonRow)
         self.setLayout(logsWindowLayout)
+
+        #scaled for this screen, its text fitted to it (see AppLayout.py)
+        AppLayout.fit_dialog(self)
 
         #Refreshes while open so a log viewed during an active workout stays current
         self.timer = QTimer()

@@ -109,3 +109,6 @@ Note that Qt no longer ships fonts. Deploy some (from https://dejavu-fonts.githu
 2026-10-02 15:29:03.924 [DISPLAY] Screen : 800x800 effective (800x800 physical, 1x scaling), available 800x800
 2026-10-02 15:29:03.978 [ERROR] Qt warning: This plugin does not support propagateSizeHints()
 2026-10-02 15:29:04.220 [ERROR] Qt warning: This plugin does not support propagateSizeHints()
+2026-10-10 15:42:43.489 [DISPLAY] ConnectDevicesWindow drawn at 0.663 to fit 800x800 (needs 1193x485 at 1)
+2026-10-10 15:42:45.850 [DISPLAY] ConnectDevicesWindow drawn at 0.6636 to fit 800x800 (needs 1668x686 at 1.4)
+2026-10-10 15:42:58.549 [DISPLAY] ConnectDevicesWindow drawn at 0.663 to fit 800x800 (needs 1193x485 at 1)

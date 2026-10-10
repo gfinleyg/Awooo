@@ -143,25 +143,27 @@ def _apply_sizes(root):
                        else (layout.spacing(),))
             layout._layoutOrigSpacing = (spacing, (margins.left(), margins.top(), margins.right(), margins.bottom()))
         spacing, margins = layout._layoutOrigSpacing
-        layout.setContentsMargins(*(gap(m) for m in margins))
+        #(a popup window shrunk to fit the screen has its gaps shrunk with it, see fit_dialog)
+        scale = AppTheme.ui_scale*AppTheme.layout_shrink(layout.parentWidget())
+        layout.setContentsMargins(*(gap(m, scale) for m in margins))
         if isinstance(layout, QGridLayout):
-            layout.setHorizontalSpacing(gap(spacing[0]))
-            layout.setVerticalSpacing(gap(spacing[1]))
+            layout.setHorizontalSpacing(gap(spacing[0], scale))
+            layout.setVerticalSpacing(gap(spacing[1], scale))
         else:
-            layout.setSpacing(gap(spacing[0]))
+            layout.setSpacing(gap(spacing[0], scale))
 
 
-def gap(design):
-    """A gap or margin of this many design px at the layout scale, on the GAP_GRID (rule 3): equal design gaps
-    come out equal, and keep their proportions, at every scale. Hairlines (under a grid step) just scale;
-    unset (-1) is Qt's default"""
+def gap(design, scale=None):
+    """A gap or margin of this many design px at the layout scale (or the scale given), on the GAP_GRID (rule 3):
+    equal design gaps come out equal, and keep their proportions, at every scale. Hairlines (under a grid step)
+    just scale; unset (-1) is Qt's default"""
     if design < 0:
         design = DEFAULT_GAP
     if design == 0:
         return 0
     if design >= GAP_GRID:
         design = int(design/GAP_GRID + 0.5)*GAP_GRID
-    return max(1, round(design*AppTheme.ui_scale))
+    return max(1, round(design*(AppTheme.ui_scale if scale is None else scale)))
 
 
 def _settle_layouts(root):
@@ -372,16 +374,50 @@ def watch_screen(widget):
         widget.installEventFilter(_textFitter)
 
 
+def _shrink_to_screen(dialog, available):
+    """Rule 1 for a popup window: steps its own scale (AppTheme.layout_shrink) down until it fits the available
+    area. Its buttons and labels take their fonts from the app wide stylesheet, which stays at the app's scale,
+    so the window carries its own copy of that to shrink along with it"""
+    shrink, tooBig = getattr(dialog, "_layoutShrink", 1.0), []
+    for _ in range(SCREEN_FIT_TRIES):
+        width, height = required_size(dialog)
+        fit = min(available.width()/max(width, 1), available.height()/max(height, 1))
+        if fit >= 1 or AppTheme.ui_scale*shrink <= MIN_SCALE:
+            break
+        tooBig.append(f"needs {width}x{height} at {AppTheme.ui_scale*shrink:g}")
+        #(a little under: not everything shrinks in proportion, e.g. borders and hairlines)
+        shrink = max(MIN_SCALE/AppTheme.ui_scale, int(shrink*fit*0.99*1000)/1000)
+        dialog._layoutShrink = shrink
+        dialog._themePrefixSheet = AppTheme._appSheet or ""
+        if not hasattr(dialog, "_themeOrigSheet"):
+            dialog._themeOrigSheet = ""
+        for widget in [dialog] + dialog.findChildren(QWidget):
+            if hasattr(widget, "_themeOrigSheet"):
+                AppTheme.original_set_stylesheet(widget, AppTheme.themed_sheet(widget))
+        _apply_sizes(dialog)
+    if tooBig:
+        ClassAntLogger.log_event("DISPLAY", f"{type(dialog).__name__} drawn at {AppTheme.ui_scale*shrink:g} to fit "
+                                 f"{available.width()}x{available.height()} ({'; '.join(tooBig)})")
+
+
 def fit_dialog(dialog):
-    """The layout scale and rules for a dialog (the pickers): its fixed sizes and gaps scaled, its size (as set
-    for the design size) scaled too and kept on the screen, and its text fitted once it's shown"""
+    """The layout scale and rules for a dialog or popup window (the pickers, the confirm/device/settings windows):
+    its fixed sizes and gaps scaled, its size (if it set one for the design size; otherwise its layout sizes it)
+    scaled too and kept on the screen, and its text fitted once it's shown. Rule 1 holds for it too: one that
+    needs more room than the screen has is drawn smaller (fonts, sizes and gaps alike) until it fits"""
     _apply_sizes(dialog)
     screen = (dialog.parentWidget() or dialog).screen()
     if screen is not None:
+        _shrink_to_screen(dialog, screen.availableGeometry())
+    if screen is not None and dialog.testAttribute(Qt.WidgetAttribute.WA_Resized):
         available = screen.availableGeometry()
         width = min(round(dialog.width()*AppTheme.ui_scale), available.width())
         height = min(round(dialog.height()*AppTheme.ui_scale), available.height())
         dialog.resize(width, height)
+        if dialog.testAttribute(Qt.WidgetAttribute.WA_Moved):
+            #(placed for the design size: moved back onto a smaller screen)
+            dialog.move(max(available.left(), min(dialog.x(), available.right() + 1 - width)),
+                        max(available.top(), min(dialog.y(), available.bottom() + 1 - height)))
     watch_screen(dialog)
 
 

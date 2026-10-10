@@ -1,6 +1,8 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
+import AppLayout
+
 from ClassAnalogGauge import *
 from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
@@ -128,6 +130,9 @@ class ConnectDevicesWindow(QWidget):
         self.goBackToReselectButton.clicked.connect(self.exit_selection)
         connectLayout.addWidget(self.goBackToReselectButton)
         self.setLayout(connectLayout)
+
+        #scaled for this screen, its text fitted to it (see AppLayout.py)
+        AppLayout.fit_dialog(self)
         
         
     def connect_devices(self):

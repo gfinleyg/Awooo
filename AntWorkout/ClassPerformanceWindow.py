@@ -1,6 +1,8 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QGridLayout, QLabel, QPushButton, QSlider, QVBoxLayout
 
+import AppLayout
+
 from ClassCustomTitleBar import CustomTitleBar
 import Performance
 
@@ -59,6 +61,9 @@ class PerformanceWindow(QDialog):
         doneButton = QPushButton("Done")
         doneButton.clicked.connect(self.accept)
         layout.addWidget(doneButton, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        #scaled for this screen, its text fitted to it (see AppLayout.py)
+        AppLayout.fit_dialog(self)
 
     def slider_moved(self, index):
         Performance.set_gauge_fps(Performance.GAUGE_FPS_CHOICES[index])
