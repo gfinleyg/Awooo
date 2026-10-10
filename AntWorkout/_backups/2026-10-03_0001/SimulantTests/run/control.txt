@@ -1,3 +1,0 @@
-run=C:\Users\gfinl\Documents\AntWorkout\SimulantTests\run\2026-10-02_235101_sensors
-scenario=sensors
-epoch=1791010270.151
