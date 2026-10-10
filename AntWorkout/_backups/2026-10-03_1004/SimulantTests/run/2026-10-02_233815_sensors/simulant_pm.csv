@@ -1,0 +1,148 @@
+1791009515.261,script,started
+1791009515.288,control,run=C:\Users\gfinl\Documents\AntWorkout\SimulantTests\run\2026-10-02_233815_sensors scenario=sensors epoch=none 
+1791009515.304,on,pairing
+1791009515.336,tx,pairing|cadence=80;power=180
+1791009520.382,tx,pairing|cadence=80;power=180
+1791009525.123,control,run=C:\Users\gfinl\Documents\AntWorkout\SimulantTests\run\2026-10-02_233815_sensors scenario=sensors epoch=1791009526.872 
+1791009525.646,tx,pairing|cadence=80;power=180
+1791009526.963,tx,ride|cadence=85;power=200
+1791009532.168,tx,ride|cadence=85;power=200
+1791009537.361,tx,ride|cadence=85;power=200
+1791009542.586,tx,ride|cadence=85;power=200
+1791009547.599,tx,ride|cadence=85;power=200
+1791009552.845,tx,ride|cadence=85;power=200
+1791009558.083,tx,ride|cadence=85;power=200
+1791009563.347,tx,ride|cadence=85;power=200
+1791009567.031,tx,harder|cadence=95;power=300
+1791009572.272,tx,harder|cadence=95;power=300
+1791009577.524,tx,harder|cadence=95;power=300
+1791009582.753,tx,harder|cadence=95;power=300
+1791009587.768,tx,harder|cadence=95;power=300
+1791009592.991,tx,harder|cadence=95;power=300
+1791009597.130,tx,stopped|cadence=0;power=0
+1791009602.384,tx,stopped|cadence=0;power=0
+1791009607.387,tx,stopped|cadence=0;power=0
+1791009612.389,tx,stopped|cadence=0;power=0
+1791009617.625,tx,stopped|cadence=0;power=0
+1791009622.645,tx,stopped|cadence=0;power=0
+1791009627.648,tx,stopped|cadence=0;power=0
+1791009632.107,tx,resume|cadence=85;power=200
+1791009637.130,tx,resume|cadence=85;power=200
+1791009642.131,tx,resume|cadence=85;power=200
+1791009647.384,tx,resume|cadence=85;power=200
+1791009652.645,tx,resume|cadence=85;power=200
+1791009657.855,tx,resume|cadence=85;power=200
+1791009662.073,tx,sc dropout|cadence=88;power=220
+1791009667.096,tx,sc dropout|cadence=88;power=220
+1791009672.098,tx,sc dropout|cadence=88;power=220
+1791009677.351,tx,sc dropout|cadence=88;power=220
+1791009682.612,tx,sc dropout|cadence=88;power=220
+1791009687.057,tx,sc back|cadence=88;power=220
+1791009692.069,tx,sc back|cadence=88;power=220
+1791009697.084,tx,sc back|cadence=88;power=220
+1791009702.099,tx,sc back|cadence=88;power=220
+1791009707.320,tx,sc back|cadence=88;power=220
+1791009712.052,tx,hr dropout|cadence=88;power=220
+1791009717.286,tx,hr dropout|cadence=88;power=220
+1791009722.297,tx,hr dropout|cadence=88;power=220
+1791009727.524,tx,hr dropout|cadence=88;power=220
+1791009732.531,tx,hr dropout|cadence=88;power=220
+1791009736.988,tx,hr back|cadence=88;power=220
+1791009741.999,tx,hr back|cadence=88;power=220
+1791009747.221,tx,hr back|cadence=88;power=220
+1791009752.462,tx,hr back|cadence=88;power=220
+1791009756.934,off,pm dropout
+1791009781.915,on,pm back
+1791009781.915,tx,pm back|cadence=85;power=200
+1791009787.159,tx,pm back|cadence=85;power=200
+1791009792.391,tx,pm back|cadence=85;power=200
+1791009797.632,tx,pm back|cadence=85;power=200
+1791009802.635,tx,pm back|cadence=85;power=200
+1791009807.899,tx,pm back|cadence=85;power=200
+1791009812.093,tx,done|cadence=85;power=200
+1791009817.315,tx,done|cadence=85;power=200
+1791009822.503,tx,done|cadence=85;power=200
+1791009827.689,tx,done|cadence=85;power=200
+1791009832.855,tx,done|cadence=85;power=200
+1791009838.046,tx,done|cadence=85;power=200
+1791009843.197,tx,done|cadence=85;power=200
+1791009848.349,tx,done|cadence=85;power=200
+1791009853.506,tx,done|cadence=85;power=200
+1791009858.655,tx,done|cadence=85;power=200
+1791009863.808,tx,done|cadence=85;power=200
+1791009868.968,tx,done|cadence=85;power=200
+1791009874.143,tx,done|cadence=85;power=200
+1791009879.317,tx,done|cadence=85;power=200
+1791009884.472,tx,done|cadence=85;power=200
+1791009889.622,tx,done|cadence=85;power=200
+1791009894.785,tx,done|cadence=85;power=200
+1791009899.960,tx,done|cadence=85;power=200
+1791009905.123,tx,done|cadence=85;power=200
+1791009910.289,tx,done|cadence=85;power=200
+1791009915.453,tx,done|cadence=85;power=200
+1791009920.624,tx,done|cadence=85;power=200
+1791009925.759,tx,done|cadence=85;power=200
+1791009930.836,tx,done|cadence=85;power=200
+1791009935.896,tx,done|cadence=85;power=200
+1791009941.016,tx,done|cadence=85;power=200
+1791009946.169,tx,done|cadence=85;power=200
+1791009951.303,tx,done|cadence=85;power=200
+1791009956.443,tx,done|cadence=85;power=200
+1791009961.587,tx,done|cadence=85;power=200
+1791009966.808,tx,done|cadence=85;power=200
+1791009972.072,tx,done|cadence=85;power=200
+1791009977.330,tx,done|cadence=85;power=200
+1791009982.597,tx,done|cadence=85;power=200
+1791009987.858,tx,done|cadence=85;power=200
+1791009993.079,tx,done|cadence=85;power=200
+1791009998.276,tx,done|cadence=85;power=200
+1791010003.419,tx,done|cadence=85;power=200
+1791010008.630,tx,done|cadence=85;power=200
+1791010013.821,tx,done|cadence=85;power=200
+1791010018.965,tx,done|cadence=85;power=200
+1791010024.164,tx,done|cadence=85;power=200
+1791010029.376,tx,done|cadence=85;power=200
+1791010034.544,tx,done|cadence=85;power=200
+1791010039.680,tx,done|cadence=85;power=200
+1791010044.906,tx,done|cadence=85;power=200
+1791010050.101,tx,done|cadence=85;power=200
+1791010055.309,tx,done|cadence=85;power=200
+1791010060.548,tx,done|cadence=85;power=200
+1791010065.743,tx,done|cadence=85;power=200
+1791010070.940,tx,done|cadence=85;power=200
+1791010076.108,tx,done|cadence=85;power=200
+1791010081.288,tx,done|cadence=85;power=200
+1791010086.514,tx,done|cadence=85;power=200
+1791010091.515,tx,done|cadence=85;power=200
+1791010096.760,tx,done|cadence=85;power=200
+1791010101.981,tx,done|cadence=85;power=200
+1791010107.177,tx,done|cadence=85;power=200
+1791010112.369,tx,done|cadence=85;power=200
+1791010117.532,tx,done|cadence=85;power=200
+1791010122.690,tx,done|cadence=85;power=200
+1791010127.875,tx,done|cadence=85;power=200
+1791010133.020,tx,done|cadence=85;power=200
+1791010138.195,tx,done|cadence=85;power=200
+1791010143.398,tx,done|cadence=85;power=200
+1791010148.586,tx,done|cadence=85;power=200
+1791010153.762,tx,done|cadence=85;power=200
+1791010158.934,tx,done|cadence=85;power=200
+1791010164.111,tx,done|cadence=85;power=200
+1791010169.281,tx,done|cadence=85;power=200
+1791010174.462,tx,done|cadence=85;power=200
+1791010179.655,tx,done|cadence=85;power=200
+1791010184.870,tx,done|cadence=85;power=200
+1791010190.042,tx,done|cadence=85;power=200
+1791010195.208,tx,done|cadence=85;power=200
+1791010200.371,tx,done|cadence=85;power=200
+1791010205.524,tx,done|cadence=85;power=200
+1791010210.669,tx,done|cadence=85;power=200
+1791010215.807,tx,done|cadence=85;power=200
+1791010221.047,tx,done|cadence=85;power=200
+1791010226.227,tx,done|cadence=85;power=200
+1791010231.405,tx,done|cadence=85;power=200
+1791010236.572,tx,done|cadence=85;power=200
+1791010241.772,tx,done|cadence=85;power=200
+1791010246.956,tx,done|cadence=85;power=200
+1791010252.126,tx,done|cadence=85;power=200
+1791010257.344,tx,done|cadence=85;power=200

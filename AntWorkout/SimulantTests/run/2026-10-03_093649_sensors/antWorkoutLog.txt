@@ -1,0 +1,44 @@
+2026-10-03 09:36:50.783 [ANT] New ANT session starting
+2026-10-03 09:36:50.785 [ANT] Opening ANT USB stick...
+2026-10-03 09:36:50.805 [SCAN] Discovered device type=17 number=1
+2026-10-03 09:36:50.805 [ANT] ANT initialized, scanning for devices
+2026-10-03 09:36:50.805 [SCAN] Discovered device type=120 number=2
+2026-10-03 09:36:50.806 [ANT_EVENT] EVENT_SERIAL_QUE_OVERFLOW (channel=0)
+2026-10-03 09:37:28.965 [BATTERY] Device type=120 number=2 battery New 100% 3.33V
+2026-10-03 09:38:00.983 [SCAN] Discovered device type=11 number=3
+2026-10-03 09:38:11.716 [SCAN] Discovered device type=121 number=4
+2026-10-03 09:38:11.807 [CONNECT] Connecting with selection: hrm=(120, 2), power=(11, 3), speed_cadence=(121, 4)
+2026-10-03 09:38:11.807 [ANT_EVENT] EVENT_CHANNEL_CLOSED (channel=0)
+2026-10-03 09:38:16.210 [BATTERY] Device type=11 number=3 battery New 3.33V
+2026-10-03 09:38:35.149 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=2)
+2026-10-03 09:38:37.178 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=1)
+2026-10-03 09:39:06.382 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=1)
+2026-10-03 09:39:30.561 [RECOVERY] DEVICE_DATA_STALLED id=4 type=121 frozen=6.1s - sensor is still transmitting but its reading hasn't changed; check battery/contact (no channel action taken)
+2026-10-03 09:39:49.564 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=1)
+2026-10-03 09:39:49.564 [RECOVERY] DEVICE_STALE id=3 type=11 silent=2.50s
+2026-10-03 09:39:51.571 [RECOVERY] DEVICE_RECOVERED id=3 type=11 age=0.26s
+2026-10-03 09:40:31.589 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=2)
+2026-10-03 09:40:32.590 [RECOVERY] DEVICE_STALE id=4 type=121 silent=3.22s
+2026-10-03 09:40:34.591 [RECOVERY] DEVICE_LOST id=4 type=121 silent=5.22s packets=431
+2026-10-03 09:40:34.591 [RECOVERY] RECOVERY reopening channel 2 (silent 5.2s, device=4 type=121)
+2026-10-03 09:40:34.592 [ANT_EVENT] EVENT_CHANNEL_CLOSED (channel=2)
+2026-10-03 09:40:39.601 [RECOVERY] RECOVERY not resetting the stick for lost=[4]: still hearing [2, 3], so the stick is working - leaving the channel searching
+2026-10-03 09:40:55.608 [RECOVERY] DEVICE_RECOVERED id=4 type=121 age=0.06s
+2026-10-03 09:41:21.374 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=0)
+2026-10-03 09:41:22.374 [RECOVERY] DEVICE_STALE id=2 type=120 silent=3.20s
+2026-10-03 09:41:24.376 [RECOVERY] DEVICE_LOST id=2 type=120 silent=5.20s packets=818
+2026-10-03 09:41:24.376 [RECOVERY] RECOVERY reopening channel 0 (silent 5.2s, device=2 type=120)
+2026-10-03 09:41:24.378 [ANT_EVENT] EVENT_CHANNEL_CLOSED (channel=0)
+2026-10-03 09:41:29.385 [RECOVERY] RECOVERY not resetting the stick for lost=[2]: still hearing [3, 4], so the stick is working - leaving the channel searching
+2026-10-03 09:41:34.899 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=1)
+2026-10-03 09:41:36.237 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=2)
+2026-10-03 09:41:45.609 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=2)
+2026-10-03 09:41:46.610 [RECOVERY] DEVICE_RECOVERED id=2 type=120 age=0.50s
+2026-10-03 09:41:48.816 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=2)
+2026-10-03 09:42:06.600 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=1)
+2026-10-03 09:42:06.600 [RECOVERY] DEVICE_STALE id=3 type=11 silent=2.50s
+2026-10-03 09:42:09.603 [RECOVERY] DEVICE_LOST id=3 type=11 silent=5.50s packets=721
+2026-10-03 09:42:09.603 [RECOVERY] RECOVERY reopening channel 1 (silent 5.5s, device=3 type=11)
+2026-10-03 09:42:09.605 [ANT_EVENT] EVENT_CHANNEL_CLOSED (channel=1)
+2026-10-03 09:42:14.614 [RECOVERY] RECOVERY not resetting the stick for lost=[3]: still hearing [2, 4], so the stick is working - leaving the channel searching
+2026-10-03 09:42:29.620 [RECOVERY] DEVICE_RECOVERED id=3 type=11 age=0.16s

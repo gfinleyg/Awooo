@@ -1,0 +1,20 @@
+{
+  "fonts": {
+    "main": {
+      "family": "Roboto Flex",
+      "scale": 100,
+      "weight": "Original"
+    },
+    "button": {
+      "family": "Roboto Flex",
+      "scale": 100,
+      "weight": "Original"
+    },
+    "gauge": {
+      "family": "Roboto Flex",
+      "scale": 100,
+      "weight": "Original"
+    }
+  },
+  "colors": {}
+}

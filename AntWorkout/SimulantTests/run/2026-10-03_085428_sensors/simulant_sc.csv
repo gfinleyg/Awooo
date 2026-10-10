@@ -1,0 +1,67 @@
+1791042944.186,script,started
+1791042944.188,control,run=C:\Users\gfinl\Documents\AntWorkout\SimulantTests\run\2026-10-03_085428_sensors scenario=sensors epoch=none 
+1791042944.194,on,pairing
+1791042944.198,tx,pairing|cadence=80;speed=28.0
+1791042949.420,tx,pairing|cadence=80;speed=28.0
+1791042954.651,tx,pairing|cadence=80;speed=28.0
+1791042957.009,control,run=C:\Users\gfinl\Documents\AntWorkout\SimulantTests\run\2026-10-03_085428_sensors scenario=sensors epoch=1791042958.907 
+1791042959.072,tx,ride|cadence=85;speed=30.0
+1791042964.262,tx,ride|cadence=85;speed=30.0
+1791042969.454,tx,ride|cadence=85;speed=30.0
+1791042974.722,tx,ride|cadence=85;speed=30.0
+1791042979.922,tx,ride|cadence=85;speed=30.0
+1791042985.054,tx,ride|cadence=85;speed=30.0
+1791042990.233,tx,ride|cadence=85;speed=30.0
+1791042995.473,tx,ride|cadence=85;speed=30.0
+1791042999.147,tx,harder|cadence=95;speed=36.0
+1791043004.409,tx,harder|cadence=95;speed=36.0
+1791043009.658,tx,harder|cadence=95;speed=36.0
+1791043014.827,tx,harder|cadence=95;speed=36.0
+1791043019.974,tx,harder|cadence=95;speed=36.0
+1791043025.124,tx,harder|cadence=95;speed=36.0
+1791043028.985,tx,stopped|cadence=0;speed=0.0
+1791043034.138,tx,stopped|cadence=0;speed=0.0
+1791043039.292,tx,stopped|cadence=0;speed=0.0
+1791043044.455,tx,stopped|cadence=0;speed=0.0
+1791043049.659,tx,stopped|cadence=0;speed=0.0
+1791043054.875,tx,stopped|cadence=0;speed=0.0
+1791043060.048,tx,stopped|cadence=0;speed=0.0
+1791043063.985,tx,resume|cadence=85;speed=30.0
+1791043069.169,tx,resume|cadence=85;speed=30.0
+1791043074.304,tx,resume|cadence=85;speed=30.0
+1791043079.429,tx,resume|cadence=85;speed=30.0
+1791043084.576,tx,resume|cadence=85;speed=30.0
+1791043089.714,tx,resume|cadence=85;speed=30.0
+1791043094.088,off,sc dropout
+1791043119.092,on,sc back
+1791043119.092,tx,sc back|cadence=88;speed=31.0
+1791043124.346,tx,sc back|cadence=88;speed=31.0
+1791043129.347,tx,sc back|cadence=88;speed=31.0
+1791043134.349,tx,sc back|cadence=88;speed=31.0
+1791043139.583,tx,sc back|cadence=88;speed=31.0
+1791043144.050,tx,hr dropout|cadence=88;speed=31.0
+1791043149.304,tx,hr dropout|cadence=88;speed=31.0
+1791043154.528,tx,hr dropout|cadence=88;speed=31.0
+1791043159.786,tx,hr dropout|cadence=88;speed=31.0
+1791043165.012,tx,hr dropout|cadence=88;speed=31.0
+1791043168.910,tx,hr back|cadence=88;speed=31.0
+1791043174.165,tx,hr back|cadence=88;speed=31.0
+1791043179.182,tx,hr back|cadence=88;speed=31.0
+1791043184.439,tx,hr back|cadence=88;speed=31.0
+1791043189.149,tx,pm dropout|cadence=85;speed=30.0
+1791043194.409,tx,pm dropout|cadence=85;speed=30.0
+1791043199.423,tx,pm dropout|cadence=85;speed=30.0
+1791043204.650,tx,pm dropout|cadence=85;speed=30.0
+1791043209.660,tx,pm dropout|cadence=85;speed=30.0
+1791043214.131,tx,pm back|cadence=85;speed=30.0
+1791043219.146,tx,pm back|cadence=85;speed=30.0
+1791043224.364,tx,pm back|cadence=85;speed=30.0
+1791043229.613,tx,pm back|cadence=85;speed=30.0
+1791043234.616,tx,pm back|cadence=85;speed=30.0
+1791043239.869,tx,pm back|cadence=85;speed=30.0
+1791043244.076,tx,done|cadence=85;speed=30.0
+1791043249.085,tx,done|cadence=85;speed=30.0
+1791043254.317,tx,done|cadence=85;speed=30.0
+1791043259.569,tx,done|cadence=85;speed=30.0
+1791043264.751,tx,done|cadence=85;speed=30.0
+1791043269.986,tx,done|cadence=85;speed=30.0

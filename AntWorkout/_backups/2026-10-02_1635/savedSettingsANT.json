@@ -1,0 +1,19 @@
+{
+  "wheelCircumference": 2.009,
+  "ftp": 225,
+  "maxHr": 190,
+  "powerCalibration": {
+    "11 101": {
+      "offset_watts": 3.0,
+      "scale": 1.0,
+      "ant_zero_offset": null,
+      "updated": "2026-09-28T01:22:29"
+    }
+  },
+  "powerDriveCutoff": 270,
+  "musicPreferredRpm": 85,
+  "musicMinSegment": 20,
+  "musicRandomMinutes": 60,
+  "themePartFiles": {},
+  "themeFile": null
+}

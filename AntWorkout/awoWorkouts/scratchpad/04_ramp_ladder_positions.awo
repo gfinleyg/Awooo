@@ -1,0 +1,7 @@
+T:Ramp Ladder, Mixed Positions
+2:240,0.4,0.7|Ramp warm-up, seated|15|0|Power climbs to the end of the block|10|120
+1:60,0.8,3|Stand up for this one|8
+1:60,0.8,4|Single leg, focus on the upstroke|10|0|Switch legs|5|30
+1:60,0.8,2|Low cadence, big gear|10
+3:2;2:60,0.7,1.0|Ramp up|5|0|Top of the ramp, push!|10|50;2:60,1.0,0.6|Ease back down|10;0:30|Free ride|5
+0:120|Cooldown, easy spin|15

@@ -1,0 +1,5 @@
+T:Quick Message Test
+0:30|Message at the start, shows 10s|10
+0:30|Halfway message at 15s|5|15
+1:30,0.6|Whole-block message (no seconds given)
+1:30,0.7|First message|5|0|Second message|5|10|Third message, lasts to the end||20

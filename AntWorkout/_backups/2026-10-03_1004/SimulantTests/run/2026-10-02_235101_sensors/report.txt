@@ -1,0 +1,75 @@
+AntWorkout SimulANT+ test: sensors   2026-10-02 23:55
+Devices: {'power': (11, 101), 'speed_cadence': (121, 102), 'hrm': (120, 103)}
+CPU while riding (this process, all threads): 11.5% of one core
+
+PASS  SimulANT+ pm script ran the timeline
+PASS  SimulANT+ sc script ran the timeline
+PASS  SimulANT+ hr script ran the timeline
+PASS  dedicated channels open the whole ride (0.3s without them, from t=145.3s)
+PASS  ride: power 200.0 (expected 200 ±6.0)
+PASS  ride: cadence 85.1 (expected 85 ±1.5)
+PASS  ride: speed km/h 29.93 (expected 30.0 ±0.8)
+PASS  ride: heart rate 130.0 (expected 130 ±1)
+PASS  harder: power 300.0 (expected 300 ±9.0)
+PASS  harder: cadence 95.11 (expected 95 ±1.5)
+PASS  harder: speed km/h 36.05 (expected 36.0 ±0.8)
+PASS  harder: heart rate 150.0 (expected 150 ±1)
+PASS  resume: power 200 (expected 200 ±6.0)
+PASS  resume: cadence 85.1 (expected 85 ±1.5)
+PASS  resume: speed km/h 29.93 (expected 30.0 ±0.8)
+PASS  resume: heart rate 130 (expected 130 ±1)
+PASS  stopped: power 0.0 (expected 0 ±0)
+PASS  stopped: cadence reached 0 5.3s in and stayed there
+PASS  stopped: speed reached 0 5.3s in and stayed there
+PASS  stopped: speed/cadence sensor flagged as stalled from t=76.8s (6.8s in) (information only)
+PASS  sc dropout: cadence (power meter fallback) 88.0 (expected 88 ±1.5)
+PASS  sc dropout: speed km/h (estimated from power) 31.22 (expected 31.2 ±3.7439999999999998)
+PASS  sc dropout: distance not added from the estimate (0.9012 -> 0.9012 km)
+PASS  sc dropout: cadence source ['fallback']
+PASS  sc back: cadence (sensor again) 88.02 (expected 88 ±1.5)
+PASS  sc back: speed km/h (sensor again) 31.06 (expected 31.0 ±0.8)
+PASS  sc back: distance counting again
+PASS  hr dropout: heart rate gauge at its minimum (max 40)
+PASS  hr back: heart rate 140.0 (expected 140 ±1)
+PASS  pm dropout: power 0.0 (expected 0 ±0)
+PASS  pm dropout: cadence (sensor) 85.1 (expected 85 ±1.5)
+PASS  pm dropout: speed km/h (sensor) 29.93 (expected 30.0 ±0.8)
+PASS  pm back: power 200 (expected 200 ±6)
+
+33/33 checks passed
+Recovery events logged: 35
+    2026-10-02 23:51:07.818 [RECOVERY] RECOVERY retrying dedicated channel open (stuck on the scan channel)
+    2026-10-02 23:51:07.832 [RECOVERY] RECOVERY dedicated channels opened
+    2026-10-02 23:52:26.889 [RECOVERY] DEVICE_DATA_STALLED id=102 type=121 frozen=6.4s - sensor is still transmitting but its reading hasn't changed; check battery/contact (no channel action taken)
+    2026-10-02 23:53:28.343 [RECOVERY] DEVICE_STALE id=102 type=121 silent=3.23s
+    2026-10-02 23:53:30.345 [RECOVERY] DEVICE_LOST id=102 type=121 silent=5.23s packets=461
+    2026-10-02 23:53:30.345 [RECOVERY] RECOVERY reopening channel 2 (silent 5.2s, device=102 type=121)
+    2026-10-02 23:53:35.362 [RECOVERY] RECOVERY escalating to device-level reset (reason=channel 2 still silent 5s after reopen, lost=[102])
+    2026-10-02 23:53:35.500 [RECOVERY] RECOVERY device-level reset complete, channel configuration reapplied
+    2026-10-02 23:53:38.504 [RECOVERY] DEVICE_STALE id=103 type=120 silent=3.00s
+    2026-10-02 23:53:39.505 [RECOVERY] DEVICE_RECOVERED id=103 type=120 age=0.84s
+    2026-10-02 23:53:52.516 [RECOVERY] DEVICE_RECOVERED id=102 type=121 age=0.06s
+    2026-10-02 23:54:18.323 [RECOVERY] DEVICE_STALE id=103 type=120 silent=3.22s
+    2026-10-02 23:54:20.325 [RECOVERY] DEVICE_LOST id=103 type=120 silent=5.22s packets=600
+    2026-10-02 23:54:20.325 [RECOVERY] RECOVERY reopening channel 0 (silent 5.2s, device=103 type=120)
+    2026-10-02 23:54:25.342 [RECOVERY] RECOVERY escalating to device-level reset (reason=channel 0 still silent 5s after reopen, lost=[103])
+    2026-10-02 23:54:25.502 [RECOVERY] RECOVERY device-level reset complete, channel configuration reapplied
+    2026-10-02 23:54:28.504 [RECOVERY] DEVICE_STALE id=102 type=121 silent=3.22s
+    2026-10-02 23:54:28.504 [RECOVERY] DEVICE_STALE id=101 type=11 silent=3.00s
+    2026-10-02 23:54:30.506 [RECOVERY] DEVICE_LOST id=102 type=121 silent=5.22s packets=558
+    2026-10-02 23:54:30.508 [RECOVERY] DEVICE_RECOVERED id=101 type=11 age=0.05s
+    2026-10-02 23:54:30.508 [RECOVERY] RECOVERY reopening channel 2 (silent 5.2s, device=102 type=121)
+    2026-10-02 23:54:36.516 [RECOVERY] DEVICE_RECOVERED id=102 type=121 age=0.14s
+    2026-10-02 23:54:43.518 [RECOVERY] DEVICE_RECOVERED id=103 type=120 age=0.72s
+    2026-10-02 23:54:45.519 [RECOVERY] DEVICE_STALE id=103 type=120 silent=2.72s
+    2026-10-02 23:54:48.258 [RECOVERY] DEVICE_RECOVERED id=103 type=120 age=0.03s
+    2026-10-02 23:55:03.412 [RECOVERY] DEVICE_STALE id=101 type=11 silent=3.25s
+    2026-10-02 23:55:05.413 [RECOVERY] DEVICE_LOST id=101 type=11 silent=5.25s packets=696
+    2026-10-02 23:55:05.413 [RECOVERY] RECOVERY reopening channel 1 (silent 5.2s, device=101 type=11)
+    2026-10-02 23:55:10.421 [RECOVERY] RECOVERY escalating to device-level reset (reason=channel 1 still silent 5s after reopen, lost=[101])
+    2026-10-02 23:55:10.555 [RECOVERY] RECOVERY device-level reset complete, channel configuration reapplied
+    2026-10-02 23:55:13.558 [RECOVERY] DEVICE_STALE id=103 type=120 silent=3.41s
+    2026-10-02 23:55:14.558 [RECOVERY] DEVICE_RECOVERED id=103 type=120 age=0.72s
+    2026-10-02 23:55:22.716 [RECOVERY] DEVICE_STALE id=103 type=120 silent=3.20s
+    2026-10-02 23:55:23.717 [RECOVERY] DEVICE_RECOVERED id=103 type=120 age=0.03s
+    2026-10-02 23:55:29.765 [RECOVERY] DEVICE_RECOVERED id=101 type=11 age=0.03s

@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="Current">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration><Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration><Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{D4C7A6F7-5C2D-4B91-9B4C-0E2E5E6F3A17}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>ant_native</RootNamespace>
+    <ProjectName>ant_native</ProjectName>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <PropertyGroup Label="UserMacros">
+    <!-- Set these in your environment or as MSBuild properties. -->
+    <PythonHome Condition="'$(PYTHONHOME)'!=''">$(PYTHONHOME)</PythonHome>
+    <PythonVersion Condition="'$(PythonVersion)'==''">310</PythonVersion>
+    <Pybind11Dir Condition="'$(PYBIND11_DIR)'!=''">$(PYBIND11_DIR)</Pybind11Dir>
+  </PropertyGroup>
+
+  <!-- The module is named for the Python version it's built against (as setuptools names extensions), so a
+       build for each version can sit side by side in one folder and each Python imports its own -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(MSBuildProjectDirectory)\build\Debug\</OutDir>
+    <IntDir>$(MSBuildProjectDirectory)\build\obj\Debug\cp$(PythonVersion)\</IntDir>
+    <TargetName>ant_native.cp$(PythonVersion)-win_amd64</TargetName>
+    <TargetExt>.pyd</TargetExt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(MSBuildProjectDirectory)\build\Release\</OutDir>
+    <IntDir>$(MSBuildProjectDirectory)\build\obj\Release\cp$(PythonVersion)\</IntDir>
+    <TargetName>ant_native.cp$(PythonVersion)-win_amd64</TargetName>
+    <TargetExt>.pyd</TargetExt>
+  </PropertyGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(PythonHome)\include;$(Pybind11Dir)\include;$(ANTLibRoot)\inc;$(ANTLibRoot)\software\serial;$(ANTLibRoot)\software\serial\device_management;$(ANTLibRoot)\software\system;$(ANTLibRoot)\software\USB;$(ANTLibRoot)\software\USB\devices;$(ANTLibRoot)\software\USB\device_handles;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalLibraryDirectories>$(PythonHome)\libs;$(ANTLibRoot)\x64\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>python$(PythonVersion).lib;ANT_LIB.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(PythonHome)\include;$(Pybind11Dir)\include;$(ANTLibRoot)\inc;$(ANTLibRoot)\software\serial;$(ANTLibRoot)\software\serial\device_management;$(ANTLibRoot)\software\system;$(ANTLibRoot)\software\USB;$(ANTLibRoot)\software\USB\devices;$(ANTLibRoot)\software\USB\device_handles;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <Optimization>MaxSpeed</Optimization>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalLibraryDirectories>$(PythonHome)\libs;$(ANTLibRoot)\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>python$(PythonVersion).lib;ANT_LIB.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <ClCompile Include="src\ant_native.cpp" />
+  </ItemGroup>
+
+
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <PropertyGroup Label="ANT SDK">
+    <ANTLibRoot Condition="'$(ANTLibRoot)' == ''">..\ANT_LIB</ANTLibRoot>
+  </PropertyGroup>
+
+  <!--
+    AntWorkout vendoring.
+
+    AntWorkout is a sibling project/folder that consumes this project's
+    compiled extension module and the "ant" Python package. Rather than
+    AntWorkout reaching across into this checkout (or someone copying
+    files by hand between the two), every build here drops a fresh copy
+    of both into AntWorkout\AntNative\, mirroring this project's own
+    layout: python\ant\... and build\<Configuration>\ant_native.pyd.
+
+    That mirrored layout matters: ant\transport\native.py locates
+    ant_native.pyd by walking 3 parents up from its own file location
+    (transport -> ant -> python -> project root) and looking in
+    build\Release (or Debug) there. Copying "ant" straight into
+    AntWorkout\AntNative\python\ant (not AntWorkout\ant) preserves that
+    same depth, so native.py's existing lookup logic keeps working
+    unmodified in both the original checkout and the vendored copy -
+    AntWorkout only needs to add AntWorkout\AntNative\python to its own
+    sys.path before importing "ant".
+
+    Override the destination with /p:AntWorkoutRoot=<path> (or set it in
+    build_windows.ps1) if AntWorkout doesn't live at ..\AntWorkout
+    relative to this project.
+  -->
+  <PropertyGroup Label="AntWorkout Vendoring">
+    <AntWorkoutRoot Condition="'$(AntWorkoutRoot)' == ''">$(MSBuildProjectDirectory)\..\AntWorkout</AntWorkoutRoot>
+  </PropertyGroup>
+
+  <Target Name="CopyToAntWorkout" AfterTargets="Build">
+    <ItemGroup>
+      <!-- *.py only, so __pycache__ is skipped without an explicit exclude -->
+      <AntPythonSource Include="$(MSBuildProjectDirectory)\python\ant\**\*.py" />
+      <AntNativeBinary Include="$(OutDir)$(TargetName).pyd" />
+      <AntNativeBinary Include="$(OutDir)$(TargetName).pdb" Condition="Exists('$(OutDir)$(TargetName).pdb')" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(AntWorkoutRoot)\AntNative\python\ant"
+             Condition="!Exists('$(AntWorkoutRoot)\AntNative\python\ant')" />
+    <MakeDir Directories="$(AntWorkoutRoot)\AntNative\build\$(Configuration)"
+             Condition="!Exists('$(AntWorkoutRoot)\AntNative\build\$(Configuration)')" />
+
+    <!-- The ant package is sometimes edited in AntWorkout's copy: never replace a file there that's newer
+         than this checkout's (robocopy /XO), and warn so it gets copied back here -->
+    <Exec Command="robocopy &quot;$(MSBuildProjectDirectory)\python\ant&quot; &quot;$(AntWorkoutRoot)\AntNative\python\ant&quot; *.py /S /XO /XD __pycache__ /NJH /NJS /NDL /NP /NC"
+          IgnoreExitCode="true" StandardOutputImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="AntPythonCopyExit" />
+    </Exec>
+    <Error Condition="$(AntPythonCopyExit) &gt;= 8" Text="Copying the ant package into $(AntWorkoutRoot) failed (robocopy exit $(AntPythonCopyExit))" />
+    <Exec Command="robocopy &quot;$(MSBuildProjectDirectory)\python\ant&quot; &quot;$(AntWorkoutRoot)\AntNative\python\ant&quot; *.py /S /L /XN /XL /XC /XX /XD __pycache__ /NJH /NJS /NDL /NP /NC /NS /FP"
+          IgnoreExitCode="true" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" ItemName="AntPythonNewerThere" />
+    </Exec>
+    <Warning Condition="'@(AntPythonNewerThere)' != ''"
+             Text="Kept AntWorkout's newer copy (copy it back to python\ant here): %(AntPythonNewerThere.Identity)" />
+
+    <Copy SourceFiles="@(AntNativeBinary)"
+          DestinationFolder="$(AntWorkoutRoot)\AntNative\build\$(Configuration)"
+          SkipUnchangedFiles="true" />
+
+    <Message Importance="high"
+             Text="Vendored ant package + $(TargetName).pyd into $(AntWorkoutRoot)\AntNative" />
+  </Target>
+
+</Project>

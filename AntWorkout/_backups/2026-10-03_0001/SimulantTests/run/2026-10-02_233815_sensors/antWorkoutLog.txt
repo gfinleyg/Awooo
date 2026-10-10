@@ -1,0 +1,57 @@
+2026-10-02 23:38:16.748 [ANT] New ANT session starting
+2026-10-02 23:38:16.749 [ANT] Opening ANT USB stick...
+2026-10-02 23:38:16.754 [ANT] Trying ANT device 0: ANT USBStick2
+2026-10-02 23:38:16.760 [ANT] Selected ANT device 0
+2026-10-02 23:38:16.765 [ANT] ANT initialized, scanning for devices
+2026-10-02 23:38:35.560 [SCAN] Discovered device type=11 number=101
+2026-10-02 23:38:41.800 [SCAN] Discovered device type=121 number=102
+2026-10-02 23:38:44.525 [SCAN] Discovered device type=120 number=103
+2026-10-02 23:38:44.555 [CONNECT] Connecting with selection: hrm=(120, 103), power=(11, 101), speed_cadence=(121, 102)
+2026-10-02 23:38:44.557 [ANT_EVENT] EVENT_CHANNEL_CLOSED (channel=0)
+2026-10-02 23:38:44.558 [RECOVERY] RECOVERY retrying dedicated channel open (stuck on the scan channel)
+2026-10-02 23:38:44.569 [RECOVERY] RECOVERY dedicated channels opened
+2026-10-02 23:38:47.583 [RECOVERY] DEVICE_STALE id=101 type=11 silent=3.28s
+2026-10-02 23:38:47.584 [RECOVERY] DEVICE_STALE id=103 type=120 silent=3.05s
+2026-10-02 23:38:48.584 [RECOVERY] DEVICE_RECOVERED id=101 type=11 age=0.03s
+2026-10-02 23:38:49.587 [RECOVERY] DEVICE_LOST id=103 type=120 silent=5.06s packets=1
+2026-10-02 23:38:49.587 [RECOVERY] RECOVERY reopening channel 0 (silent 5.1s, device=103 type=120)
+2026-10-02 23:38:49.590 [ANT_EVENT] EVENT_CHANNEL_CLOSED (channel=0)
+2026-10-02 23:38:54.596 [RECOVERY] RECOVERY escalating to device-level reset (reason=channel 0 still silent 5s after reopen, lost=[103])
+2026-10-02 23:38:54.645 [ANT] Dedicated channels failed to reopen after reset, staying on the scan channel: ANT scan channel configuration failed
+2026-10-02 23:38:54.646 [RECOVERY] RECOVERY device-level reset complete, channel configuration reapplied
+2026-10-02 23:38:54.647 [ANT_EVENT] EVENT_CHANNEL_CLOSED (channel=0)
+2026-10-02 23:38:54.647 [ANT_EVENT] CHANNEL_IN_WRONG_STATE (channel=0)
+2026-10-02 23:38:54.648 [ANT_EVENT] CHANNEL_IN_WRONG_STATE (channel=0)
+2026-10-02 23:38:54.648 [ANT_EVENT] UNKNOWN (channel=0, code=0x19, response_to=0x5B)
+2026-10-02 23:38:55.648 [RECOVERY] DEVICE_RECOVERED id=103 type=120 age=0.03s
+2026-10-02 23:39:06.022 [BATTERY] Device type=11 number=101 battery New 3.33V
+2026-10-02 23:39:48.555 [BATTERY] Device type=120 number=103 battery New 100% 3.33V
+2026-10-02 23:40:04.691 [RECOVERY] DEVICE_DATA_STALLED id=102 type=121 frozen=6.6s - sensor is still transmitting but its reading hasn't changed; check battery/contact (no channel action taken)
+2026-10-02 23:40:27.705 [RECOVERY] DEVICE_STALE id=102 type=121 silent=2.52s
+2026-10-02 23:40:28.706 [RECOVERY] DEVICE_RECOVERED id=102 type=121 age=0.31s
+2026-10-02 23:40:28.706 [RECOVERY] DEVICE_DATA_STALLED id=102 type=121 frozen=30.7s - sensor is still transmitting but its reading hasn't changed; check battery/contact (no channel action taken)
+2026-10-02 23:40:32.708 [RECOVERY] DEVICE_STALE id=103 type=120 silent=3.03s
+2026-10-02 23:40:33.709 [RECOVERY] DEVICE_RECOVERED id=103 type=120 age=0.09s
+2026-10-02 23:40:46.718 [RECOVERY] DEVICE_STALE id=102 type=121 silent=2.78s
+2026-10-02 23:40:48.721 [RECOVERY] DEVICE_RECOVERED id=102 type=121 age=0.59s
+2026-10-02 23:40:58.727 [RECOVERY] DEVICE_STALE id=102 type=121 silent=2.70s
+2026-10-02 23:40:59.728 [RECOVERY] DEVICE_RECOVERED id=102 type=121 age=0.25s
+2026-10-02 23:41:04.732 [RECOVERY] DEVICE_STALE id=102 type=121 silent=3.03s
+2026-10-02 23:41:06.733 [RECOVERY] DEVICE_LOST id=102 type=121 silent=5.03s packets=334
+2026-10-02 23:41:10.736 [RECOVERY] DEVICE_STALE id=103 type=120 silent=2.64s
+2026-10-02 23:41:11.737 [RECOVERY] DEVICE_RECOVERED id=103 type=120 age=0.69s
+2026-10-02 23:41:17.741 [RECOVERY] DEVICE_STALE id=101 type=11 silent=3.12s
+2026-10-02 23:41:19.742 [RECOVERY] DEVICE_RECOVERED id=101 type=11 age=0.39s
+2026-10-02 23:41:28.747 [RECOVERY] DEVICE_RECOVERED id=102 type=121 age=0.17s
+2026-10-02 23:41:54.758 [RECOVERY] DEVICE_STALE id=103 type=120 silent=2.83s
+2026-10-02 23:41:57.761 [RECOVERY] DEVICE_LOST id=103 type=120 silent=5.84s packets=375
+2026-10-02 23:42:18.770 [RECOVERY] DEVICE_RECOVERED id=103 type=120 age=0.01s
+2026-10-02 23:42:39.784 [RECOVERY] DEVICE_STALE id=101 type=11 silent=3.03s
+2026-10-02 23:42:41.785 [RECOVERY] DEVICE_LOST id=101 type=11 silent=5.03s packets=514
+2026-10-02 23:42:44.792 [RECOVERY] DEVICE_STALE id=102 type=121 silent=2.69s
+2026-10-02 23:42:45.793 [RECOVERY] DEVICE_RECOVERED id=102 type=121 age=0.23s
+2026-10-02 23:43:01.801 [RECOVERY] DEVICE_STALE id=103 type=120 silent=2.66s
+2026-10-02 23:43:02.802 [RECOVERY] DEVICE_RECOVERED id=101 type=11 age=0.19s
+2026-10-02 23:43:02.803 [RECOVERY] DEVICE_STALE id=102 type=121 silent=3.17s
+2026-10-02 23:43:02.803 [RECOVERY] DEVICE_RECOVERED id=103 type=120 age=0.70s
+2026-10-02 23:43:03.805 [RECOVERY] DEVICE_RECOVERED id=102 type=121 age=0.22s

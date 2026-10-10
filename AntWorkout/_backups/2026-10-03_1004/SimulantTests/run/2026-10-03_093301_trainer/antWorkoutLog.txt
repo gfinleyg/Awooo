@@ -1,0 +1,29 @@
+2026-10-03 09:33:02.663 [ANT] New ANT session starting
+2026-10-03 09:33:02.663 [ANT] Opening ANT USB stick...
+2026-10-03 09:33:02.684 [SCAN] Discovered device type=120 number=2
+2026-10-03 09:33:02.684 [ANT] ANT initialized, scanning for devices
+2026-10-03 09:33:02.684 [SCAN] Discovered device type=17 number=1
+2026-10-03 09:33:02.685 [ANT_EVENT] EVENT_SERIAL_QUE_OVERFLOW (channel=0)
+2026-10-03 09:33:07.709 [CONNECT] Connecting with selection: hrm=(120, 2), power=(17, 1)
+2026-10-03 09:33:07.712 [ANT_EVENT] EVENT_CHANNEL_CLOSED (channel=0)
+2026-10-03 09:34:07.535 [TRAINER] Target power 250W send failed, result=0
+2026-10-03 09:34:16.927 [BATTERY] Device type=120 number=2 battery New 100% 3.33V
+2026-10-03 09:34:18.532 [TRAINER] Target power 100W send failed, result=0
+2026-10-03 09:34:28.529 [TRAINER] Target power 100W send failed, result=0
+2026-10-03 09:35:07.272 [TRAINER] Target power 200W send failed, result=0
+2026-10-03 09:35:08.382 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=0)
+2026-10-03 09:35:10.516 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=1)
+2026-10-03 09:35:19.516 [TRAINER] Target power 200W send failed, result=0
+2026-10-03 09:35:28.014 [TRAINER] Target power 200W send failed, result=0
+2026-10-03 09:35:31.276 [TRAINER] Target power 200W send failed, result=2
+2026-10-03 09:35:32.259 [ANT_EVENT] EVENT_RX_FAIL_GO_TO_SEARCH (channel=1)
+2026-10-03 09:35:33.269 [RECOVERY] DEVICE_STALE id=1 type=17 silent=3.00s
+2026-10-03 09:35:35.293 [RECOVERY] DEVICE_LOST id=1 type=17 silent=5.03s packets=527
+2026-10-03 09:35:35.294 [RECOVERY] RECOVERY reopening channel 1 (silent 5.0s, device=1 type=17)
+2026-10-03 09:35:35.296 [ANT_EVENT] EVENT_CHANNEL_CLOSED (channel=1)
+2026-10-03 09:35:40.357 [RECOVERY] RECOVERY not resetting the stick for lost=[1]: still hearing [2], so the stick is working - leaving the channel searching
+2026-10-03 09:35:51.479 [RECOVERY] DEVICE_RECOVERED id=1 type=17 age=0.23s
+2026-10-03 09:35:56.747 [TRAINER] Target power 200W send failed, result=0
+2026-10-03 09:36:03.745 [TRAINER] Target power 200W send failed, result=0
+2026-10-03 09:36:35.989 [TRAINER] Target power 0W send failed, result=0
+2026-10-03 09:36:38.250 [TRAINER] Target power 0W send failed, result=2

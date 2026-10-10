@@ -1,0 +1,196 @@
+1791044215.023,script,started
+1791044215.025,control,run=C:\Users\gfinl\Documents\AntWorkout\SimulantTests\run\2026-10-03_090111_trainer scenario=trainer epoch=none 
+1791044215.033,on,pairing
+1791044215.037,tx,pairing|cadence=85;free=120;speed=30.0
+1791044216.083,control,run=C:\Users\gfinl\Documents\AntWorkout\SimulantTests\run\2026-10-03_090111_trainer scenario=trainer epoch=1791044217.922 
+1791044216.524,rx_target,125.00
+1791044218.186,tx,target 150|cadence=85;free=120;speed=30.0
+1791044218.465,rx_target,150.00
+1791044223.434,tx,target 150|cadence=85;free=120;speed=30.0
+1791044225.214,rx_target,150.00
+1791044227.464,rx_target,150.00
+1791044228.668,tx,target 150|cadence=85;free=120;speed=30.0
+1791044229.213,rx_target,150.00
+1791044230.963,rx_target,150.00
+1791044233.920,tx,target 150|cadence=85;free=120;speed=30.0
+1791044235.213,rx_target,150.00
+1791044237.212,rx_target,150.00
+1791044239.147,tx,target 150|cadence=85;free=120;speed=30.0
+1791044239.211,rx_target,150.00
+1791044241.211,rx_target,150.00
+1791044243.210,rx_target,150.00
+1791044244.158,tx,target 150|cadence=85;free=120;speed=30.0
+1791044245.209,rx_target,150.00
+1791044247.210,rx_target,150.00
+1791044248.069,tx,target 250|cadence=85;free=120;speed=30.0
+1791044249.209,rx_target,250.00
+1791044251.458,rx_target,250.00
+1791044253.292,tx,target 250|cadence=85;free=120;speed=30.0
+1791044253.708,rx_target,250.00
+1791044255.458,rx_target,250.00
+1791044258.481,tx,target 250|cadence=85;free=120;speed=30.0
+1791044259.956,rx_target,250.00
+1791044261.956,rx_target,250.00
+1791044263.734,tx,target 250|cadence=85;free=120;speed=30.0
+1791044263.956,rx_target,250.00
+1791044266.205,rx_target,250.00
+1791044268.204,rx_target,250.00
+1791044268.976,tx,target 250|cadence=85;free=120;speed=30.0
+1791044270.704,rx_target,250.00
+1791044273.453,rx_target,250.00
+1791044273.981,tx,target 250|cadence=85;free=120;speed=30.0
+1791044275.452,rx_target,250.00
+1791044277.203,rx_target,250.00
+1791044278.183,tx,target 100|cadence=85;free=120;speed=30.0
+1791044278.452,rx_target,100.00
+1791044280.951,rx_target,100.00
+1791044282.201,rx_target,100.00
+1791044283.186,tx,target 100|cadence=85;free=120;speed=30.0
+1791044284.201,rx_target,100.00
+1791044286.950,rx_target,100.00
+1791044288.432,tx,target 100|cadence=85;free=120;speed=30.0
+1791044288.450,rx_target,100.00
+1791044290.949,rx_target,100.00
+1791044293.451,tx,target 100|cadence=85;free=120;speed=30.0
+1791044297.701,rx_target,100.00
+1791044298.706,tx,target 100|cadence=85;free=120;speed=30.0
+1791044300.697,rx_target,100.00
+1791044303.932,tx,target 100|cadence=85;free=120;speed=30.0
+1791044305.194,rx_target,100.00
+1791044307.194,rx_target,100.00
+1791044308.143,tx,released|cadence=85;free=120;speed=30.0
+1791044308.702,rx_resistance,0.0
+1791044311.194,rx_resistance,0.0
+1791044312.943,rx_resistance,0.0
+1791044313.387,tx,released|cadence=85;free=120;speed=30.0
+1791044314.942,rx_resistance,0.0
+1791044317.191,rx_resistance,0.0
+1791044318.616,tx,released|cadence=85;free=120;speed=30.0
+1791044321.190,rx_resistance,0.0
+1791044323.439,rx_resistance,0.0
+1791044323.860,tx,released|cadence=85;free=120;speed=30.0
+1791044325.938,rx_resistance,0.0
+1791044327.937,rx_resistance,0.0
+1791044328.865,tx,released|cadence=85;free=120;speed=30.0
+1791044330.686,rx_resistance,0.0
+1791044333.033,tx,target 200|cadence=85;free=120;speed=30.0
+1791044333.935,rx_target,200.00
+1791044335.684,rx_target,200.00
+1791044337.434,rx_target,200.00
+1791044338.046,tx,target 200|cadence=85;free=120;speed=30.0
+1791044340.182,rx_target,200.00
+1791044341.932,rx_target,200.00
+1791044343.286,tx,target 200|cadence=85;free=120;speed=30.0
+1791044345.681,rx_target,200.00
+1791044347.930,rx_target,200.00
+1791044348.516,tx,target 200|cadence=85;free=120;speed=30.0
+1791044352.429,rx_target,200.00
+1791044353.524,tx,target 200|cadence=85;free=120;speed=30.0
+1791044354.928,rx_target,200.00
+1791044358.006,off,fe dropout
+1791044377.951,on,fe back
+1791044377.951,tx,fe back|cadence=85;free=120;speed=30.0
+1791044381.463,rx_target,200.00
+1791044383.203,tx,fe back|cadence=85;free=120;speed=30.0
+1791044383.462,rx_target,200.00
+1791044385.462,rx_target,200.00
+1791044387.462,rx_target,200.00
+1791044388.211,tx,fe back|cadence=85;free=120;speed=30.0
+1791044389.461,rx_target,200.00
+1791044391.460,rx_target,200.00
+1791044393.432,tx,fe back|cadence=85;free=120;speed=30.0
+1791044393.461,rx_target,200.00
+1791044395.460,rx_target,200.00
+1791044398.449,tx,fe back|cadence=85;free=120;speed=30.0
+1791044399.958,rx_target,200.00
+1791044402.208,rx_target,200.00
+1791044403.168,tx,stopped|cadence=85;free=120;speed=30.0
+1791044403.458,rx_target,0.00
+1791044407.957,rx_target,0.00
+1791044408.421,tx,stopped|cadence=85;free=120;speed=30.0
+1791044409.706,rx_target,0.00
+1791044411.955,rx_target,0.00
+1791044413.426,tx,stopped|cadence=85;free=120;speed=30.0
+1791044414.204,rx_target,0.00
+1791044415.954,rx_target,0.00
+1791044417.953,rx_target,0.00
+1791044418.431,tx,stopped|cadence=85;free=120;speed=30.0
+1791044419.952,rx_target,0.00
+1791044421.951,rx_target,0.00
+1791044423.146,tx,done|cadence=85;free=120;speed=30.0
+1791044423.951,rx_target,0.00
+1791044425.950,rx_target,0.00
+1791044428.405,tx,done|cadence=85;free=120;speed=30.0
+1791044433.417,tx,done|cadence=85;free=120;speed=30.0
+1791044438.652,tx,done|cadence=85;free=120;speed=30.0
+1791044443.914,tx,done|cadence=85;free=120;speed=30.0
+1791044449.172,tx,done|cadence=85;free=120;speed=30.0
+1791044454.413,tx,done|cadence=85;free=120;speed=30.0
+1791044459.426,tx,done|cadence=85;free=120;speed=30.0
+1791044464.678,tx,done|cadence=85;free=120;speed=30.0
+1791044469.936,tx,done|cadence=85;free=120;speed=30.0
+1791044475.095,tx,done|cadence=85;free=120;speed=30.0
+1791044480.215,tx,done|cadence=85;free=120;speed=30.0
+1791044485.432,tx,done|cadence=85;free=120;speed=30.0
+1791044490.648,tx,done|cadence=85;free=120;speed=30.0
+1791044495.856,tx,done|cadence=85;free=120;speed=30.0
+1791044501.089,tx,done|cadence=85;free=120;speed=30.0
+1791044506.300,tx,done|cadence=85;free=120;speed=30.0
+1791044511.555,tx,done|cadence=85;free=120;speed=30.0
+1791044516.573,tx,done|cadence=85;free=120;speed=30.0
+1791044521.808,tx,done|cadence=85;free=120;speed=30.0
+1791044527.069,tx,done|cadence=85;free=120;speed=30.0
+1791044532.094,tx,done|cadence=85;free=120;speed=30.0
+1791044537.108,tx,done|cadence=85;free=120;speed=30.0
+1791044542.352,tx,done|cadence=85;free=120;speed=30.0
+1791044547.613,tx,done|cadence=85;free=120;speed=30.0
+1791044552.835,tx,done|cadence=85;free=120;speed=30.0
+1791044557.857,tx,done|cadence=85;free=120;speed=30.0
+1791044563.104,tx,done|cadence=85;free=120;speed=30.0
+1791044568.347,tx,done|cadence=85;free=120;speed=30.0
+1791044573.580,tx,done|cadence=85;free=120;speed=30.0
+1791044578.597,tx,done|cadence=85;free=120;speed=30.0
+1791044583.858,tx,done|cadence=85;free=120;speed=30.0
+1791044589.110,tx,done|cadence=85;free=120;speed=30.0
+1791044594.373,tx,done|cadence=85;free=120;speed=30.0
+1791044599.623,tx,done|cadence=85;free=120;speed=30.0
+1791044604.872,tx,done|cadence=85;free=120;speed=30.0
+1791044609.881,tx,done|cadence=85;free=120;speed=30.0
+1791044615.121,tx,done|cadence=85;free=120;speed=30.0
+1791044620.383,tx,done|cadence=85;free=120;speed=30.0
+1791044625.631,tx,done|cadence=85;free=120;speed=30.0
+1791044630.641,tx,done|cadence=85;free=120;speed=30.0
+1791044635.886,tx,done|cadence=85;free=120;speed=30.0
+1791044641.122,tx,done|cadence=85;free=120;speed=30.0
+1791044646.371,tx,done|cadence=85;free=120;speed=30.0
+1791044651.623,tx,done|cadence=85;free=120;speed=30.0
+1791044656.866,tx,done|cadence=85;free=120;speed=30.0
+1791044662.086,tx,done|cadence=85;free=120;speed=30.0
+1791044667.329,tx,done|cadence=85;free=120;speed=30.0
+1791044672.575,tx,done|cadence=85;free=120;speed=30.0
+1791044677.811,tx,done|cadence=85;free=120;speed=30.0
+1791044682.823,tx,done|cadence=85;free=120;speed=30.0
+1791044688.077,tx,done|cadence=85;free=120;speed=30.0
+1791044693.325,tx,done|cadence=85;free=120;speed=30.0
+1791044698.545,tx,done|cadence=85;free=120;speed=30.0
+1791044703.788,tx,done|cadence=85;free=120;speed=30.0
+1791044709.028,tx,done|cadence=85;free=120;speed=30.0
+1791044714.259,tx,done|cadence=85;free=120;speed=30.0
+1791044719.500,tx,done|cadence=85;free=120;speed=30.0
+1791044724.732,tx,done|cadence=85;free=120;speed=30.0
+1791044729.943,tx,done|cadence=85;free=120;speed=30.0
+1791044735.149,tx,done|cadence=85;free=120;speed=30.0
+1791044740.336,tx,done|cadence=85;free=120;speed=30.0
+1791044745.584,tx,done|cadence=85;free=120;speed=30.0
+1791044750.799,tx,done|cadence=85;free=120;speed=30.0
+1791044755.812,tx,done|cadence=85;free=120;speed=30.0
+1791044760.838,tx,done|cadence=85;free=120;speed=30.0
+1791044766.069,tx,done|cadence=85;free=120;speed=30.0
+1791044771.322,tx,done|cadence=85;free=120;speed=30.0
+1791044776.548,tx,done|cadence=85;free=120;speed=30.0
+1791044781.741,tx,done|cadence=85;free=120;speed=30.0
+1791044786.751,tx,done|cadence=85;free=120;speed=30.0
+1791044791.988,tx,done|cadence=85;free=120;speed=30.0
+1791044797.246,tx,done|cadence=85;free=120;speed=30.0
+1791044802.256,tx,done|cadence=85;free=120;speed=30.0
+1791044803.831,script,stopped
