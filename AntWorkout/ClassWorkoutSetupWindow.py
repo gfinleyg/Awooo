@@ -1475,16 +1475,9 @@ class WorkoutSetupWindow(QWidget):
 
     def apply_cadence_ranges(self):
         """The zone boundaries (AppState.ftpRanges, which color the blocks, graph, gauge arc and band): zone "0" up
-        to a fifth of the way from the ride's lowest to highest cadence plus a step, the rest a step apart, red from
+        to FtpColors.CADENCE_SCALE_BOTTOM_RPM plus a step, the rest a step apart, red from
         FtpColors.CADENCE_SCALE_TOP_RPM (see FtpColors.cadence_ranges)"""
-        cadences = [block[2][0] for block in AppState.workoutList if block[0] == 1]
-        if not cadences:
-            return
-        low, high = min(cadences), max(cadences)
-        if high == low:
-            low, high = low - 1, high + 1
-        zoneCount = len(FtpColors.ZONE_KEYS) - 1 #(not counting free ride)
-        AppState.ftpRanges[:] = FtpColors.cadence_ranges(low + (high - low)/zoneCount)
+        AppState.ftpRanges[:] = FtpColors.cadence_ranges(FtpColors.CADENCE_SCALE_BOTTOM_RPM)
         FtpColors.update_graph_brushes()
 
     def clear_workout(self):

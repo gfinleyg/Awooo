@@ -216,7 +216,9 @@ def gauge_scale_stops(ftp):
     return [(float(ftp)*pct/100, QColor(color)) for pct, color in sorted(get("gaugeScale"))]
 
 
-#Musical Cadence Mode's cadence scale: the top zone (red) starts here
+#Musical Cadence Mode's cadence scale: the gradient starts here (the least green, zone "0"'s color), and the top
+#zone (red) starts here
+CADENCE_SCALE_BOTTOM_RPM = 58
 CADENCE_SCALE_TOP_RPM = 115
 
 
