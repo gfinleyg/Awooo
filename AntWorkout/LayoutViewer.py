@@ -291,6 +291,7 @@ def run_hud(hud, untilSeconds, rider, record=None):
     hud.viewerRider = rider
     hud.viewerRevolutions = revolutions
     show_reading(hud, reading)
+    hud.update_power_rings()
     if hud.cadenceMode:
         #the beat caught at its brightest
         hud.cadenceGaugeDisplay.ui.widget.displayValue = hud.cadenceGaugeDisplay.ui.widget.value #(no easing in)

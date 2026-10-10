@@ -47,6 +47,54 @@ from ClassGradeWidgets import GradeList, GradeOverlay
 #beat (AppState.musicPulses) and fade back over this long
 BEAT_SECONDS = 0.2
 
+#the nested circles in the power gauge's middle show the power over this many seconds: the outermost the
+#power now, the innermost the power this long ago (see set_power_rings)
+POWER_RING_SECONDS = 4
+
+
+def new_power_gauge():
+    """The power gauge as the HUD shows it, the reading in the middle as big as fits in the nested circles
+    there (gaugeChooser colors its band, set_power_rings its circles)"""
+    gauge = Gauge()
+    widget = gauge.ui.widget
+    widget.setNeedleColor(*QColor(AppState.gaugeRed).getRgb())
+    widget.setGaugeTheme(3)
+    widget.outer_circle_bg = [[0.25, QColor(0,0,0,0)], [0.18, QColor(255, 255, 255, 255)],]
+    widget.setMouseTracking(False)
+    widget.setEnableBarGraph(False)
+    widget.units = "Watts"
+    widget.big_needle_center_size = 5
+    widget.altUnitsDisplay = True
+    widget.fit_value_in_center = True #(fitted, the reading is smaller than the default size: the units keep theirs)
+    #paler than the cadence gauge's only enough for the reading over them: the innermost shows the power back then
+    widget.center_rings_pale = (0.1, 0.4)
+    return gauge
+
+
+def set_power_rings(gauge):
+    """The power gauge's nested circles: each the band's color at the power ridden a moment ago, the
+    outermost now through to the innermost POWER_RING_SECONDS ago"""
+    widget = gauge.ui.widget
+    stops = FtpColors.gauge_scale_stops(FtpColors.zone_ftp())
+    count = widget.CENTER_RING_COUNT
+    powers = [widget.reading] + [power_ago(POWER_RING_SECONDS*i/(count - 1)) for i in range(1, count)]
+    widget.set_center_rings([FtpColors.stops_color(stops, power) for power in powers])
+
+
+def power_ago(seconds):
+    """The power read this many seconds ago (AppState.savedPowerVals, as the gauge showed it: blended
+    between readings, 0 before the first and once the power meter had been silent DROPOUT_ZERO_SECONDS)"""
+    times, watts = AppState.savedPowerVals
+    when = AppState.secondsPassed - seconds
+    index = bisect.bisect_right(times, when)
+    if index == 0:
+        return 0
+    if index == len(times):
+        return watts[-1] if when - times[-1] <= DROPOUT_ZERO_SECONDS else 0
+    t0, t1 = times[index - 1], times[index]
+    return watts[index - 1] + (watts[index] - watts[index - 1])*(when - t0)/(t1 - t0)
+
+
 
 
 class HUDWindow(QWidget):
@@ -283,14 +331,9 @@ class HUDWindow(QWidget):
             self.currentBlockLayoutWidget.setLayout(self.currentBlockLayout)
             self.hudLayout.addWidget(self.currentBlockLayoutWidget,0,6,4,16, Qt.AlignmentFlag.AlignTop)
         
-        self.wattGaugeDisplay = Gauge()
-        self.wattGaugeDisplay.ui.widget.setNeedleColor(*QColor(AppState.gaugeRed).getRgb())
-        self.wattGaugeDisplay.ui.widget.setGaugeTheme(3)
-        self.wattGaugeDisplay.ui.widget.outer_circle_bg = [[0.25, QColor(0,0,0,0)], [0.18, QColor(255, 255, 255, 255)],]
+        self.wattGaugeDisplay = new_power_gauge()
         self.gaugeChooser() #the colored band, its colors at set % of FTP
-        self.wattGaugeDisplay.ui.widget.setMouseTracking(False)
-        self.wattGaugeDisplay.ui.widget.setEnableBarGraph(False)
-        self.wattGaugeDisplay.ui.widget.units = "Watts"
+        self.update_power_rings()
         if self.cadenceMode:
             #in the cadence gauge's usual corner; the cadence gauge is the big one in the middle
             self.wattGaugeDisplay.setMaximumSize(220, 165)
@@ -804,6 +847,9 @@ class HUDWindow(QWidget):
         color = FtpColors.stops_color(getattr(self, "cadenceScaleStops", []), self.currentPower)
         gauge.set_center_rings((color.darker(130), color), level)
 
+    def update_power_rings(self):
+        set_power_rings(self.wattGaugeDisplay)
+
     def workout_time_delta(self):
         """How far the workout moves on this tick: the music's progress in Musical Cadence Mode, else the time
         since the last tick"""
@@ -1118,6 +1164,7 @@ class HUDWindow(QWidget):
         self.timeElapsed.setText(MinimizedDuration(AppState.secondsPassed))
         #add the graph
         self.hud_graph_data_update()
+        self.update_power_rings()
         if AppState.workoutMode:
             self.process_workout_events()
             self.update_trainer_target()

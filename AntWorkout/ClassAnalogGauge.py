@@ -1434,9 +1434,13 @@ class AnalogGaugeWidget(QWidget):
     ################################################################################################
     CENTER_RING_COUNT = 4
 
+    #how much the rings are blended toward white, outermost and innermost (the reading is drawn over the middle)
+    center_rings_pale = (0.15, 0.7)
+
     def set_center_rings(self, colors, level=0.0):
-        """Nested circles in place of the center point, shaded from the outer color to the inner, or the
-        center point back (colors None). level (0 to 1) brightens them and swells them a little, e.g. on a beat"""
+        """Nested circles in place of the center point, shaded through colors from the outermost to the
+        innermost (two or more), or the center point back (colors None). level (0 to 1) brightens them and
+        swells them a little, e.g. on a beat"""
         rings = None if colors is None else (tuple(QColor(c) for c in colors), level)
         old = self.center_rings
         if old is not None and rings is not None and old[0] == rings[0] and abs(old[1] - level) < 0.02:
@@ -1446,16 +1450,22 @@ class AnalogGaugeWidget(QWidget):
             self.update_frame()
 
     def draw_center_rings(self, painter, radius):
-        (outer, inner), level = self.center_rings
+        colors, level = self.center_rings
         white = QColor("#ffffff")
         def mix(a, b, t):
             return QColor.fromRgbF(*(x + (y - x)*t for x, y in zip(a.getRgbF(), b.getRgbF())))
+        def shade(t):
+            #the colors spread evenly from t 0 (outermost) to 1 (innermost), blended between
+            at = t*(len(colors) - 1)
+            i = min(int(at), len(colors) - 2)
+            return mix(colors[i], colors[i + 1], at - i)
+        paleOuter, paleInner = self.center_rings_pale
         count = self.CENTER_RING_COUNT
         for i in range(count):
             t = i/(count - 1) #outermost 0 to innermost 1
             r = radius*(1 - 0.6*t)*(1 + 0.04*level)
             #paler toward the middle (the reading is drawn over it), less pale on the beat
-            color = mix(mix(outer, inner, t), white, (0.15 + 0.55*t)*(1 - 0.6*level))
+            color = mix(shade(t), white, (paleOuter + (paleInner - paleOuter)*t)*(1 - 0.6*level))
             grad = QRadialGradient(QPointF(0, 0), r)
             grad.setColorAt(0, color.lighter(112))
             grad.setColorAt(1, color.darker(118))
