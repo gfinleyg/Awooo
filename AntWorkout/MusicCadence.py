@@ -20,8 +20,8 @@ Tempo, per song (numpy only):
 Playback (MusicPlayer) is miniaudio too: the ride's songs as one continuous stream, whose position (the audio
 frames handed to the sound device) is the workout's clock, so the targets can't drift from the music.
 
-That per-window track is cached (CACHE_FILE, keyed by path, size and modified time), so a song is only
-ever analyzed once; the segments are worked out from it each time, which is instant:
+That per-window track is cached (CACHE_FILE, keyed by file name, size and CRC32, under cache_version()), so a song is
+only ever analyzed once; the segments are worked out from it each time, which is instant:
   - the classes are unwrapped into one continuous tempo line (so 119 -> 121 BPM doesn't flip to 60.5),
     median filtered, cut wherever the tempo moves more than SEGMENT_TOLERANCE, and anything shorter than
     the minimum segment is merged into its nearest neighbor
@@ -37,6 +37,7 @@ import random
 import threading
 import time
 import wave
+import zlib
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
@@ -54,7 +55,8 @@ MIN_RPM, MAX_RPM = 40, 120
 DEFAULT_PREFERRED_RPM = 85
 DEFAULT_MIN_SEGMENT_SECONDS = 8
 
-#bump when the analysis changes, so cached results from the old one are redone
+#bump when the analysis code changes, so cached results from the old one are redone (its settings below are checked
+#by cache_version() themselves)
 ANALYSIS_VERSION = 3
 CACHE_FILE = "musicCadenceCacheANT.json"
 #the song picker's list from last time: [[path, title, checked], ...]
@@ -346,20 +348,48 @@ def analyze_file(path):
 ###----------------------------------------------------------------------------------------------
 ### Cache
 ###----------------------------------------------------------------------------------------------
+def cache_version():
+    """What the cached analyses were made with: ANALYSIS_VERSION and the settings the analysis uses, so changing
+    either one redoes them all. (The minimum segment, preferred cadence, MIN_CONFIDENCE and SEGMENT_TOLERANCE are
+    applied to the cached analysis each time, so changing those needs nothing redone)"""
+    return {"analysis": ANALYSIS_VERSION, "sampleRate": SAMPLE_RATE, "fft": N_FFT, "hop": HOP,
+            "window": WINDOW_SECONDS, "step": STEP_SECONDS, "classSteps": CLASS_STEPS,
+            "classOctaves": list(CLASS_OCTAVES), "classOctaveWeights": list(CLASS_OCTAVE_WEIGHTS),
+            "medianWindows": MEDIAN_WINDOWS, "beatTightness": BEAT_TIGHTNESS, "silenceStep": SILENCE_STEP_SECONDS,
+            "silenceDb": SILENCE_DB, "silenceBelowLoud": SILENCE_BELOW_LOUD, "silenceMin": SILENCE_MIN_SECONDS}
+
+
+#{(path, size, modified ns): crc}, so a song's file is only read for its CRC once a run
+_crcs = {}
+
+
+def _crc(path, stat):
+    known = (os.path.normcase(os.path.abspath(path)), stat.st_size, stat.st_mtime_ns)
+    if known not in _crcs:
+        crc = 0
+        with open(path, "rb") as f:
+            while chunk := f.read(1 << 20):
+                crc = zlib.crc32(chunk, crc)
+        _crcs[known] = crc
+    return _crcs[known]
+
+
 def _cache_key(path):
+    """<file name>|<size>|<CRC32>: a song renamed, replaced or changed is a different song; one moved to another
+    folder is the same"""
     stat = os.stat(path)
-    return f"{os.path.normcase(os.path.abspath(path))}|{stat.st_size}|{int(stat.st_mtime)}"
+    return f"{os.path.normcase(os.path.basename(path))}|{stat.st_size}|{_crc(path, stat):08x}"
 
 
 def load_cache():
     try:
         with open(CACHE_FILE, encoding="utf-8") as f:
             cache = json.load(f)
-        if cache.get("version") == ANALYSIS_VERSION and isinstance(cache.get("songs"), dict):
+        if cache.get("version") == cache_version() and isinstance(cache.get("songs"), dict):
             return cache
     except (OSError, ValueError):
         pass
-    return {"version": ANALYSIS_VERSION, "songs": {}}
+    return {"version": cache_version(), "songs": {}}
 
 
 def save_cache(cache):
