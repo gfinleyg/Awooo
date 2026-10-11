@@ -1253,6 +1253,11 @@ class WorkoutSetupWindow(QWidget):
         self.textFtp.setText(str(ftp))
         self.set_ftp()
 
+    #a workout's max heart rate, from its synopsis (Set Max HR): set the same as typing it in and pressing Set new Max HR
+    def apply_max_hr(self, maxHr):
+        self.textMaxHr.setText(str(maxHr))
+        self.set_max_hr()
+
     #the loaded workout again after a setting it was built from changed: the FTP test, else the workout file if there is one
     def reload_workout(self):
         if AppState.cadenceMode:

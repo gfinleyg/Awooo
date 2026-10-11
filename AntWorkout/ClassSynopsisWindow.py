@@ -333,18 +333,26 @@ class SynopsisWindow(QWidget):
             self.statsLayout.addWidget(timeBox)
         #every block's grade, over the synopsis (see show_block_grades)
         if self.grading:
-            self.blockGradesButton = QPushButton("BLOCK GRADES")
+            self.blockGradesButton = QPushButton("Block Grades")
             self.blockGradesButton.clicked.connect(lambda: self.show_block_grades(True))
             self.statsLayout.addSpacing(6)
             self.statsLayout.addWidget(self.blockGradesButton)
         #an FTP test's new FTP becomes the FTP from here (see apply_ftp)
         if self.ftpTestMode:
-            self.applyFtpButton = QPushButton("APPLY FTP")
+            self.applyFtpButton = QPushButton("Apply FTP")
             self.applyFtpButton.clicked.connect(self.apply_ftp)
             #greyed out when there's no different FTP to apply
             self.applyFtpButton.setEnabled(self.newFtp is not None and self.newFtp != self.previousFtp)
             self.statsLayout.addSpacing(6)
             self.statsLayout.addWidget(self.applyFtpButton)
+        #the whole workout's max heart rate becomes the Max HR from here, whatever is zoomed in (see set_max_hr)
+        self.workoutMaxHr = round(maxSavedHr)
+        self.setMaxHrButton = QPushButton("Set Max HR")
+        self.setMaxHrButton.clicked.connect(self.set_max_hr)
+        #greyed out with no heart rate recorded, one the setup screen wouldn't take, or the Max HR already set
+        self.setMaxHrButton.setEnabled(80 <= self.workoutMaxHr < 250 and str(self.workoutMaxHr) != AppState.maxHr)
+        self.statsLayout.addSpacing(6)
+        self.statsLayout.addWidget(self.setMaxHrButton)
         #same label width in both boxes so the two time fields line up; measured again whenever their
         #font changes, since the stylesheet font only applies once they're polished (measuring here
         #used the smaller default font and clipped "From")
@@ -476,6 +484,11 @@ class SynopsisWindow(QWidget):
         self.parent.setupWidget.apply_ftp(self.newFtp)
         self.previousFtp = self.newFtp
         self.applyFtpButton.setEnabled(False)
+
+    def set_max_hr(self):
+        #set like it was typed in on the setup screen, which saves it
+        self.parent.setupWidget.apply_max_hr(self.workoutMaxHr)
+        self.setMaxHrButton.setEnabled(False)
 
     def cadence_ride(self):
         #a Musical Cadence Mode ride: its targets (and grades) are cadences
@@ -644,7 +657,7 @@ class SynopsisWindow(QWidget):
             self.gradeHighlight.hide()
 
     def show_block_grades(self, show):
-        """Every block's grade over the synopsis (the BLOCK GRADES button), the same list the HUD shows once a
+        """Every block's grade over the synopsis (the Block Grades button), the same list the HUD shows once a
         workout is complete"""
         if not show:
             if self.blockGradesOverlay is not None:

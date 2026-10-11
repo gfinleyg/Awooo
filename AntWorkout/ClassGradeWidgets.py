@@ -7,7 +7,7 @@ What shows the block grades (see WorkoutGrading.py):
                 FTP test's effort, its average power (show_value)
   GradeList     each ridden block's grade beside its usual colored block label, with the workout's average
                 grade pinned at the bottom: the HUD's left column once the workout is complete, and the
-                synopsis's BLOCK GRADES view
+                synopsis's Block Grades view
 
 Both draw themselves at the layout scale (AppTheme.ui_scale), in the theme's fonts and colors.
 """
