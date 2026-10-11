@@ -6,7 +6,7 @@ import time
 import pyqtgraph as pg
 
 from PyQt6.QtCore import QEvent, QPoint, QPointF, QRect, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QPainter, QPen
+from PyQt6.QtGui import QColor, QKeySequence, QPainter, QPen, QShortcut
 from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
@@ -40,6 +40,7 @@ import WorkoutGrading
 import FtpTest
 import ClassAntLogger
 import MusicCadence
+import SavedSettings
 import Units
 from ClassGradeWidgets import GradeList, GradeOverlay
 
@@ -129,6 +130,14 @@ class HUDWindow(QWidget):
         self.cadenceMode = AppState.workoutMode and AppState.cadenceMode
         self.musicPlayer = None #(see setup_music; every mode's pause/restart/hide checks it)
         self.musicSkipsLogged = 0
+        self.musicVolume = 1.0 #the Volume slider's setting (0 to 1), kept for each new player (see music_start)
+        #the Volume slider's position (0-100%), saved between runs a moment after it stops moving (see volume_changed)
+        savedVolume = SavedSettings.load().get("musicVolume")
+        self.musicVolumePercent = savedVolume if isinstance(savedVolume, int) and 0 <= savedVolume <= 100 else 100
+        self.volumeSaveTimer = QTimer(self)
+        self.volumeSaveTimer.setSingleShot(True)
+        self.volumeSaveTimer.setInterval(1000)
+        self.volumeSaveTimer.timeout.connect(self.save_volume)
 
         #an FE-C trainer as the power source gets its target power driven from here:
         #the workout's requested power in workout mode, the Watts slider in free mode.
@@ -453,6 +462,10 @@ class HUDWindow(QWidget):
         self.progressGraph.plotScreen.getViewBox().setMouseEnabled(x=False,y=False)
         self.progressGraph.powerVBox.setMouseEnabled(x=False,y=False)
         self.progressGraph.hrCadenceVBox.setMouseEnabled(x=False,y=False)
+        #the graph just follows the workout: no mouse (clicks, drags, menu, wheel go to the HUD behind it) or keyboard
+        self.progressGraph.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.progressGraph.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.progressGraph.viewport().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.progressGraph.updateViews()
         self.progressGraph.plotScreen.vb.sigResized.connect(self.progressGraph.updateViews)
         self.progressGraph.setXRange(0,AppState.graphSecondsShown)
@@ -608,10 +621,11 @@ class HUDWindow(QWidget):
         else:
             self.hudLayout.addLayout(self.otherInfo, 2,25,4,5)
 
-        #workout mode's FTP slider; free mode with an FE-C trainer gets the same slider setting the trainer's watts
+        #workout mode's FTP slider; free mode with an FE-C trainer gets the same slider setting the trainer's watts,
+        #and Musical Cadence Mode (whose targets don't depend on FTP) the music's volume
         if AppState.workoutMode or self.trainerControl:
             self.difficultyLayout = QGridLayout()
-            self.difficultyLabel = QLabel("Difficulty")
+            self.difficultyLabel = QLabel("Volume" if self.cadenceMode else "Difficulty")
             self.difficultyLabel.setStyleSheet("font: 900 14pt 'Orbitron';")
             self.difficultyLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.difficultyLayout.addWidget(self.difficultyLabel,0,0)
@@ -634,7 +648,10 @@ class HUDWindow(QWidget):
                 sliderRow = 3
             self.difficultySlider = QSlider()
             self.difficultySlider.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-            if AppState.workoutMode:
+            if self.cadenceMode:
+                self.difficultySlider.setRange(0,100)
+                self.difficultySlider.setValue(self.musicVolumePercent)
+            elif AppState.workoutMode:
                 self.difficultySlider.setRange(-10,10)
                 self.difficultySlider.setValue(0)
             else:
@@ -642,8 +659,13 @@ class HUDWindow(QWidget):
                 self.difficultySlider.setRange(TARGET_POWER_MIN_WATTS, maxWatts)
                 #free mode starts at half of FTP
                 self.difficultySlider.setValue(min(round(int(AppState.ftp)*.5), maxWatts))
+                #the wheel/Up/Down stop at FTP and the starting watts as well as every 5 W, so either can be got back to
+                self.sliderStops = {int(AppState.ftp), self.difficultySlider.value()}
             self.difficultySlider.setSingleStep(1)
-            if AppState.workoutMode:
+            if self.cadenceMode:
+                self.difficultySlider.setPageStep(10)
+                self.difficultySlider.valueChanged.connect(self.volume_changed)
+            elif AppState.workoutMode:
                 self.difficultySlider.valueChanged.connect(self.difficulty_changed)
             else:
                 self.difficultySlider.valueChanged.connect(self.trainer_watts_changed)
@@ -652,16 +674,21 @@ class HUDWindow(QWidget):
                                                     QSlider::handle:vertical { background:%s; width:40px; height:40px; margin:-20px -40px; border-style:solid; border-color:#9fc5d1; border-width:1px; border-radius:15px}
                                                     QSlider::handle:vertical:disabled { background:transparent}
                                                 """ % AppState.gaugeRed)
-            #workout mode enables it on START, free mode has no START so it's live right away
-            self.difficultySlider.setEnabled(not AppState.workoutMode)
-            #Musical Cadence Mode's targets don't depend on FTP: the slider stays greyed out
+            #workout mode enables it on START, free mode has no START so it's live right away, as is the volume
+            self.difficultySlider.setEnabled(not AppState.workoutMode or self.cadenceMode)
             if self.cadenceMode:
-                self.difficultyLabel.setEnabled(False)
-                self.difficultyPercentage.setEnabled(False)
+                self.volume_changed(self.difficultySlider.value())
+                self.volumeSaveTimer.stop() #(nothing changed yet)
             self.difficultyLayout.addWidget(self.difficultySlider,sliderRow,0,15-sliderRow,1)
             self.hudLayout.addLayout(self.difficultyLayout, 0,30,15,2)
             if not AppState.workoutMode:
                 self.trainer_watts_changed(self.difficultySlider.value())
+            #the mouse wheel anywhere on the HUD (but the scrolling lists) and Up/Down move the slider, see nudge_slider;
+            #the slider's own wheel handling (several steps a notch) is taken over
+            self.sliderWheelRemainder = 0
+            self.difficultySlider.installEventFilter(self)
+            QShortcut(QKeySequence(Qt.Key.Key_Up), self, activated=lambda: self.nudge_slider(1))
+            QShortcut(QKeySequence(Qt.Key.Key_Down), self, activated=lambda: self.nudge_slider(-1))
 
         if AppState.workoutMode:
             self.pauseStartEndLayout = QGridLayout()
@@ -780,6 +807,7 @@ class HUDWindow(QWidget):
     def music_start(self):
         self.music_stop()
         self.musicPlayer = MusicCadence.MusicPlayer(AppState.musicTracks)
+        self.musicPlayer.volume = self.musicVolume
         try:
             self.musicPlayer.start()
         except Exception as e:
@@ -862,6 +890,8 @@ class HUDWindow(QWidget):
         #leaving the workout screen (END, back to setup) stops the music; minimizing the window doesn't
         if self.cadenceMode and not event.spontaneous():
             self.music_stop()
+            if self.volumeSaveTimer.isActive():
+                self.save_volume()
         super().hideEvent(event)
 
     def restart_workout(self):
@@ -884,9 +914,10 @@ class HUDWindow(QWidget):
             self.pauseButton.clicked.disconnect(self.pause_recording)
             #START blinks again until it's pressed
             self.startButtonBlink = True
-            #reset and disable the difficulty slider
-            self.difficultySlider.setValue(0)
-            self.difficultySlider.setEnabled(False)
+            #reset and disable the difficulty slider (the volume stays as it's set)
+            if not self.cadenceMode:
+                self.difficultySlider.setValue(0)
+                self.difficultySlider.setEnabled(False)
             #timer and pause tracking booleans set
             self.startedBool = False
             self.workoutUnpausedBool = False
@@ -1084,6 +1115,52 @@ class HUDWindow(QWidget):
         self.activeDifficulty = val + 10
         self.difficultyChangedBool = True
 
+    def volume_changed(self, val):
+        #Musical Cadence Mode's Volume slider, 0-100%; squared so each step sounds about as big as the next
+        self.difficultyPercentage.setText(f"{val}%")
+        self.musicVolume = (val/100)**2
+        if self.musicPlayer is not None:
+            self.musicPlayer.volume = self.musicVolume
+        self.musicVolumePercent = val
+        self.volumeSaveTimer.start()
+
+    def save_volume(self):
+        self.volumeSaveTimer.stop()
+        SavedSettings.update(musicVolume=self.musicVolumePercent)
+
+    def nudge_slider(self, steps):
+        """The mouse wheel/Up/Down: moves the slider steps of 2% FTP, 5% volume or (free mode) 5 watts, landing on
+        a whole step or (free mode) one of sliderStops; nothing while the slider's disabled"""
+        slider = getattr(self, "difficultySlider", None)
+        if not steps or slider is None or not slider.isEnabled() or not self.isVisible():
+            return
+        step = 5 if (self.cadenceMode or not AppState.workoutMode) else 1
+        stops = getattr(self, "sliderStops", ())
+        value = slider.value()
+        for _ in range(abs(steps)):
+            if steps > 0:
+                nextValue = min([(value//step + 1)*step] + [stop for stop in stops if stop > value])
+            else:
+                nextValue = max([-((-value)//step + 1)*step] + [stop for stop in stops if stop < value])
+            value = max(slider.minimum(), min(nextValue, slider.maximum()))
+        slider.setValue(value)
+
+    def slider_wheel(self, event):
+        #one step per wheel notch (120), touchpads send smaller steps that accumulate
+        self.sliderWheelRemainder += event.angleDelta().y()
+        steps = int(self.sliderWheelRemainder/120)
+        if steps:
+            self.sliderWheelRemainder -= steps*120
+            self.nudge_slider(steps)
+        event.accept()
+
+    def wheelEvent(self, event):
+        #reaches here from anywhere on the HUD that doesn't scroll itself (the block and grade lists do)
+        if hasattr(self, "difficultySlider"):
+            self.slider_wheel(event)
+        else:
+            super().wheelEvent(event)
+
     def difficulty_ftp_text(self, val):
         #the FTP at this difficulty (2% steps); a ramp FTP test can be ridden with no FTP set
         if AppState.ftp == "0":
@@ -1129,8 +1206,9 @@ class HUDWindow(QWidget):
         self.pauseButton.setEnabled(True)
         self.pauseButton.clicked.connect(self.pause_recording)
 
-        #enable the difficulty slider (FTP tests don't get one: the test sets the power; nor does Musical Cadence Mode)
-        self.difficultySlider.setEnabled(not (self.ftpTest or self.cadenceMode))
+        #enable the difficulty slider (FTP tests don't get one: the test sets the power; Musical Cadence Mode's volume
+        #slider is already live)
+        self.difficultySlider.setEnabled(self.cadenceMode or not self.ftpTest)
 
         #timer and pause tracking booleans set
         self.startedBool = True
@@ -1272,9 +1350,10 @@ class HUDWindow(QWidget):
             self.upNextLabelDescription.setText("")
             self.upNextLabelDescription.setStyleSheet("") #drop the light blue box, nothing is up next
             self.remainingWorkoutList.ui.widget.setFullText("DONE")
-            #reset and disable difficulty slider
-            self.difficultySlider.setValue(0)
-            self.difficultySlider.setEnabled(False)
+            #reset and disable difficulty slider (the volume stays as it's set)
+            if not self.cadenceMode:
+                self.difficultySlider.setValue(0)
+                self.difficultySlider.setEnabled(False)
             #end the progress bars
             self.currentBlockProgressBar.setRange(0,1)
             self.currentBlockProgressBar.setValue(1)
@@ -1684,6 +1763,10 @@ class HUDWindow(QWidget):
     def eventFilter(self, obj, event):
         if obj is self.rideAtWidget and event.type() in (QEvent.Type.Resize, QEvent.Type.Move, QEvent.Type.Show):
             self.messageFitTimer.start()
+        #the slider: the wheel moves it a step a notch (see slider_wheel)
+        if event.type() == QEvent.Type.Wheel and obj is getattr(self, "difficultySlider", None):
+            self.slider_wheel(event)
+            return True
         return super().eventFilter(obj, event)
 
     def store_workout_power_time(self, power):

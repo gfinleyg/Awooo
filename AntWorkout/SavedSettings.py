@@ -9,6 +9,7 @@ The one settings file AntWorkout keeps between runs, savedSettingsANT.json:
     "maxHr": 185,                     - BPM
     "maxWatts": 1200,                 - top of the free mode FE-C Watts slider
     "powerDriveCutoff": 300,          - workout mode FE-C trainer is released above this requested power
+    "musicVolume": 100,               - Musical Cadence Mode's Volume slider, 0-100%
     "themeFile": "C:/.../theme.json", - font/color theme from the settings menu (see AppTheme.py), null for the default theme
     "themePartFiles": {               - colors/gradients files loaded on top of it from the settings menu
       "colors": "C:/.../colors.json", "ftpColors": "C:/.../gradients.json"
