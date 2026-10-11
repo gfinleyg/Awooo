@@ -115,7 +115,7 @@ class MusicSelectWindow(QDialog):
         options.addWidget(self.preferredRpm, 1, 1)
         options.addWidget(QLabel("Shortest cadence block"), 1, 2, Qt.AlignmentFlag.AlignRight)
         self.minSegment = QSpinBox()
-        self.minSegment.setRange(10, 120)
+        self.minSegment.setRange(8, 120)
         self.minSegment.setSuffix(" s")
         self.minSegment.setToolTip("Tempo changes shorter than this are folded into the cadence around them")
         options.addWidget(self.minSegment, 1, 3)

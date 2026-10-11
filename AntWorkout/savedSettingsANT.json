@@ -12,7 +12,7 @@
   },
   "powerDriveCutoff": 270,
   "musicPreferredRpm": 85,
-  "musicMinSegment": 20,
+  "musicMinSegment": 8,
   "musicRandomMinutes": 60,
   "themePartFiles": {},
   "themeFile": null

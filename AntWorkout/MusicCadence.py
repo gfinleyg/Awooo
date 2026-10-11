@@ -52,7 +52,7 @@ PLAYLIST_EXTENSIONS = (".m3u", ".m3u8")
 
 MIN_RPM, MAX_RPM = 40, 120
 DEFAULT_PREFERRED_RPM = 85
-DEFAULT_MIN_SEGMENT_SECONDS = 20
+DEFAULT_MIN_SEGMENT_SECONDS = 8
 
 #bump when the analysis changes, so cached results from the old one are redone
 ANALYSIS_VERSION = 3
