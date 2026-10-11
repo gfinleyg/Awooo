@@ -4,7 +4,6 @@ from PyQt6.QtWidgets import QGridLayout, QPushButton, QWidget
 import AppLayout
 
 from ClassAnalogGauge import *
-from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
 from ClassSpiralProgressBar import *
 from ClassWorkoutGraph import *
@@ -131,4 +130,3 @@ class ConfirmEndWorkoutWindow(QWidget):
         if self.pausedHere:
             self.pausedHere = False
             self.parent.pause_recording()
-        self.hide

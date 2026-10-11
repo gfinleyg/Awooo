@@ -359,11 +359,15 @@ def cache_version():
             "silenceDb": SILENCE_DB, "silenceBelowLoud": SILENCE_BELOW_LOUD, "silenceMin": SILENCE_MIN_SECONDS}
 
 
-#{(path, size, modified ns): crc}, so a song's file is only read for its CRC once a run
+#{(path, size, modified ns): crc}, so a song's file is only read for its CRC once: they're kept in the cache file too
+#(see save_cache), so later runs only stat the file
 _crcs = {}
+#a CRC was worked out (the file read) since the cache was last saved, see save_new_crcs
+_crcsAdded = False
 
 
 def _crc(path, stat):
+    global _crcsAdded
     known = (os.path.normcase(os.path.abspath(path)), stat.st_size, stat.st_mtime_ns)
     if known not in _crcs:
         crc = 0
@@ -371,7 +375,31 @@ def _crc(path, stat):
             while chunk := f.read(1 << 20):
                 crc = zlib.crc32(chunk, crc)
         _crcs[known] = crc
+        _crcsAdded = True
     return _crcs[known]
+
+
+def _remember_crcs(saved):
+    """The cache file's [[path, size, modified ns, crc], ...] into _crcs"""
+    if not isinstance(saved, list):
+        return
+    for entry in saved:
+        if isinstance(entry, list) and len(entry) == 4 and isinstance(entry[0], str) and \
+                all(isinstance(value, int) for value in entry[1:]):
+            _crcs.setdefault(tuple(entry[:3]), entry[3])
+
+
+def _current_crcs():
+    """_crcs for the cache file: only the files still there and unchanged"""
+    current = []
+    for (path, size, modified), crc in _crcs.items():
+        try:
+            stat = os.stat(path)
+        except OSError:
+            continue
+        if (stat.st_size, stat.st_mtime_ns) == (size, modified):
+            current.append([path, size, modified, crc])
+    return current
 
 
 def _cache_key(path):
@@ -385,18 +413,33 @@ def load_cache():
     try:
         with open(CACHE_FILE, encoding="utf-8") as f:
             cache = json.load(f)
+        #(the files' CRCs are kept whatever version the analyses were made with: they're just the files')
+        _remember_crcs(cache.get("crcs"))
         if cache.get("version") == cache_version() and isinstance(cache.get("songs"), dict):
             return cache
-    except (OSError, ValueError):
+    except (OSError, ValueError, AttributeError):
         pass
     return {"version": cache_version(), "songs": {}}
 
 
 def save_cache(cache):
+    global _crcsAdded
+    cache["crcs"] = _current_crcs()
     temp = CACHE_FILE + ".tmp"
     with open(temp, "w", encoding="utf-8") as f:
         json.dump(cache, f, separators=(",", ":"))
     os.replace(temp, CACHE_FILE)
+    _crcsAdded = False
+
+
+def save_new_crcs(cache):
+    """Saves the cache (as loaded by load_cache) if a song's CRC had to be worked out from its file since it was last
+    saved, so next time it doesn't have to be"""
+    if _crcsAdded:
+        try:
+            save_cache(cache)
+        except OSError:
+            pass
 
 
 def cached(cache, path):
@@ -739,13 +782,38 @@ class MusicPlayer:
             #(silence keeps the device's buffer just as full while paused, so this holds still then)
             return max(0.0, handed - self.latency())
 
-    def _songs(self):
-        """Each song's decoded chunks, song by song; marks the song being decoded"""
-        for index, (path, _, _, _) in enumerate(self.tracks):
+    @staticmethod
+    def _read_ahead(path):
+        """Starts reading a song's file on its own thread: (thread, result), result gets "data" (the file's bytes)
+        or "error" once the thread is done"""
+        result = {}
+        def read():
             try:
                 with open(path, "rb") as f:
-                    data = f.read()
-                chunks = miniaudio.stream_memory(data, output_format=miniaudio.SampleFormat.SIGNED16,
+                    result["data"] = f.read()
+            except Exception as e:
+                result["error"] = e
+        thread = threading.Thread(target=read, daemon=True)
+        thread.start()
+        return thread, result
+
+    def _songs(self):
+        """Each song's decoded chunks, song by song (a generator, see _song_chunks). The first song's file starts
+        being read right away, before the sound device asks for anything"""
+        firstRead = self._read_ahead(self.tracks[0][0]) if self.tracks else None
+        return self._song_chunks(firstRead)
+
+    def _song_chunks(self, nextRead):
+        """Each song's decoded chunks with its index, song by song. Each file is read on a thread while the song before
+        it plays, not here: this runs in the sound device's callback, where reading a whole file could leave a gap"""
+        for index, (path, _, _, _) in enumerate(self.tracks):
+            thread, result = nextRead
+            thread.join()
+            nextRead = self._read_ahead(self.tracks[index + 1][0]) if index + 1 < len(self.tracks) else None
+            try:
+                if "error" in result:
+                    raise result["error"]
+                chunks = miniaudio.stream_memory(result.pop("data"), output_format=miniaudio.SampleFormat.SIGNED16,
                                                  nchannels=self.CHANNELS, sample_rate=self.SAMPLE_RATE,
                                                  frames_to_read=4096)
                 first = next(chunks)

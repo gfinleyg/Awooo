@@ -43,6 +43,9 @@ import threading
 from datetime import datetime
 
 LOG_FILE = "antWorkoutLog.txt"
+#UTF-8 whatever the system's codepage, so any text (song titles, file paths) can be logged; reading never fails on
+#what an older version wrote in the codepage either, it's just shown as replacement characters
+LOG_ENCODING = "utf-8"
 
 MAX_LOG_BYTES = 1_000_000  # 1MB
 TRIM_LINES = 50
@@ -64,7 +67,7 @@ def log_event(category, message):
 
     with _lock:
         try:
-            with open(LOG_FILE, "a") as f:
+            with open(LOG_FILE, "a", encoding=LOG_ENCODING, errors="replace") as f:
                 f.write(line)
         except OSError:
             return
@@ -78,10 +81,10 @@ def _rotate_if_needed():
         if os.path.getsize(LOG_FILE) <= MAX_LOG_BYTES:
             return
 
-        with open(LOG_FILE, "r") as f:
+        with open(LOG_FILE, "r", encoding=LOG_ENCODING, errors="replace") as f:
             lines = f.readlines()
 
-        with open(LOG_FILE, "w") as f:
+        with open(LOG_FILE, "w", encoding=LOG_ENCODING) as f:
             f.writelines(lines[TRIM_LINES:])
 
     except OSError:
@@ -95,7 +98,7 @@ def clear_log():
     """
     with _lock:
         try:
-            with open(LOG_FILE, "w") as f:
+            with open(LOG_FILE, "w", encoding=LOG_ENCODING) as f:
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
                 f.write(f"{timestamp} [LOG] Log cleared\n")
         except OSError:
@@ -110,7 +113,7 @@ def read_log(max_lines=500):
     close the file is to its rotation size.
     """
     try:
-        with open(LOG_FILE, "r") as f:
+        with open(LOG_FILE, "r", encoding=LOG_ENCODING, errors="replace") as f:
             lines = f.readlines()
     except OSError:
         return ""

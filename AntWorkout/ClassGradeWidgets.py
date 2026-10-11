@@ -37,15 +37,25 @@ def theme_font(family, points, weight=QFont.Weight.Black):
     return AppTheme.THEME.map_font(font, AppTheme.ui_scale)
 
 
+#fitted_font's results, by (font, text, width, height): what's drawn every frame fits its text once
+_fittedFonts = {}
+
+
 def fitted_font(font, text, width, height):
     """font, shrunk if needed so text fits width x height"""
-    font = QFont(font)
-    for _ in range(40):
-        metrics = QFontMetricsF(font)
-        if (metrics.horizontalAdvance(text) <= width and metrics.height() <= height) or font.pointSizeF() <= 5:
-            break
-        font.setPointSizeF(font.pointSizeF()*0.92)
-    return font
+    key = (font.key(), text, width, height)
+    fitted = _fittedFonts.get(key)
+    if fitted is None:
+        fitted = QFont(font)
+        for _ in range(40):
+            metrics = QFontMetricsF(fitted)
+            if (metrics.horizontalAdvance(text) <= width and metrics.height() <= height) or fitted.pointSizeF() <= 5:
+                break
+            fitted.setPointSizeF(fitted.pointSizeF()*0.92)
+        if len(_fittedFonts) >= 256: #(a resize or new theme makes new ones; the old ones are dropped now and then)
+            _fittedFonts.clear()
+        _fittedFonts[key] = fitted
+    return QFont(fitted)
 
 
 def label_gradient_colors(text):
@@ -93,6 +103,8 @@ class GradeOverlay(QWidget):
         self.shownAt = 0.0
         self.showSeconds = 0.0
         self.opacity = 0.0
+        #the drawn text's (path, outline width), see draw_outlined
+        self.shapes = {}
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.timer = QTimer(self)
         self.timer.setInterval(30)
@@ -184,7 +196,29 @@ class GradeOverlay(QWidget):
         self.draw_outlined(painter, self.grade, letterRect, fill, 110)
 
     def draw_outlined(self, painter, text, rect, fill, points):
-        font = QFont(AppTheme.THEME.fonts[AppTheme.ROLE_MAIN]["family"])
+        #(the overlay repaints with the spiral under it, every frame: the text's shape is only worked out again when
+        #the text, its room or the theme's font changes)
+        family = AppTheme.THEME.fonts[AppTheme.ROLE_MAIN]["family"]
+        key = (text, rect.x(), rect.y(), rect.width(), rect.height(), points, family)
+        shape = self.shapes.get(key)
+        if shape is None:
+            shape = self.text_shape(text, rect, points, family)
+            if len(self.shapes) >= 16:
+                self.shapes.clear()
+            self.shapes[key] = shape
+        path, outline = shape
+        painter.setPen(QPen(QColor(0, 0, 0, 220), outline*2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+                            Qt.PenJoinStyle.RoundJoin))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(path)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(fill)
+        painter.drawPath(path)
+
+    @staticmethod
+    def text_shape(text, rect, points, family):
+        """(path, outline width) of text centered in rect, as big as fits up to points"""
+        font = QFont(family)
         font.setWeight(QFont.Weight.Black)
         font.setPointSizeF(points)
         font = fitted_font(font, text, rect.width(), rect.height())
@@ -195,14 +229,7 @@ class GradeOverlay(QWidget):
         path = QPainterPath()
         path.addText(QPointF(rect.center().x() - width/2, baseline), font, text)
         path.setFillRule(Qt.FillRule.WindingFill) #a "+" is two overlapping strokes; don't leave a hole where they cross
-        outline = max(1.5, font.pointSizeF()*0.06)
-        painter.setPen(QPen(QColor(0, 0, 0, 220), outline*2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
-                            Qt.PenJoinStyle.RoundJoin))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawPath(path)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(fill)
-        painter.drawPath(path)
+        return path, max(1.5, font.pointSizeF()*0.06)
 
 
 ###----------------------------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 import os
 
-from PyQt6.QtCore import QSize, Qt, QEvent
-from PyQt6.QtGui import QGuiApplication, QKeySequence, QMouseEvent, QShortcut
+from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -126,18 +126,8 @@ class CustomTitleBar(QWidget):
         if not mainWindow:
             QShortcut(QKeySequence(Qt.Key.Key_Escape), self.window(), activated=self.close_button.click)
 
-        # Normal button
-        self.normal_button = QToolButton(self)
-        normal_icon = self.style().standardIcon(
-            QStyle.StandardPixmap.SP_TitleBarNormalButton
-        )
-        self.normal_button.setIcon(normal_icon)
-        self.normal_button.clicked.connect(self.window().showNormal)
-        self.normal_button.setVisible(False)
-
         buttons = [
             self.min_button,
-            self.normal_button,
             self.max_button,
             self.close_button,
         ]
@@ -261,13 +251,3 @@ class CustomTitleBar(QWidget):
     def mouseDoubleClickEvent(self, event):
         self.window().showMaximized()
         event.accept()
-
-    def changeEvent(self, event):
-        if event.type() == QEvent.Type.WindowStateChange:
-            self.title_bar.window_state_changed(self.windowState())
-        super().changeEvent(event)
-        event.accept()
-
-    def window_state_changed(self, state):
-        self.normal_button.setVisible(state == Qt.WindowState.WindowMaximized)
-        self.max_button.setVisible(state != Qt.WindowState.WindowMaximized)

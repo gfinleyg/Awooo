@@ -4,7 +4,6 @@ from PyQt6.QtWidgets import QApplication, QHBoxLayout, QPlainTextEdit, QPushButt
 import AppLayout
 
 from ClassAnalogGauge import *
-from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
 from ClassSpiralProgressBar import *
 from ClassWorkoutGraph import *
@@ -76,11 +75,20 @@ class ShowLogsWindow(QWidget):
         #scaled for this screen, its text fitted to it (see AppLayout.py)
         AppLayout.fit_dialog(self)
 
-        #Refreshes while open so a log viewed during an active workout stays current
-        self.timer = QTimer()
+        #Refreshes while it's showing so a log viewed during an active workout stays current (see showEvent/hideEvent)
+        self.timer = QTimer(self)
         self.timer.timeout.connect(self.read_log)
         self.timer.setInterval(1000)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.read_log()
         self.timer.start()
+
+    def hideEvent(self, event):
+        #Exit, the title bar's X and Esc (and minimizing) all end up here: nothing to refresh while it isn't showing
+        self.timer.stop()
+        super().hideEvent(event)
 
     def read_log(self):
         #setPlainText() unconditionally clears any active text selection
@@ -121,5 +129,4 @@ class ShowLogsWindow(QWidget):
         self.read_log()
 
     def hide_logs_window(self):
-        self.timer.stop()
         self.hide()

@@ -1,6 +1,0 @@
-2026-10-03 10:05:16.284 [ANT] New ANT session starting
-2026-10-03 10:05:16.285 [ANT] Opening ANT USB stick...
-2026-10-03 10:05:16.404 [DISPLAY] Screen DELL U3011: 1920x1200 effective (1920x1200 physical, 1x scaling), available 1920x1152
-2026-10-03 10:05:16.420 [ANT] Trying ANT device 0: ANT USBStick2
-2026-10-03 10:05:16.442 [ANT] Selected ANT device 0
-2026-10-03 10:05:16.508 [ANT] ANT initialized, scanning for devices

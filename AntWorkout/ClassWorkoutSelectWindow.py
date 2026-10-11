@@ -38,6 +38,26 @@ RANDOM_TOLERANCE = 0.2
 WORKOUT_EXTENSIONS = (".awo", ".zwo")
 
 
+#WorkoutSetupWindow.preview_workout() results, by (path, size, modified time, FTP, target unit), so the picker only
+#reads a file again when it (or what its blocks are worked out from) has changed, not every time it's opened
+_previewCache = {}
+
+
+def cached_preview(setup, path):
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return setup.preview_workout(path)
+    key = (path, stat.st_size, stat.st_mtime_ns, AppState.ftp, AppState.target_unit())
+    preview = _previewCache.get(key)
+    if preview is None:
+        #(an older read of the same file is dropped)
+        for old in [k for k in _previewCache if k[0] == path]:
+            del _previewCache[old]
+        preview = _previewCache[key] = setup.preview_workout(path)
+    return preview
+
+
 def folder_workouts(folder):
     return [os.path.join(folder, f).replace("\\", "/") for f in sorted(os.listdir(folder), key=str.lower)
             if f.lower().endswith(WORKOUT_EXTENSIONS)]
@@ -153,7 +173,7 @@ class WorkoutSelectWindow(QDialog):
                 continue
             listed.add(path)
             if path not in self.previews:
-                self.previews[path] = self.setup.preview_workout(path)
+                self.previews[path] = cached_preview(self.setup, path)
             item = QListWidgetItem(self.item_text(path))
             item.setData(Qt.ItemDataRole.UserRole, path)
             item.setToolTip(path)

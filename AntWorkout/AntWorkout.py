@@ -83,4 +83,12 @@ if __name__ == "__main__":
     w = MainWindow()
     w.show()
 
-    app.exec()
+    code = app.exec()
+
+    #Out without Python's own teardown: by now the ANT stick is closed (ConfirmExitWindow.exit_program), settings and
+    #the log are written as they change and the sound thread is stopped (aboutToQuit), so there's nothing left for it
+    #to do but destroy the Qt objects in whatever order it gets to them, which could crash Qt6Core on the way out
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None:
+            stream.flush()
+    _os._exit(code)

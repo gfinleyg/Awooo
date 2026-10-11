@@ -1,7 +1,7 @@
 import time
-from ant.manager_v21 import ANTManager
+from ant.manager import ANTManager
 
-def callback(msg, device):
+def callback(msg, device, changed):
     if msg.get("has_device_id"):
         print(
             "DEVICE",

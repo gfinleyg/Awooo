@@ -7,7 +7,6 @@ from .fitness_equipment import (
     FitnessEquipmentCapabilities, target_power_payload,
     TARGET_POWER_MIN_WATTS, TARGET_POWER_MAX_WATTS,
 )
-from .controllable_trainer import ControllableTrainerProfile, TrainerMessage
 
 PROFILE_CLASSES = [
     HeartRateProfile,
@@ -23,5 +22,5 @@ __all__ = [
     "FitnessEquipmentProfile", "FitnessEquipmentPage", "FitnessEquipmentData",
     "FitnessEquipmentCapabilities", "target_power_payload",
     "TARGET_POWER_MIN_WATTS", "TARGET_POWER_MAX_WATTS",
-    "ControllableTrainerProfile", "TrainerMessage", "PROFILE_CLASSES",
+    "PROFILE_CLASSES",
 ]

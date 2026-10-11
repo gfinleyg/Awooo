@@ -46,10 +46,10 @@ def load():
 
 
 def update(**changes):
-    """Merge changes into the saved settings (other keys are kept)"""
+    """Merge changes into the saved settings (other keys are kept); False if the file couldn't be written"""
     data = load()
     data.update(changes)
-    _write(data)
+    return _write(data)
 
 
 def _write(data):

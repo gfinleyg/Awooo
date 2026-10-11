@@ -196,7 +196,8 @@ class QSpiralProgressBar(QWidget):
             raise ValueError("Tuple length more than number of Progress Bars")
         elif len(value) < self.noProgBar:                        #IF INPUT TUPLE LENGTH IS LESS THAN THE NUMBER OF PROGRESS BAR
             raise ValueError("Tuple length less than the number of Progress Bars")
-        elif self.spb_value!=value:                                #IF EVERY THING GOES RIGHT
+        else:                                                      #IF EVERY THING GOES RIGHT
+            before = list(self.spb_value)                          #(spb_value holds the converted values, see convValue)
             for each in range(0, self.noProgBar, 1):
                 if value[each]!='nc':                           #nc: NOC CHANGE STRING FOR ELEIMINATING THE NO CHANGE PROGRESS VALUES
                     if value[each] < 0:
@@ -205,7 +206,8 @@ class QSpiralProgressBar(QWidget):
                         QSpiralProgressBar.convValue(self, 100, each)
                     else:
                         QSpiralProgressBar.convValue(self, value[each], each)
-            self.update()
+            if self.spb_value != before:                           #REDRAWN ONLY WHEN A BAR MOVED
+                self.update()
 
 
     def spb_setGap(self, gap):

@@ -42,7 +42,7 @@ python AntWorkout.py
 Or double-click `AntWorkout.pyw` to run it without a console window. Output and crash tracebacks then go to
 `AntWorkout_console.log`.
 
-A prebuilt `AntWorkout.exe` is in `dist\AntWorkout\`.
+To run it as an exe instead, build `AntWorkout.exe` into `dist\AntWorkout\` (see Building the exe below).
 
 ## Workout files (.awo)
 
@@ -71,7 +71,8 @@ T:Short Intervals
 1:300,0.5
 ```
 
-`awo-verifier.py` checks every `.awo` file in the folder it is run from. `zwo2awo.py` converts the Zwift files there.
+`awo-verifier.py` checks every `.awo` file in the folder it is run from (for the workouts folder: `cd awoWorkouts`, then
+`python ..\awo-verifier.py`). `zwo2awo.py` converts the Zwift files there.
 
 ## Other tools
 

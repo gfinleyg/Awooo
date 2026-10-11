@@ -42,6 +42,7 @@ def get(device_type, device_number):
 
 
 def save(device_type, device_number, offset_watts=0.0, scale=1.0, ant_zero_offset=None):
+    """False if the settings file couldn't be written"""
     data = load_all()
     data[_key(device_type, device_number)] = {
         "offset_watts": round(float(offset_watts), 1),
@@ -49,13 +50,15 @@ def save(device_type, device_number, offset_watts=0.0, scale=1.0, ant_zero_offse
         "ant_zero_offset": ant_zero_offset,
         "updated": datetime.datetime.now().isoformat(timespec="seconds"),
     }
-    SavedSettings.update(powerCalibration=data)
+    return SavedSettings.update(powerCalibration=data)
 
 
 def clear(device_type, device_number):
+    """False if the settings file couldn't be written"""
     data = load_all()
     if data.pop(_key(device_type, device_number), None) is not None:
-        SavedSettings.update(powerCalibration=data)
+        return SavedSettings.update(powerCalibration=data)
+    return True
 
 
 def apply(watts, calibration):

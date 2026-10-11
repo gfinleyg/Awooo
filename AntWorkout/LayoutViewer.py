@@ -275,7 +275,7 @@ def run_hud(hud, untilSeconds, rider, record=None):
             break
         if not workoutMode and AppState.secondsPassed >= untilSeconds:
             break
-        hud.lastTimestamp = datetime.datetime.now() - datetime.timedelta(seconds=1)
+        hud.lastTimestamp = time.monotonic() - 1
         if hud.cadenceMode and hud.musicPlayer is not None:
             hud.musicPlayer.seconds += 1
         hud.process_events()
@@ -457,9 +457,6 @@ class DisplayWindow(QMainWindow):
         setup.displayFtp.setText(AppState.ftp + " Watts")
         setup.displayMaxHr.setText(AppState.maxHr + " BPM")
         setup.init_ant_scan_connect()
-        #switching to free mode shrinks MainWindow to its minimum width, which here (no minimum, see
-        #mainLayout) squashes the window to nothing; the tools window sets this one's size instead
-        setup.try_resize = lambda: setup.resizeTimer.stop()
         if setup.process_workout_file(workoutPath.replace("\\", "/")):
             AppState.workoutFilename = workoutPath.replace("\\", "/")
             AppState.workoutFilenameShort = _os.path.basename(workoutPath)
@@ -604,7 +601,7 @@ class DisplayWindow(QMainWindow):
             if hud.musicPlayer is None: #(leaving the view stops the music, see HUDWindow.hideEvent)
                 hud.musicPlayer = ViewerMusicPlayer(hud.workoutSecondsPassed)
             hud.musicPlayer.run_clock(True)
-        hud.lastTimestamp = datetime.datetime.now()
+        hud.lastTimestamp = time.monotonic()
         hud.timer.start()
         if hasattr(hud, "smoothBarTimer"):
             hud.smoothBarTimer.start()
@@ -1683,7 +1680,12 @@ def main():
         available = screens[0].availableGeometry()
         controls.move(available.right() - 540, available.top() + 40)
     controls.show()
-    sys.exit(app.exec())
+    code = app.exec()
+    #(out without Python's teardown, as AntWorkout.py: destroying the Qt objects in its order could crash Qt6Core)
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None:
+            stream.flush()
+    _os._exit(code)
 
 
 if __name__ == "__main__":

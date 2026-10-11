@@ -108,17 +108,8 @@ class AppState:
 
     #HUD specific stored metrics
     savedPowerVals = ([],[]) #each element is [<time string>,<power string>]
-    savedPowerVals[0].clear()
-    savedPowerVals[1].clear()
     savedHRVals = ([],[]) #each element is [<time string>,<hr string>]
-    savedHRVals[0].clear()
-    savedHRVals[1].clear()
     savedCadenceVals = ([],[]) #each element is [<time string>,<cadence integer>]
-    savedCadenceVals[0].clear()
-    savedCadenceVals[1].clear()
-    savedWorkoutPowerVals = ([],[]) #power requested from the workout (difficulty included), each element is [<time string>,<power string>]
-    savedWorkoutPowerVals[0].clear()
-    savedWorkoutPowerVals[1].clear()
     totalRevolutions = 0 #convert to distance by multiplying by wheel circumference and either miles/meter or km/meter
 
     #Start time; when the HUD screen is entered before starting the workout

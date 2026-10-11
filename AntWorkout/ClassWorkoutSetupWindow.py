@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (
 )
 
 from ClassAnalogGauge import *
-from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
 from ClassSpiralProgressBar import *
 from ClassWorkoutGraph import *
@@ -59,6 +58,13 @@ DIFFICULTY_STEP = 0.02
 
   
 
+#a stylesheet set only when it's a change: every stylesheet goes through the theme and re-polishes the widget (see
+#AppTheme.install), and setup_blink() sets the same ones again every 300ms
+def set_style(widget, sheet):
+    if getattr(widget, "_themeOrigSheet", None) != sheet:
+        widget.setStyleSheet(sheet)
+
+
 class WorkoutSetupWindow(QWidget):
     def __init__(self, parent):
         super(WorkoutSetupWindow, self).__init__()
@@ -76,9 +82,6 @@ class WorkoutSetupWindow(QWidget):
 
         #Track when scanning
         self.scanBool = True
-
-        #Window Width pre workout selection
-        self.windowWidth = 0
 
         #Found devices
         self.deviceDetectedRawList = []
@@ -461,7 +464,6 @@ class WorkoutSetupWindow(QWidget):
         self.workoutDisplayLabel.hide()
 
         self.setLayout(self.introductoryLayout)
-        self.workoutWindowWidth = self.parent.width()
 
         # Read saved Wheel Circumference, FTP and Max HR (savedSettingsANT.json), anything missing or out of range
         # has to be entered; each is checked on its own so one bad value doesn't throw away the others
@@ -723,81 +725,81 @@ class WorkoutSetupWindow(QWidget):
         #power button
         self.powerButtonBlinkTgl = not self.powerButtonBlinkTgl
         if self.powerButtonBlink and self.powerButtonBlinkTgl: 
-            self.powerButton.setStyleSheet(self.btnBlinkOn)
+            set_style(self.powerButton, self.btnBlinkOn)
         else: #default setting
-            self.powerButton.setStyleSheet(self.btnBlinkOff)
+            set_style(self.powerButton, self.btnBlinkOff)
         #hr button
         self.hrButtonBlinkTgl = not self.hrButtonBlinkTgl
         if self.hrButtonBlink and self.hrButtonBlinkTgl: 
-            self.hrmButton.setStyleSheet(self.btnBlinkOn)
+            set_style(self.hrmButton, self.btnBlinkOn)
         else: #default setting
-            self.hrmButton.setStyleSheet(self.btnBlinkOff)
+            set_style(self.hrmButton, self.btnBlinkOff)
         #speed cadence button
         self.spdCadButtonBlinkTgl = not self.spdCadButtonBlinkTgl
         if self.spdCadButtonBlink and self.spdCadButtonBlinkTgl: 
-            self.speedCadenceButton.setStyleSheet(self.btnBlinkOn)
+            set_style(self.speedCadenceButton, self.btnBlinkOn)
         else: #default setting
-            self.speedCadenceButton.setStyleSheet(self.btnBlinkOff)
+            set_style(self.speedCadenceButton, self.btnBlinkOff)
         #connect button
         self.connectButtonBlinkTgl = not self.connectButtonBlinkTgl
         if self.connectButtonBlink and self.connectButtonBlinkTgl: 
-            self.connectButton.setStyleSheet(self.btnBlinkOn)
+            set_style(self.connectButton, self.btnBlinkOn)
         else: #default setting
-            self.connectButton.setStyleSheet(self.btnBlinkOff)
+            set_style(self.connectButton, self.btnBlinkOff)
         #wheel circumference text
         self.wheelCTextBlinkTgl = not self.wheelCTextBlinkTgl
         if self.wheelCTextBlink and self.wheelCTextBlinkTgl: 
-            self.textWheelC.setStyleSheet(self.txtBlinkOn)
+            set_style(self.textWheelC, self.txtBlinkOn)
         else: #default setting
-            self.textWheelC.setStyleSheet(self.txtBlinkOff)
+            set_style(self.textWheelC, self.txtBlinkOff)
         #wheel circumference button
         self.wheelCButtonBlinkTgl = not self.wheelCButtonBlinkTgl
         if self.wheelCButtonBlink and self.wheelCButtonBlinkTgl: 
-            self.setWheelC.setStyleSheet(self.tinyBtnBlinkOn)
+            set_style(self.setWheelC, self.tinyBtnBlinkOn)
         else: #default setting
-            self.setWheelC.setStyleSheet(self.tinyBtnBlinkOff)
+            set_style(self.setWheelC, self.tinyBtnBlinkOff)
         #max hr text
         self.maxHrTextBlinkTgl = not self.maxHrTextBlinkTgl
         if self.maxHrTextBlink and self.maxHrTextBlinkTgl: 
-            self.textMaxHr.setStyleSheet(self.txtBlinkOn)
+            set_style(self.textMaxHr, self.txtBlinkOn)
         else: #default setting
-            self.textMaxHr.setStyleSheet(self.txtBlinkOff)
+            set_style(self.textMaxHr, self.txtBlinkOff)
         #max hr button
         self.maxHrButtonBlinkTgl = not self.maxHrButtonBlinkTgl
         if self.maxHrButtonBlink and self.maxHrButtonBlinkTgl: 
-            self.setMaxHr.setStyleSheet(self.tinyBtnBlinkOn)
+            set_style(self.setMaxHr, self.tinyBtnBlinkOn)
         else: #default setting
-            self.setMaxHr.setStyleSheet(self.tinyBtnBlinkOff)
+            set_style(self.setMaxHr, self.tinyBtnBlinkOff)
         #ftp text
         self.ftpTextBlinkTgl = not self.ftpTextBlinkTgl
         if self.ftpTextBlink and self.ftpTextBlinkTgl: 
-            self.textFtp.setStyleSheet(self.txtBlinkOn)
+            set_style(self.textFtp, self.txtBlinkOn)
         else: #default setting
-            self.textFtp.setStyleSheet(self.txtBlinkOff)
+            set_style(self.textFtp, self.txtBlinkOff)
         #ftp button
         self.ftpButtonBlinkTgl = not self.ftpButtonBlinkTgl
         if self.ftpButtonBlink and self.ftpButtonBlinkTgl: 
-            self.setFtp.setStyleSheet(self.tinyBtnBlinkOn)
+            set_style(self.setFtp, self.tinyBtnBlinkOn)
         else: #default setting
-            self.setFtp.setStyleSheet(self.tinyBtnBlinkOff)
+            set_style(self.setFtp, self.tinyBtnBlinkOff)
         #workout select button
         self.workoutSelectBlinkTgl = not self.workoutSelectBlinkTgl
         if self.workoutSelectBlink and self.workoutSelectBlinkTgl: 
-            self.workoutFileButton.setStyleSheet(self.btnBlinkOn)
+            set_style(self.workoutFileButton, self.btnBlinkOn)
         else: #default setting
-            self.workoutFileButton.setStyleSheet(self.btnBlinkOff)
+            set_style(self.workoutFileButton, self.btnBlinkOff)
         #start button
         self.startButtonBlinkTgl = not self.startButtonBlinkTgl
         if self.startButtonBlink and self.startButtonBlinkTgl: 
-            self.introStartButton.setStyleSheet(self.btnBlinkOn)
+            set_style(self.introStartButton, self.btnBlinkOn)
         else: #default setting
-            self.introStartButton.setStyleSheet(self.btnBlinkOff)
+            set_style(self.introStartButton, self.btnBlinkOff)
         #disconnect and restart scan button
         self.disconnectButtonBlinkTgl = not self.disconnectButtonBlinkTgl
         if self.disconnectButtonBlink and self.disconnectButtonBlinkTgl: 
-            self.restartScanButton.setStyleSheet(self.btnBlinkOn)
+            set_style(self.restartScanButton, self.btnBlinkOn)
         else: #default setting
-            self.restartScanButton.setStyleSheet(self.btnBlinkOff)
+            set_style(self.restartScanButton, self.btnBlinkOff)
 
     def get_found_devices(self):
         self.deviceDetectedRawList.clear()
@@ -844,11 +846,10 @@ class WorkoutSetupWindow(QWidget):
                             self.pwrFound = True
                             if self.scanBool:
                                 self.powerButton.setEnabled(True)
-                                self.connectButtonCheckBool = True
                     case "17": # ANT+ Fitness Equipment
                         txt = "Stationary Trainer: " + devTypeId[1]
                         deviceTextList.append(txt)
-                        if selectedListBool: 
+                        if selectedListBool:
                             self.pwrSelected = True
                             self.selectedPowerLabel.setText(txt)
                             self.selectedPowerLabel.show()
@@ -859,7 +860,6 @@ class WorkoutSetupWindow(QWidget):
                             self.pwrFound = True
                             if self.scanBool:
                                 self.powerButton.setEnabled(True)
-                                self.connectButtonCheckBool = True
                     case "121": # ANT+ Speed/Cadence
                         txt = "Speed/Cadence Meter: " + devTypeId[1]
                         deviceTextList.append(txt)
@@ -1016,6 +1016,7 @@ class WorkoutSetupWindow(QWidget):
     def resume(self):
         self.stopReadingInit = False
         self.timer.start()
+        self.blinkTimer.start()
 
     def set_init_status(self, text):
         #"ANT Initialized" sits above whatever the connection status is once the stick is up
@@ -1315,11 +1316,6 @@ class WorkoutSetupWindow(QWidget):
             self.workoutFileSelected.hide()
             self.workoutInfo.hide()
             self.workoutDisplayLabel.hide()
-            #When switching back to free mode, resize the window to remove the workout list space
-            self.resizeTimer = QTimer()
-            self.resizeTimer.setInterval(5)
-            self.resizeTimer.timeout.connect(self.try_resize)
-            self.resizeTimer.start()
         #Re-evaluate mode dependent UI now, rather than waiting for the next
         #init_ant_scan_connect() tick (up to 2s) to notice the mode changed
         self.workoutSelectBlink = self.workout_needs_choosing()
@@ -1379,12 +1375,6 @@ class WorkoutSetupWindow(QWidget):
         self.workoutFileSelected.setText(" "+test["name"]+" ")
         self.workoutDisplayLabel.show()
 
-    def try_resize(self):
-        if self.parent.minimumWidth() < self.workoutWindowWidth:
-            self.parent.resize(self.parent.minimumWidth(), self.parent.height())
-            self.resizeTimer.stop()
-
-
     def open_workout_dialog(self):
         if AppState.cadenceMode:
             self.open_music_dialog()
@@ -1424,14 +1414,18 @@ class WorkoutSetupWindow(QWidget):
         built right away, without the song picker); None otherwise"""
         cache = MusicCadence.load_cache()
         songs, analyses = [], {}
-        for path, title, checked in MusicCadence.load_selection():
-            if not checked:
-                continue
-            analysis = MusicCadence.cached(cache, path) if os.path.isfile(path) else None
-            if analysis is None:
-                return None
-            songs.append((path, title))
-            analyses[path] = analysis
+        try:
+            for path, title, checked in MusicCadence.load_selection():
+                if not checked:
+                    continue
+                analysis = MusicCadence.cached(cache, path) if os.path.isfile(path) else None
+                if analysis is None:
+                    return None
+                songs.append((path, title))
+                analyses[path] = analysis
+        finally:
+            #(a song looked up for the first time has its file read for its CRC: kept, so that's only ever once)
+            MusicCadence.save_new_crcs(cache)
         if not songs:
             return None
         settings = SavedSettings.load()
@@ -1493,7 +1487,7 @@ class WorkoutSetupWindow(QWidget):
 
     def process_workout_file(self, filePath):
         self.clear_workout()
-        ext = filePath.split(".")[-1]
+        ext = filePath.split(".")[-1].lower()
         filename = filePath.split("/")[-1]
         if ext == "awo":
             try:
@@ -1507,7 +1501,7 @@ class WorkoutSetupWindow(QWidget):
             if contentsList[-1] == "": 
                 contentsList = contentsList[0:-1]
             return self.process_workout_lines(contentsList, filename)
-        elif ext.lower() == "zwo":
+        elif ext == "zwo":
             #a Zwift workout, read as the .awo it converts to (see ZwoConvert.py)
             try:
                 contentsList, _, warnings = ZwoConvert.convert(filePath)

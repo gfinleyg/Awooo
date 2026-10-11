@@ -1,12 +1,9 @@
-import sys
-
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
 
 import AppLayout
 
 from ClassAnalogGauge import *
-from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
 from ClassSpiralProgressBar import *
 from ClassWorkoutGraph import *
@@ -21,11 +18,10 @@ import ClassAntLogger
 
 ###Confirm Exit QWidget Window
 class ConfirmExitWindow(QWidget):
-    def __init__(self, closeEvent, parent):
+    def __init__(self, parent):
         super(ConfirmExitWindow, self).__init__()
 
         self.parent = parent
-        self.closeEvent = closeEvent
 
         self.setWindowTitle("   Exit Awooo Workout?   ")
         self.exitSynopsisConfirmButton = QPushButton("Yes, Exit")
@@ -73,7 +69,9 @@ class ConfirmExitWindow(QWidget):
             # stick is left mid-session for the next launch to recover from
             if not bridge.wait(3000):
                 ClassAntLogger.log_event("ANT", "ANT bridge did not shut down within 3s, exiting anyway")
-        sys.exit(0)
+        # Out of the event loop; AntWorkout.py ends the process from there. (Not sys.exit() here: that started
+        # Python's teardown with Qt's event loop still running, which could crash Qt on the way out)
+        QApplication.quit()
 
     def hide_confirm_exit_window(self):
         self.hide()

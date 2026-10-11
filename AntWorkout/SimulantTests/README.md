@@ -38,6 +38,25 @@ coming back.
 resistance 0%); the trainer dropping out and getting its target again when it's back; target 0 when the
 workout stops.
 
+## The whole app
+
+`run_app_test.py` drives the real app (main window, setup screen, workout screen, synopsis, exit) the way a rider
+would, against the same simulators, which send their steady pairing values the whole time (no timeline). Run it
+with the same simulators running as the test above, and only those (a trainer heard alongside a power meter makes
+the power device a choice on the setup screen):
+
+    python SimulantTests\run_app_test.py trainer
+    python SimulantTests\run_app_test.py sensors
+
+`trainer` (about 3 minutes): Workout Mode on the trainer - ERG through steady blocks, a ramp and intervals, a block
+over the Power Drive Cutoff (released), a difficulty change and a pause - then grading, the synopsis, Esc for the
+End Workout prompt, back to setup and the app's own exit.
+
+`sensors` (about 4 minutes): Musical Cadence Mode with two generated songs analyzed and played (silently), a
+shortened 20m FTP test and Apply FTP, a Free Mode ride, going back to setup each time and the app's own exit.
+
+Its run folder holds `report.txt`, the scripts' logs and the app's own files (settings, log).
+
 ## Files
 
 - `simulant_scripts/` - the SimulANT+ scripts (IronPython 2.7); `modules/awo_timeline.py` is the timeline both

@@ -3,13 +3,6 @@ import time as time_module
 from PyQt6.QtCore import QObject
 from PyQt6.QtGui import QColor
 
-from ClassAnalogGauge import *
-from ClassLongVerticalLabel import *
-from ClassLongVerticalLabelSeries import *
-from ClassSpiralProgressBar import *
-from ClassWorkoutGraph import *
-from ClassCustomTitleBar import *
-
 from ClassAntDevices import (
     ROLE_HRM,
     ROLE_POWER,
@@ -21,6 +14,7 @@ from AppState import AppState
 import FtpColors
 import PowerCalibration
 import WorkoutData
+from WorkoutHelpers import HOLD_POWER_READINGS, HOLD_HR_READINGS, HOLD_CADENCE_READINGS, HOLD_SPEED_READINGS
 
 
 DEVICE_TYPE_POWER_METER = 11
@@ -37,29 +31,13 @@ SPEED_CALIBRATION_MAX_SAMPLES = 900
 SPEED_CALIBRATION_MIN_SAMPLES = 5
 
 
-###AntWorkout.exe text file handling
+###Live sensor readings onto the HUD's gauges and graph, and into the workout's sensor history (WorkoutData.py)
 ###
-### Was a QThread running its own 100ms while-loop, polling
-### bridge.selected_device(...) on every tick regardless of whether
-### anything new had actually arrived. Converted to a plain QObject that
-### reacts to AntWorkoutBridge's dataUpdated signal instead - the signal
-### only fires when a role's decoded data actually changed (see
-### ClassAntDevices.py's _on_message), so gauge updates now land the
-### instant a new ANT page decodes rather than up to 100ms late, and the
-### CPU/thread stop entirely being idle-woken 10x/second with nothing to
-### do most of the time.
-###
-### start()/stop() keep their original names/semantics (connect/
-### disconnect from the bridge's signal instead of starting/stopping a
-### thread) so ClassMainWindow.py's existing
-### self.workoutHudWidget.antDevices.start()/.stop() call sites don't
-### need to change.
-###
-### The loop body itself is unchanged line-for-line below (now living in
-### _on_data_updated as a single pass instead of one while-loop
-### iteration) - it was already self-gated on each role's own
-### pages_received counter, so it's safe and correct to run the whole
-### thing on every dataUpdated signal, whichever role triggered it.
+### Reacts to AntWorkoutBridge's dataUpdated signal, which fires the moment a
+### role's decoded data changes (see ClassAntDevices.py's _on_message), so
+### gauge updates land as soon as an ANT page decodes. start()/stop()
+### connect to and disconnect from that signal (ClassMainWindow.py's
+### self.workoutHudWidget.antDevices.start()/.stop()).
 class AntDevicesPoller(QObject):
     def __init__(self, parent):
         super(AntDevicesPoller, self).__init__()
@@ -80,26 +58,19 @@ class AntDevicesPoller(QObject):
         #self.parent.parent.go_back_to_setup() idiom used elsewhere.
         self.bridge = self.parent.parent.startExe
 
-        #Per-role "pages_received" bookkeeping: a role's profile only has new
-        #data to act on when its pages_received count has moved since the
-        #last time we looked. Instance attributes now (rather than run()
-        #locals) since each dataUpdated signal is a separate, independent
-        #call into _on_data_updated rather than one iteration of a
-        #standing loop - this state has to persist across those calls.
-        self.lastPowerPages = -1
-        self.lastHrPages = -1
-
-        #Separate pages_received trackers for the cadence/speed sources,
-        #since the "which source" can itself change mid-workout (a
-        #dedicated sensor going stale/lost/stalled and falling back to
-        #the power meter's own cadence field, or recovering back). Each
-        #possible source gets its own counter so switching between them
-        #doesn't get confused by a stale comparison against a different
-        #device's page count.
-        self.lastCadenceSourcePages = -1
-        self.lastCadenceFallbackPmPages = -1
-        self.lastSpeedSourcePages = -1
-        self.lastSpeedFallbackPmPages = -1
+        #The last reading acted on from each source. Every decoded reading is
+        #a new object (see the profiles), so a reading is acted on once, when
+        #its object first shows up, however many signals arrive while it's the
+        #latest. Each possible cadence/speed source has its own, since the
+        #"which source" can itself change mid-workout (a dedicated sensor
+        #going stale/lost/stalled and falling back to the power meter's own
+        #cadence field, or recovering back).
+        self.lastPowerReading = None
+        self.lastHrReading = None
+        self.lastCadenceSourceReading = None
+        self.lastCadenceFallbackReading = None
+        self.lastSpeedSourceReading = None
+        self.lastSpeedFallbackReading = None
 
         #Initialize these to zero, they'll get updated to non-zero once values are added
         self.lastNonZeroPower = 0
@@ -155,11 +126,6 @@ class AntDevicesPoller(QObject):
         #independent of speed, which breaks the whole premise.
         self._speedCalSamples = []
 
-        self.cumulativeSpeedRevolutionsLast = "0"
-        self.speedEventTimeLast = "0"
-        self.cumulativeCadenceRevolutionsLast = "0"
-        self.cadenceEventTimeLast = "0"
-
         #Saved power meter calibrations (see PowerCalibration.py / Calibrate
         #Power on the setup screen), read once per workout
         self._powerCalibrations = PowerCalibration.load_all()
@@ -170,287 +136,282 @@ class AntDevicesPoller(QObject):
     def _on_data_updated(self, role):
         #Connected to AntWorkoutBridge.dataUpdated - fires once per ANT
         #page decode for a role-relevant device (see ClassAntDevices.py's
-        #_on_message). `role` isn't dispatched on below: every block here
-        #is already self-gated on its own pages_received counter, so
-        #running the whole pass on every signal (whichever role actually
-        #triggered it) is harmless and exactly mirrors what the old
-        #100ms-tick while-loop body did each iteration.
+        #_on_message). Only what that role feeds is looked at: power
+        #readings update the power gauge (and the cadence/speed fallbacks,
+        #which come from the power meter), heart rate readings the heart rate
+        #gauge, and cadence/speed sensor readings the cadence gauge and speed.
         if not self.active:
             return
 
-        bridge = self.bridge
-        lastPowerPages = self.lastPowerPages
-        lastHrPages = self.lastHrPages
-        lastCadenceSourcePages = self.lastCadenceSourcePages
-        lastCadenceFallbackPmPages = self.lastCadenceFallbackPmPages
-        lastSpeedSourcePages = self.lastSpeedSourcePages
-        lastSpeedFallbackPmPages = self.lastSpeedFallbackPmPages
+        #Pull decoded values straight off the live ANTDevice/profile
+        powerDevice = self.bridge.selected_device(ROLE_POWER)
+        pmLatest = None
+        if powerDevice is not None and powerDevice.profile is not None:
+            pmLatest = powerDevice.profile.latest
+            if not hasattr(pmLatest, "instantaneous_power_watts"):
+                #no power reading decoded yet (an FE-C trainer only fills this from its trainer data page)
+                pmLatest = None
 
-        if True:  # noqa: preserves the old while-loop body's indentation verbatim below
-            #Pull decoded values straight off the live ANTDevice/profile
-            #instead of polling files.
-            powerDevice = bridge.selected_device(ROLE_POWER)
-            pmLatest = None
-            if powerDevice is not None and powerDevice.profile is not None:
-                pmLatest = powerDevice.profile.latest
-                if not hasattr(pmLatest, "instantaneous_power_watts"):
-                    #no power reading decoded yet (an FE-C trainer only fills this from its trainer data page)
-                    pmLatest = None
-                pmPages = powerDevice.profile.readings_received
-                if pmLatest is not None and pmPages != lastPowerPages:
-                    lastPowerPages = pmPages
-                    pmVal = self._calibrated_power(powerDevice, pmLatest)
-                    WorkoutData.power.append(pmVal)
-                    if pmVal == 0:
-                        if self.lastNonZeroPowerIndex < 3:
-                            #possible misread, keep the last value for a few cycles
-                            pmVal = self.lastNonZeroPower
-                            self.lastNonZeroPowerIndex += 1
-                    else:
-                        #reset the counter
-                        self.lastNonZeroPowerIndex = 0
-                        self.lastNonZeroPower = pmVal
-                    self.powerGauge.ui.widget.setValue(int(pmVal))
-                    AppState.savedPowerVals[0].append(AppState.secondsPassed)
-                    AppState.savedPowerVals[1].append(int(pmVal))
-                    c0 = self.getFtpColor(int(pmVal))
-                    self.powerGauge.ui.widget.outer_circle_bg = [[0.25, QColor(0,0,0,0)], [0.18, QColor(c0)],]
-                    while AppState.savedPowerVals[0][-1] - AppState.savedPowerVals[0][0] > AppState.graphSecondsShown-AppState.graphBreakpoint:
-                        AppState.savedPowerVals[0].pop(0)
-                        AppState.savedPowerVals[1].pop(0)
+        if role == ROLE_POWER:
+            self._update_power(powerDevice, pmLatest)
 
-            #Track the power meter's own reported cadence + whether the
-            #power source itself looks healthy and is a fixed-resistance
-            #device - independent of the hold-last-value smoothing above
-            #(that's purely for the watt gauge display). Used by the
-            #cadence/speed fallback logic below.
-            if powerDevice is not None and pmLatest is not None:
-                self._latestPowerMeterCadenceRpm = getattr(
-                    pmLatest, "power_meter_cadence_rpm", None
-                )
-                self._powerDeviceHealthy = (
-                    powerDevice.state == "ACTIVE"
-                    and not powerDevice.data_stalled
-                )
-                self._powerDeviceIsFixedResistance = (
-                    powerDevice.device_type == DEVICE_TYPE_POWER_METER
-                )
-            else:
-                self._latestPowerMeterCadenceRpm = None
-                self._powerDeviceHealthy = False
-                self._powerDeviceIsFixedResistance = False
+        #Track the power meter's own reported cadence + whether the
+        #power source itself looks healthy and is a fixed-resistance
+        #device - independent of the hold-last-value smoothing in
+        #_update_power (that's purely for the watt gauge display). Used by
+        #the cadence/speed fallback logic below.
+        if powerDevice is not None and pmLatest is not None:
+            self._latestPowerMeterCadenceRpm = getattr(
+                pmLatest, "power_meter_cadence_rpm", None
+            )
+            self._powerDeviceHealthy = (
+                powerDevice.state == "ACTIVE"
+                and not powerDevice.data_stalled
+            )
+            self._powerDeviceIsFixedResistance = (
+                powerDevice.device_type == DEVICE_TYPE_POWER_METER
+            )
+        else:
+            self._latestPowerMeterCadenceRpm = None
+            self._powerDeviceHealthy = False
+            self._powerDeviceIsFixedResistance = False
 
+        if role == ROLE_HRM:
             if AppState.antHRM:
-                hrDevice = bridge.selected_device(ROLE_HRM)
-                if hrDevice is not None and hrDevice.profile is not None:
-                    hrLatest = hrDevice.profile.latest
-                    hrPages = hrDevice.profile.readings_received
-                    if hrLatest is not None and hrPages != lastHrPages:
-                        lastHrPages = hrPages
-                        hrmVal = hrLatest.computed_heart_rate
-                        WorkoutData.heartRate.append(hrmVal)
-                        if hrmVal == 0:
-                            if self.lastNonZeroHRIndex < 10:
-                                #possible misread, keep the last value for a few cycles
-                                hrmVal = self.lastNonZeroHR
-                                self.lastNonZeroHRIndex += 1
-                        else:
-                            #reset the counter
-                            self.lastNonZeroHRIndex = 0
-                            self.lastNonZeroHR = hrmVal
-                        self.hrGauge.ui.widget.setValue(int(hrmVal))
-                        AppState.savedHRVals[0].append(AppState.secondsPassed)
-                        AppState.savedHRVals[1].append(int(hrmVal))
-                        while AppState.savedHRVals[0][-1] - AppState.savedHRVals[0][0] > AppState.graphSecondsShown-AppState.graphBreakpoint:
-                            AppState.savedHRVals[0].pop(0)
-                            AppState.savedHRVals[1].pop(0)
+                self._update_heart_rate()
+        elif AppState.shows_cadence():
+            self._update_cadence(powerDevice, pmLatest)
+            #(Musical Cadence Mode shows cadence, from the power meter, with no speed/cadence source selected)
+            if AppState.any_speed_cadence():
+                self._update_speed(powerDevice, pmLatest)
 
-            if AppState.shows_cadence():
-                #--- Cadence: dedicated sensor (combined or discrete)
-                #first, falling back to the power meter's own cadence
-                #field if the dedicated source has gone stale/lost/
-                #stalled (RecoveryManager). ---
-                cadenceDevice = None
-                if AppState.antCadence:
-                    cadenceDevice = bridge.selected_device(ROLE_CADENCE)
-                elif AppState.antSpeedCadence:
-                    cadenceDevice = bridge.selected_device(ROLE_SPEED_CADENCE)
+    def _update_power(self, powerDevice, pmLatest):
+        if pmLatest is None or pmLatest is self.lastPowerReading:
+            return
+        self.lastPowerReading = pmLatest
+        pmVal = self._calibrated_power(powerDevice, pmLatest)
+        WorkoutData.power.append(pmVal)
+        if pmVal == 0:
+            if self.lastNonZeroPowerIndex < HOLD_POWER_READINGS:
+                #possible misread, keep the last value for a few cycles
+                pmVal = self.lastNonZeroPower
+                self.lastNonZeroPowerIndex += 1
+        else:
+            #reset the counter
+            self.lastNonZeroPowerIndex = 0
+            self.lastNonZeroPower = pmVal
+        self.powerGauge.ui.widget.setValue(int(pmVal))
+        AppState.savedPowerVals[0].append(AppState.secondsPassed)
+        AppState.savedPowerVals[1].append(int(pmVal))
+        c0 = self.getFtpColor(int(pmVal))
+        self.powerGauge.ui.widget.outer_circle_bg = [[0.25, QColor(0,0,0,0)], [0.18, QColor(c0)],]
+        while AppState.savedPowerVals[0][-1] - AppState.savedPowerVals[0][0] > AppState.graphSecondsShown-AppState.graphBreakpoint:
+            AppState.savedPowerVals[0].pop(0)
+            AppState.savedPowerVals[1].pop(0)
 
-                dedicatedCadenceHealthy = (
-                    cadenceDevice is not None
-                    and cadenceDevice.profile is not None
-                    and cadenceDevice.state == "ACTIVE"
-                    and not cadenceDevice.data_stalled
-                )
+    def _update_heart_rate(self):
+        hrDevice = self.bridge.selected_device(ROLE_HRM)
+        if hrDevice is None or hrDevice.profile is None:
+            return
+        hrLatest = hrDevice.profile.latest
+        if hrLatest is None or hrLatest is self.lastHrReading:
+            return
+        self.lastHrReading = hrLatest
+        hrmVal = hrLatest.computed_heart_rate
+        WorkoutData.heartRate.append(hrmVal)
+        if hrmVal == 0:
+            if self.lastNonZeroHRIndex < HOLD_HR_READINGS:
+                #possible misread, keep the last value for a few cycles
+                hrmVal = self.lastNonZeroHR
+                self.lastNonZeroHRIndex += 1
+        else:
+            #reset the counter
+            self.lastNonZeroHRIndex = 0
+            self.lastNonZeroHR = hrmVal
+        self.hrGauge.ui.widget.setValue(int(hrmVal))
+        AppState.savedHRVals[0].append(AppState.secondsPassed)
+        AppState.savedHRVals[1].append(int(hrmVal))
+        while AppState.savedHRVals[0][-1] - AppState.savedHRVals[0][0] > AppState.graphSecondsShown-AppState.graphBreakpoint:
+            AppState.savedHRVals[0].pop(0)
+            AppState.savedHRVals[1].pop(0)
 
-                if not dedicatedCadenceHealthy:
-                    #Reset the rollover baseline so a recovered sensor
-                    #doesn't diff its first fresh reading against ticks
-                    #from before the outage.
-                    self._cadenceTrackerKey = None
+    def _update_cadence(self, powerDevice, pmLatest):
+        #--- Cadence: dedicated sensor (combined or discrete)
+        #first, falling back to the power meter's own cadence
+        #field if the dedicated source has gone stale/lost/
+        #stalled (RecoveryManager). ---
+        cadenceDevice = None
+        if AppState.antCadence:
+            cadenceDevice = self.bridge.selected_device(ROLE_CADENCE)
+        elif AppState.antSpeedCadence:
+            cadenceDevice = self.bridge.selected_device(ROLE_SPEED_CADENCE)
 
-                newCadence = None
-                cadenceIsFallback = False
+        dedicatedCadenceHealthy = (
+            cadenceDevice is not None
+            and cadenceDevice.profile is not None
+            and cadenceDevice.state == "ACTIVE"
+            and not cadenceDevice.data_stalled
+        )
 
-                if dedicatedCadenceHealthy:
-                    cadLatest = cadenceDevice.profile.latest
-                    cadPages = cadenceDevice.profile.pages_received
-                    if cadLatest is not None and cadPages != lastCadenceSourcePages:
-                        lastCadenceSourcePages = cadPages
-                        #raw counters for SynopsisWindow's replay, every new page whether or not
-                        #it has a new pedal stroke (so a combined sensor's speed while coasting
-                        #is kept too, and no gap long enough for its 64s event time to wrap)
-                        if cadenceDevice.device_type == DEVICE_TYPE_SPEED_CADENCE_COMBINED:
-                            #both readings together: cumulativeSpeedRevolutions, speedEventTime,
-                            #cumulativeCadenceRevolutions, cadenceEventTime (see
-                            #SynopsisWindow.process_synopsis_data)
-                            WorkoutData.speedCadence.append(
-                                cadLatest.speed_revolution_count,
-                                cadLatest.speed_event_ticks,
-                                cadLatest.cadence_revolution_count,
-                                cadLatest.cadence_event_ticks,
-                            )
-                        else:
-                            WorkoutData.cadence.append(cadLatest.revolution_count, cadLatest.event_ticks)
-                        newCadence = self._cadence_from_ticks(cadenceDevice, cadLatest)
-                elif (
-                    self._powerDeviceHealthy
-                    and self._latestPowerMeterCadenceRpm is not None
-                    and pmLatest is not None
-                    and lastCadenceFallbackPmPages != powerDevice.profile.readings_received
-                ):
-                    lastCadenceFallbackPmPages = powerDevice.profile.readings_received
-                    newCadence = float(self._latestPowerMeterCadenceRpm)
-                    cadenceIsFallback = True
-                    #for SynopsisWindow's replay - there are no raw counters to record here
-                    WorkoutData.fallbackCadence.append(self._latestPowerMeterCadenceRpm)
+        if not dedicatedCadenceHealthy:
+            #Reset the rollover baseline so a recovered sensor
+            #doesn't diff its first fresh reading against ticks
+            #from before the outage.
+            self._cadenceTrackerKey = None
 
-                if newCadence is not None:
-                    cadence = newCadence
-                    cadenceSource = "fallback" if cadenceIsFallback else "sensor"
-                    if cadenceSource != self._cadenceSource:
-                        self._cadenceSource = cadenceSource
-                        self.lastNonZeroCadence = 0
-                        self.lastNonZeroCadenceIndex = 0
-                    if cadence <= 200:
-                        if cadence < 10:
-                            if self.lastNonZeroCadenceIndex < 30:
-                                #possible misread, keep the last value for a few cycles
-                                cadence = self.lastNonZeroCadence
-                                self.lastNonZeroCadenceIndex += 1
-                        else:
-                            #reset the counter
-                            self.lastNonZeroCadence = cadence
-                            self.lastNonZeroCadenceIndex = 0
-                        #the power meter fallback only reports whole RPM, so drop the decimal for it
-                        self.cadenceGauge.ui.widget.value_decimals = 0 if cadenceIsFallback else 1
-                        self.cadenceGauge.ui.widget.setValue(cadence)
-                        AppState.savedCadenceVals[0].append(AppState.secondsPassed)
-                        AppState.savedCadenceVals[1].append(int(cadence))
-                        while AppState.savedCadenceVals[0][-1] - AppState.savedCadenceVals[0][0] > AppState.graphSecondsShown-AppState.graphBreakpoint:
-                            AppState.savedCadenceVals[0].pop(0)
-                            AppState.savedCadenceVals[1].pop(0)
+        newCadence = None
+        cadenceIsFallback = False
 
-                #(Musical Cadence Mode shows cadence, from the power meter, with no speed/cadence source selected)
-                if AppState.any_speed_cadence():
-                    #--- Speed: dedicated sensor (combined or discrete)
-                    #first, falling back to a live-calibrated power->speed
-                    #estimate if the dedicated source has gone stale/lost/
-                    #stalled. Only offered for a fixed-resistance power
-                    #source (a plain power meter, not an FE-C/controllable
-                    #trainer, which can change its own resistance
-                    #independent of speed) - see _powerDeviceIsFixedResistance. ---
-                    speedDevice = None
-                    if AppState.antSpeed:
-                        speedDevice = bridge.selected_device(ROLE_SPEED)
-                    elif AppState.antSpeedCadence:
-                        speedDevice = bridge.selected_device(ROLE_SPEED_CADENCE)
-
-                    dedicatedSpeedHealthy = (
-                        speedDevice is not None
-                        and speedDevice.profile is not None
-                        and speedDevice.state == "ACTIVE"
-                        and not speedDevice.data_stalled
+        if dedicatedCadenceHealthy:
+            cadLatest = cadenceDevice.profile.latest
+            if cadLatest is not None and cadLatest is not self.lastCadenceSourceReading:
+                self.lastCadenceSourceReading = cadLatest
+                #raw counters for SynopsisWindow's replay, every new page whether or not
+                #it has a new pedal stroke (so a combined sensor's speed while coasting
+                #is kept too, and no gap long enough for its 64s event time to wrap)
+                if cadenceDevice.device_type == DEVICE_TYPE_SPEED_CADENCE_COMBINED:
+                    #both readings together: cumulativeSpeedRevolutions, speedEventTime,
+                    #cumulativeCadenceRevolutions, cadenceEventTime (see
+                    #SynopsisWindow.process_synopsis_data)
+                    WorkoutData.speedCadence.append(
+                        cadLatest.speed_revolution_count,
+                        cadLatest.speed_event_ticks,
+                        cadLatest.cadence_revolution_count,
+                        cadLatest.cadence_event_ticks,
                     )
+                else:
+                    WorkoutData.cadence.append(cadLatest.revolution_count, cadLatest.event_ticks)
+                newCadence = self._cadence_from_ticks(cadenceDevice, cadLatest)
+        elif (
+            self._powerDeviceHealthy
+            and self._latestPowerMeterCadenceRpm is not None
+            and pmLatest is not None
+            and pmLatest is not self.lastCadenceFallbackReading
+        ):
+            self.lastCadenceFallbackReading = pmLatest
+            newCadence = float(self._latestPowerMeterCadenceRpm)
+            cadenceIsFallback = True
+            #for SynopsisWindow's replay - there are no raw counters to record here
+            WorkoutData.fallbackCadence.append(self._latestPowerMeterCadenceRpm)
 
-                    if not dedicatedSpeedHealthy:
-                        self._speedTrackerKey = None
+        if newCadence is None:
+            return
+        cadence = newCadence
+        cadenceSource = "fallback" if cadenceIsFallback else "sensor"
+        if cadenceSource != self._cadenceSource:
+            self._cadenceSource = cadenceSource
+            self.lastNonZeroCadence = 0
+            self.lastNonZeroCadenceIndex = 0
+        if cadence > 200:
+            return
+        if cadence < 10:
+            if self.lastNonZeroCadenceIndex < HOLD_CADENCE_READINGS:
+                #possible misread, keep the last value for a few cycles
+                cadence = self.lastNonZeroCadence
+                self.lastNonZeroCadenceIndex += 1
+        else:
+            #reset the counter
+            self.lastNonZeroCadence = cadence
+            self.lastNonZeroCadenceIndex = 0
+        #the power meter fallback only reports whole RPM, so drop the decimal for it
+        self.cadenceGauge.ui.widget.value_decimals = 0 if cadenceIsFallback else 1
+        self.cadenceGauge.ui.widget.setValue(cadence)
+        AppState.savedCadenceVals[0].append(AppState.secondsPassed)
+        AppState.savedCadenceVals[1].append(int(cadence))
+        while AppState.savedCadenceVals[0][-1] - AppState.savedCadenceVals[0][0] > AppState.graphSecondsShown-AppState.graphBreakpoint:
+            AppState.savedCadenceVals[0].pop(0)
+            AppState.savedCadenceVals[1].pop(0)
 
-                    newSpeed = None
-                    speedIsFallback = False
+    def _update_speed(self, powerDevice, pmLatest):
+        #--- Speed: dedicated sensor (combined or discrete)
+        #first, falling back to a live-calibrated power->speed
+        #estimate if the dedicated source has gone stale/lost/
+        #stalled. Only offered for a fixed-resistance power
+        #source (a plain power meter, not an FE-C/controllable
+        #trainer, which can change its own resistance
+        #independent of speed) - see _powerDeviceIsFixedResistance. ---
+        speedDevice = None
+        if AppState.antSpeed:
+            speedDevice = self.bridge.selected_device(ROLE_SPEED)
+        elif AppState.antSpeedCadence:
+            speedDevice = self.bridge.selected_device(ROLE_SPEED_CADENCE)
 
-                    if dedicatedSpeedHealthy:
-                        spdLatest = speedDevice.profile.latest
-                        spdPages = speedDevice.profile.pages_received
-                        if spdLatest is not None and spdPages != lastSpeedSourcePages:
-                            lastSpeedSourcePages = spdPages
-                            if speedDevice.device_type != DEVICE_TYPE_SPEED_CADENCE_COMBINED:
-                                #raw counters for SynopsisWindow's replay, see the cadence equivalent above
-                                WorkoutData.speed.append(spdLatest.revolution_count, spdLatest.event_ticks)
-                            newSpeed = self._speed_from_ticks(speedDevice, spdLatest)
-                            if (
-                                newSpeed is not None
-                                and pmLatest is not None
-                                and self._powerDeviceIsFixedResistance
-                            ):
-                                #Real, simultaneous power+speed sample -
-                                #feed the fallback calibration. Never
-                                #recorded from an estimate.
-                                self._record_speed_calibration(
-                                    self._calibrated_power(powerDevice, pmLatest),
-                                    newSpeed,
-                                )
-                    elif (
-                        self._powerDeviceHealthy
-                        and self._powerDeviceIsFixedResistance
-                        and pmLatest is not None
-                        and lastSpeedFallbackPmPages != powerDevice.profile.readings_received
-                    ):
-                        lastSpeedFallbackPmPages = powerDevice.profile.readings_received
-                        estimated = self._estimate_speed_from_power(
-                            self._calibrated_power(powerDevice, pmLatest)
-                        )
-                        if estimated is not None:
-                            newSpeed = estimated
-                            speedIsFallback = True
+        dedicatedSpeedHealthy = (
+            speedDevice is not None
+            and speedDevice.profile is not None
+            and speedDevice.state == "ACTIVE"
+            and not speedDevice.data_stalled
+        )
 
-                    if newSpeed is not None:
-                        speed = newSpeed
-                        speedSource = "fallback" if speedIsFallback else "sensor"
-                        if speedSource != self._speedSource:
-                            self._speedSource = speedSource
-                            self.lastNonZeroSpeed = 0
-                            self.lastNonZeroSpeedIndex = 0
-                        if speed <= 60:
-                            if speed < 5:
-                                if self.lastNonZeroSpeedIndex < 3:
-                                    #possible misread, keep the last value for a few cycles
-                                    speed = self.lastNonZeroSpeed
-                                    self.lastNonZeroSpeedIndex += 1
-                            else:
-                                #reset the counter
-                                self.lastNonZeroSpeed = speed
-                                self.lastNonZeroSpeedIndex = 0
-                            self.parent.set_speed(str(round(speed,1)))
-                            if not speedIsFallback:
-                                #Distance is accumulated from real wheel
-                                #revolutions only (see _speed_from_ticks) - an
-                                #estimated speed during a dropout moves the
-                                #gauge/label so the ride doesn't look frozen,
-                                #but deliberately does NOT add fabricated
-                                #distance to the permanent total.
-                                distance = float(AppState.wheelCircumference) * AppState.totalRevolutions * 0.000621371 #0.000621371 miles per meter
-                                self.parent.set_distance(str(round(distance,2)))
+        if not dedicatedSpeedHealthy:
+            self._speedTrackerKey = None
 
-        #Write the (possibly-updated) local trackers back to instance
-        #state so the next dataUpdated call picks up where this one left
-        #off - see the mirroring reads at the top of this method.
-        self.lastPowerPages = lastPowerPages
-        self.lastHrPages = lastHrPages
-        self.lastCadenceSourcePages = lastCadenceSourcePages
-        self.lastCadenceFallbackPmPages = lastCadenceFallbackPmPages
-        self.lastSpeedSourcePages = lastSpeedSourcePages
-        self.lastSpeedFallbackPmPages = lastSpeedFallbackPmPages
+        newSpeed = None
+        speedIsFallback = False
+
+        if dedicatedSpeedHealthy:
+            spdLatest = speedDevice.profile.latest
+            if spdLatest is not None and spdLatest is not self.lastSpeedSourceReading:
+                self.lastSpeedSourceReading = spdLatest
+                if speedDevice.device_type != DEVICE_TYPE_SPEED_CADENCE_COMBINED:
+                    #raw counters for SynopsisWindow's replay, see the cadence equivalent in _update_cadence
+                    WorkoutData.speed.append(spdLatest.revolution_count, spdLatest.event_ticks)
+                newSpeed = self._speed_from_ticks(speedDevice, spdLatest)
+                if (
+                    newSpeed is not None
+                    and pmLatest is not None
+                    and self._powerDeviceIsFixedResistance
+                ):
+                    #Real, simultaneous power+speed sample -
+                    #feed the fallback calibration. Never
+                    #recorded from an estimate.
+                    self._record_speed_calibration(
+                        self._calibrated_power(powerDevice, pmLatest),
+                        newSpeed,
+                    )
+        elif (
+            self._powerDeviceHealthy
+            and self._powerDeviceIsFixedResistance
+            and pmLatest is not None
+            and pmLatest is not self.lastSpeedFallbackReading
+        ):
+            self.lastSpeedFallbackReading = pmLatest
+            estimated = self._estimate_speed_from_power(
+                self._calibrated_power(powerDevice, pmLatest)
+            )
+            if estimated is not None:
+                newSpeed = estimated
+                speedIsFallback = True
+
+        if newSpeed is None:
+            return
+        speed = newSpeed
+        speedSource = "fallback" if speedIsFallback else "sensor"
+        if speedSource != self._speedSource:
+            self._speedSource = speedSource
+            self.lastNonZeroSpeed = 0
+            self.lastNonZeroSpeedIndex = 0
+        if speed > 60:
+            return
+        if speed < 5:
+            if self.lastNonZeroSpeedIndex < HOLD_SPEED_READINGS:
+                #possible misread, keep the last value for a few cycles
+                speed = self.lastNonZeroSpeed
+                self.lastNonZeroSpeedIndex += 1
+        else:
+            #reset the counter
+            self.lastNonZeroSpeed = speed
+            self.lastNonZeroSpeedIndex = 0
+        self.parent.set_speed(str(round(speed,1)))
+        if not speedIsFallback:
+            #Distance is accumulated from real wheel
+            #revolutions only (see _speed_from_ticks) - an
+            #estimated speed during a dropout moves the
+            #gauge/label so the ride doesn't look frozen,
+            #but deliberately does NOT add fabricated
+            #distance to the permanent total.
+            distance = float(AppState.wheelCircumference) * AppState.totalRevolutions * 0.000621371 #0.000621371 miles per meter
+            self.parent.set_distance(str(round(distance,2)))
 
     def _calibrated_power(self, device, latest):
         """The power meter's reading with its saved calibration applied"""

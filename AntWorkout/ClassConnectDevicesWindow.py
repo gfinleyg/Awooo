@@ -4,7 +4,6 @@ from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 import AppLayout
 
 from ClassAnalogGauge import *
-from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
 from ClassSpiralProgressBar import *
 from ClassWorkoutGraph import *
@@ -56,8 +55,6 @@ class ConnectDevicesWindow(QWidget):
         connectingMessage = ""
         selectedDevList = ReadSelectedDeviceLines()
         scannedDevList.extend(self.bridge.found_devices() if self.bridge is not None else [])
-        if len(selectedDevList) == 0 or len(scannedDevList) == 0: #shouldn't be possible
-            self.exit_selection()
         #check which selected devices were scanned
         for selDev in selectedDevList:
             #find device type

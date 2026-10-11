@@ -10,6 +10,7 @@ from ClassCustomTitleBar import CustomTitleBar
 from ClassAntDevices import ROLE_POWER
 import ClassAntLogger
 import PowerCalibration
+import SavedSettings
 
 DEVICE_TYPE_POWER_METER = 11
 REST_MEASURE_SECONDS = 5
@@ -337,20 +338,16 @@ class CalibratePowerWindow(QWidget):
         self.clearButton.setEnabled(self.saved is not None)
 
     def save(self):
-        try:
-            PowerCalibration.save(self.deviceType, self.deviceNumber, self.offsetWatts, self.scale, self.antZeroOffset)
-        except OSError as e:
-            self.reviewStatus.setText(f"Couldn't save the calibration: {e}")
+        if not PowerCalibration.save(self.deviceType, self.deviceNumber, self.offsetWatts, self.scale, self.antZeroOffset):
+            self.reviewStatus.setText(f"Couldn't save the calibration: {SavedSettings.SETTINGS_FILE} couldn't be written")
             return
         ClassAntLogger.log_event("CALIBRATE", f"Saved power calibration for {self.deviceType} {self.deviceNumber}: "
                                               f"offset={self.offsetWatts} scale={self.scale} ant_zero_offset={self.antZeroOffset}")
         self.close_window()
 
     def clear_saved(self):
-        try:
-            PowerCalibration.clear(self.deviceType, self.deviceNumber)
-        except OSError as e:
-            self.reviewStatus.setText(f"Couldn't remove the calibration: {e}")
+        if not PowerCalibration.clear(self.deviceType, self.deviceNumber):
+            self.reviewStatus.setText(f"Couldn't remove the calibration: {SavedSettings.SETTINGS_FILE} couldn't be written")
             return
         self.saved = None
         self.offsetWatts, self.scale = 0.0, 1.0

@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QPushButton, QVBo
                              QGraphicsSimpleTextItem, QGraphicsLineItem, QGraphicsRectItem)
 
 from ClassAnalogGauge import *
-from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
 from ClassSolidColoredColumns import SolidColoredColumns
 import FtpColors
@@ -20,7 +19,9 @@ from ClassCustomTitleBar import *
 from AppState import AppState
 import WorkoutData
 from ClassConfirmExitWindow import ConfirmExitWindow
-from WorkoutHelpers import MinimizedDuration, GetMaxOrZero, GetMaxOrZeroAndIndex, WithDropoutsAsZero
+from WorkoutHelpers import (MinimizedDuration, GetMaxOrZero, GetMaxOrZeroAndIndex, WithDropoutsAsZero,
+                            DROPOUT_ZERO_SECONDS, HOLD_POWER_READINGS, HOLD_HR_READINGS, HOLD_CADENCE_READINGS,
+                            HOLD_SPEED_READINGS)
 import AppTheme
 import WorkoutGrading
 import FtpTest
@@ -117,6 +118,11 @@ class SynopsisWindow(QWidget):
                     " Watts over 20m",
                     " Watts over 30m",
                     " Watts over 1h!"]
+
+        #best power is over unbroken readings (see findBestPowerRange), but a 20m or 1h FTP test's effort keeps its
+        #average through a sensor dropout, the same as the test's own average (FtpTest.EffortAverage)
+        self.dropoutsKeepAverage = AppState.workoutMode and \
+            FtpTest.TESTS.get(AppState.ftpTestMode, {}).get("kind") == "effort"
 
         #recalculate all of this info based on the raw data files
         self.processedWorkoutPowerVals = ([],[])
@@ -699,8 +705,11 @@ class SynopsisWindow(QWidget):
         self.blockGradesSheet.setGeometry((self.width() - width)//2, (self.height() - height)//2, width, height)
 
     def fix_size(self):
+        #(a second after it's built: if it's been left already - RESTART, back to setup - it mustn't show itself again
+        #over the screen that replaced it)
+        if not self.isVisible():
+            return
         self.parent.showMaximized()
-        self.showMaximized()
         QTimer.singleShot(0, self.layout_max_labels)
 
     def add_max_marker(self, vbox, vals, index, value, fmt, curve):
@@ -982,10 +991,11 @@ class SynopsisWindow(QWidget):
         if AppState.antHRM:
             lastNonZeroVal = 0
             lastNonZeroValIndex = 0
-            val = 0
             for timestamp, hr in WorkoutData.heartRate.rows():
+                #(the same hold-last-value smoothing as the live gauge: a 0 is only held over for a few readings)
+                val = hr
                 if hr == 0:
-                    if lastNonZeroValIndex < 3:
+                    if lastNonZeroValIndex < HOLD_HR_READINGS:
                         #possible misread, keep the last value for a few cycles
                         val = lastNonZeroVal
                         lastNonZeroValIndex += 1
@@ -993,7 +1003,6 @@ class SynopsisWindow(QWidget):
                     #reset the counter
                     lastNonZeroValIndex = 0
                     lastNonZeroVal = hr
-                    val = hr
                 deltaSeconds = timestamp - startSeconds
                 if deltaSeconds > 0:
                     self.processedHRVals[0].append(deltaSeconds)
@@ -1004,10 +1013,11 @@ class SynopsisWindow(QWidget):
 
         lastNonZeroVal = 0
         lastNonZeroValIndex = 0
-        val = 0
         for timestamp, watts in WorkoutData.power.rows():
+            #(as for heart rate above: coasting's 0s show as 0 once they've gone on for more than a few readings)
+            val = watts
             if watts == 0:
-                if lastNonZeroValIndex < 3:
+                if lastNonZeroValIndex < HOLD_POWER_READINGS:
                     #possible misread, keep the last value for a few cycles
                     val = lastNonZeroVal
                     lastNonZeroValIndex += 1
@@ -1015,7 +1025,6 @@ class SynopsisWindow(QWidget):
                 #reset the counter
                 lastNonZeroValIndex = 0
                 lastNonZeroVal = watts
-                val = watts
             deltaSeconds = timestamp - startSeconds
             if deltaSeconds > 0:
                 self.processedPowerVals[0].append(deltaSeconds)
@@ -1088,7 +1097,7 @@ class SynopsisWindow(QWidget):
             self.speedRevolutions[0].append(deltaSeconds)
             self.speedRevolutions[1].append(deltaRevCount)
             if speed < 5:
-                if self.lastNonZeroSpeedIndex < 3:
+                if self.lastNonZeroSpeedIndex < HOLD_SPEED_READINGS:
                     #possible misread, keep the last value for a few cycles
                     #(same hold-last-value smoothing the live gauge uses,
                     #so the post-workout graph matches what was shown
@@ -1121,7 +1130,7 @@ class SynopsisWindow(QWidget):
         if cadence > 200: #remove any crazy values
             return
         if cadence < 10:
-            if self.lastNonZeroCadenceIndex < 30:
+            if self.lastNonZeroCadenceIndex < HOLD_CADENCE_READINGS:
                 #possible misread, keep the last value for a few cycles
                 #(same hold-last-value smoothing the live gauge uses)
                 cadence = self.lastNonZeroCadence
@@ -1137,13 +1146,22 @@ class SynopsisWindow(QWidget):
         """Highest average power over any stretch of the ride at least
         targetTime seconds long, or None when the recorded power doesn't
         span targetTime (sensor connected late, dropped out, short ride).
-        Searches the whole ride's power unless given (times, watts)"""
+        Searches the whole ride's power unless given (times, watts).
+        A stretch is unbroken readings: a sensor dropout (readings further
+        apart than DROPOUT_ZERO_SECONDS, where the graph drops to zero too)
+        ends one - except in a 20m or 1h FTP test (dropoutsKeepAverage),
+        where the power is taken to have stayed at the stretch's average
+        through a dropout"""
         if times is None:
             times, watts = self.processedPowerVals
         best = None
         total = 0
         startIndex = 0
         for endIndex in range(len(times)):
+            if not self.dropoutsKeepAverage and endIndex > startIndex and \
+                    times[endIndex] - times[endIndex - 1] > DROPOUT_ZERO_SECONDS:
+                #a dropout: the next stretch starts with this reading
+                startIndex, total = endIndex, 0
             total += watts[endIndex]
             #drop readings off the front while the window would still span targetTime without them
             while endIndex > startIndex and times[endIndex] - times[startIndex+1] >= targetTime:
@@ -1166,5 +1184,5 @@ class SynopsisWindow(QWidget):
         self.hide()
 
     def confirm_exit(self):
-        self.w = ConfirmExitWindow(self.closeEvent, self)
+        self.w = ConfirmExitWindow(self)
         self.w.show()

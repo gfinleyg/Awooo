@@ -71,8 +71,8 @@ def init(app):
     _player.moveToThread(_playerThread)
     _playerThread.started.connect(_player.load)
     _playerThread.start()
-    #stop the thread before Python tears the objects down, whether the app
-    #quits normally or via sys.exit() from the exit confirmation
+    #stop the thread before the app ends (AntWorkout.py leaves without Python's
+    #teardown once its event loop is done), or Python tears the objects down
     app.aboutToQuit.connect(_stop_player_thread)
     atexit.register(_stop_player_thread)
 

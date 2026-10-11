@@ -150,7 +150,6 @@ ROLE_BATTERY_NAMES = {
     ROLE_SPEED: "Speed sensor",
 }
 TRAINER_BATTERY_NAME = "Trainer"
-SHOW_ALL_BATTERY_WARNINGS = False #TEMPORARY layout testing override, see low_battery_warnings()
 
 
 # ANT initialization retries: close/reopen/reconfigure the stick up to
@@ -316,6 +315,8 @@ class AntWorkoutBridge(QThread):
         # a connect request is processed.
         self._selected = {}
         self._connected = False
+        # role -> ((device_type, device_number), ANTDevice), see selected_device()
+        self._selected_devices = {}
 
         # Setup screen state, see the module docstring. _connect_requested
         # and _ready are only changed under _request_lock.
@@ -363,6 +364,14 @@ class AntWorkoutBridge(QThread):
         if identity is None:
             return None
 
+        # Looked up once per selection: the manager keeps every device
+        # object it creates for good (in the order first heard), so the
+        # first match found stays the first match. AntDevicesPoller asks
+        # for these on every ANT reading.
+        cached = self._selected_devices.get(role)
+        if cached is not None and cached[0] == identity:
+            return cached[1]
+
         device_type, device_number = identity
 
         for device in self.ant.get_devices():
@@ -370,6 +379,7 @@ class AntWorkoutBridge(QThread):
                 device.device_type == device_type
                 and device.device_number == device_number
             ):
+                self._selected_devices[role] = (identity, device)
                 return device
 
         return None
@@ -417,10 +427,6 @@ class AntWorkoutBridge(QThread):
         low/critical (GUI thread). Empty when nothing is selected - only
         the devices actually in use for this workout matter.
         """
-        #TEMPORARY: show every possible warning so the layouts can be checked; set back to False when done
-        if SHOW_ALL_BATTERY_WARNINGS:
-            #one per battery reporting role (power meter and trainer share the power slot) - never more than 4
-            return [f"{name} battery low (5%)" for name in ROLE_BATTERY_NAMES.values()]
         warnings = []
         for role in sorted(self._selected):
             if role not in ROLE_BATTERY_NAMES:

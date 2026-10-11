@@ -74,16 +74,34 @@ def _theme_changes():
     return AppTheme.THEME.ftp
 
 
+#each entry's current value, worked out once (the gauges and labels ask for them with every reading) until the theme's
+#changes are replaced (a theme loaded) or changed (set_value, notify)
+_values = {}
+_valuesSource = None
+
+
+def _current(key):
+    """The current value of one entry, shared: not to be changed (get() gives a copy that can be)"""
+    global _valuesSource
+    changes = _theme_changes()
+    if changes is not _valuesSource:
+        _values.clear()
+        _valuesSource = changes
+    value = _values.get(key)
+    if value is None:
+        value = copy.deepcopy(DEFAULTS[key])
+        if key in changes:
+            if isinstance(value, dict):
+                value.update(copy.deepcopy(changes[key]))
+            else:
+                value = copy.deepcopy(changes[key])
+        _values[key] = value
+    return value
+
+
 def get(key):
     """The current value of one entry (a copy)"""
-    changes = _theme_changes()
-    value = copy.deepcopy(DEFAULTS[key])
-    if key not in changes:
-        return value
-    if isinstance(value, dict):
-        value.update(copy.deepcopy(changes[key]))
-        return value
-    return copy.deepcopy(changes[key])
+    return copy.deepcopy(_current(key))
 
 
 def set_value(key, value, zone=None):
@@ -138,17 +156,17 @@ def zone_of(power, ranges=None):
 ###----------------------------------------------------------------------------------------------
 def gauge_arc(power, ranges=None):
     """The target arc's two colors for a power, without the "#" (the gauge adds transparency)"""
-    return tuple(c[1:] for c in get("gaugeArc")[zone_of(power, ranges)])
+    return tuple(c[1:] for c in _current("gaugeArc")[zone_of(power, ranges)])
 
 
 def gauge_ring(power, ranges=None):
     """The ring color for the power being ridden, without the "#" """
-    return get("gaugeRing")[zone_of(power, ranges)][1:]
+    return _current("gaugeRing")[zone_of(power, ranges)][1:]
 
 
 def spiral(power, ranges=None):
     """(line, blink) for the current block's power, without the "#" """
-    return tuple(c[1:] for c in get("spiral")[zone_of(power, ranges)])
+    return tuple(c[1:] for c in _current("spiral")[zone_of(power, ranges)])
 
 
 def all_colors():
@@ -164,7 +182,7 @@ def all_colors():
             for item in value.values():
                 walk(item)
     for key in DEFAULTS:
-        walk(get(key))
+        walk(_current(key))
     return found
 
 
@@ -176,9 +194,9 @@ BLOCK_TEXT = "#111111"
 def block_css(power0, power1=0, ranges=None):
     """A block label's background: a range from its low power's start color to its high power's end
     color, a single power from its start color to blockSingleEnd"""
-    blocks = get("blocks")
+    blocks = _current("blocks")
     start = blocks[_block_zone(power0, ranges)][0]
-    end = blocks[_block_zone(power1, ranges)][1] if power1 else get("blockSingleEnd")
+    end = blocks[_block_zone(power1, ranges)][1] if power1 else _current("blockSingleEnd")
     return f"background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 {start} stop:1 {end}); color:{BLOCK_TEXT};"
 
 
@@ -189,14 +207,14 @@ def _block_zone(power, ranges):
 
 
 def free_ride_css():
-    start, end = get("blocks")["free"]
+    start, end = _current("blocks")["free"]
     return f"background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 {start} stop:1 {end}); color:{BLOCK_TEXT};"
 
 
 def graph_brushes(state):
     """The bars' colors (one per zone, see transparent) for "paused", "upcoming" or "past" """
     index = GRAPH_STATES.index(state)
-    graph = get("graph")
+    graph = _current("graph")
     return [QColor(GRAPH_ALPHA + graph[zone][index][1:]) for zone in ZONE_KEYS[:5]]
 
 
@@ -213,7 +231,7 @@ def update_graph_brushes():
 
 def gauge_scale_stops(ftp):
     """The gauge band's stops as (watts, QColor)"""
-    return [(float(ftp)*pct/100, QColor(color)) for pct, color in sorted(get("gaugeScale"))]
+    return [(float(ftp)*pct/100, QColor(color)) for pct, color in sorted(_current("gaugeScale"))]
 
 
 #Musical Cadence Mode's cadence scale: the gradient starts here (the least green, zone "0"'s color), and the top
@@ -237,7 +255,7 @@ def cadence_scale_stops(ranges):
     if len(ranges) < 2:
         return []
     starts = [ranges[0] - (ranges[1] - ranges[0])] + list(ranges)
-    arc = get("gaugeArc")
+    arc = _current("gaugeArc")
     return [(rpm, QColor(arc[str(zone)][1])) for zone, rpm in enumerate(starts)]
 
 
@@ -268,6 +286,7 @@ def watch(obj, methodName):
 
 def notify():
     global _lastApplied
+    _values.clear()
     _lastApplied = copy.deepcopy(_theme_changes())
     update_graph_brushes()
     for ref, methodName in list(_watchers):

@@ -4,7 +4,6 @@ from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 
 from ClassAnalogGauge import *
-from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
 from ClassSpiralProgressBar import *
 from ClassWorkoutGraph import *
@@ -223,5 +222,5 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         # Make sure the user wants to close the app
         event.ignore()
-        self.w = ConfirmExitWindow(event, self)
+        self.w = ConfirmExitWindow(self)
         self.w.show()

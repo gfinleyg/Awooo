@@ -1,0 +1,32 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# AntNative build intermediates and debug symbols (the .pyd modules in build/Release are what the apps load, those
+# stay tracked)
+AntNative/build/obj/
+AntNative/build/Release/*.exp
+AntNative/build/Release/*.lib
+AntNative/build.log
+*.pdb
+
+# PyInstaller's work folder and output (see "Building the exe" in AntWorkout/README.md)
+AntWorkout/build/
+AntWorkout/dist/
+
+# Written while the apps run: logs, settings and caches, SimulantTests results
+*_console.log
+antWorkoutLog.txt
+*.tmp
+AntWorkout/layoutScreenshots/
+AntWorkout/savedSettingsANT.json
+AntWorkout/musicCadenceCacheANT.json
+AntWorkout/musicSelectionANT.json
+AntWorkout/workoutPickerANT.json
+AntWorkout/SimulantTests/run/
+
+# The old native AntWorkout.exe, replaced by AntWorkoutBridge
+*.exe.old
+
+# vscode settings
+.\.vscode\*

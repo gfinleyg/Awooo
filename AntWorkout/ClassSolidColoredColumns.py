@@ -83,10 +83,7 @@ class SolidColoredColumns(GraphicsObject):
         if len(d) == 0:
             return (None, None)
 
-        # include a percentile of data range
-        if len(d) == 0:
-            return (None, None)
-        b = np.percentile(d, [0, 100]) # percentile result is always float64 or larger
+        b = (float(np.min(d)), float(np.max(d)))
 
         ## adjust for fill level
         if ax == 1:
@@ -243,27 +240,3 @@ class SolidColoredColumns(GraphicsObject):
         self._fillRectList = None
         self.path = None
         self._boundsCache = [None, None]
-
-
-class ROIPlotItem(SolidColoredColumns):
-    """Plot curve that monitors an ROI and image for changes to automatically replot."""
-    def __init__(self, roi, data, img, axes=(0,1), xVals=None, color=None):
-        self.roi = roi
-        self.roiData = data
-        self.roiImg = img
-        self.axes = axes
-        self.xVals = xVals
-        SolidColoredColumns.__init__(self, self.getRoiData(), x=self.xVals, color=color)
-        roi.sigRegionChanged.connect(self.roiChangedEvent)
-
-    def getRoiData(self):
-        d = self.roi.getArrayRegion(self.roiData, self.roiImg, axes=self.axes)
-        if d is None:
-            return
-        while d.ndim > 1:
-            d = d.mean(axis=1)
-        return d
-
-    def roiChangedEvent(self):
-        d = self.getRoiData()
-        self.updateData(d, self.xVals)

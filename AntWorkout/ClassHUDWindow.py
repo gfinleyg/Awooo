@@ -19,7 +19,6 @@ from PyQt6.QtWidgets import (
 )
 
 from ClassAnalogGauge import *
-from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
 from ClassSolidColoredColumns import SolidColoredColumns
 from ClassSpiralProgressBar import *
@@ -199,8 +198,8 @@ class HUDWindow(QWidget):
         # track how far back in the workout power list to go when viewing
         self.pastPowerIndex = 0
 
-        #Timer settings
-        self.lastTimestamp = datetime.datetime.now()
+        #Timer settings (time.monotonic(): a system clock change mid-ride doesn't move the workout clock)
+        self.lastTimestamp = time.monotonic()
         self.timeDelta = 0.0 #difference between current AppState.secondsPassed and previous
         self.workoutDelta = 0.0 #how far the workout timers moved on the last tick (see workout_time_delta)
         self.workoutSecondsPassed = 0.0 #initialize the workout timer
@@ -630,8 +629,9 @@ class HUDWindow(QWidget):
             self.difficultyLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.difficultyLayout.addWidget(self.difficultyLabel,0,0)
             self.difficultyPercentage = QLabel(self.difficulty_ftp_text(0) if AppState.workoutMode else "Watts:")
-            difficultyTextStyleSheet = "font: 900 14pt 'Orbitron';"
-            self.difficultyPercentage.setStyleSheet(difficultyTextStyleSheet)
+            #(difficulty_changed adds its color to this)
+            self.difficultyTextStyleSheet = "font: 900 14pt 'Orbitron';"
+            self.difficultyPercentage.setStyleSheet(self.difficultyTextStyleSheet)
             self.difficultyPercentage.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.difficultyPercentage.setMinimumWidth(120)
             self.difficultyLayout.addWidget(self.difficultyPercentage,1,0)
@@ -639,7 +639,7 @@ class HUDWindow(QWidget):
             if not AppState.workoutMode:
                 #free mode target watts, follows the slider and can be typed in (see trainer_watts_edited)
                 self.trainerWattsText = QLineEdit()
-                self.trainerWattsText.setStyleSheet(difficultyTextStyleSheet)
+                self.trainerWattsText.setStyleSheet(self.difficultyTextStyleSheet)
                 self.trainerWattsText.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 self.trainerWattsText.setMaxLength(len(str(TARGET_POWER_MAX_WATTS)))
                 self.trainerWattsText.setMaximumWidth(120)
@@ -824,8 +824,9 @@ class HUDWindow(QWidget):
             return None
         #songs that couldn't be played go to the log (the clock has moved on past them)
         for path, reason in self.musicPlayer.skipped[self.musicSkipsLogged:]:
-            ClassAntLogger.log_event("ERROR", f"Music: skipped {path}: {reason}")
+            #(counted first: a song whose logging fails is still only tried once, not on every tick)
             self.musicSkipsLogged += 1
+            ClassAntLogger.log_event("ERROR", f"Music: skipped {path}: {reason}")
         return self.musicPlayer.position()
 
     def music_pause(self, paused):
@@ -1105,13 +1106,9 @@ class HUDWindow(QWidget):
     def difficulty_changed(self, val):
         ##2% difficulty changes
         self.difficultyPercentage.setText(self.difficulty_ftp_text(val))
-        if val == 0:
-            self.difficultyPercentage.setStyleSheet("color: green")
-        elif val != 0:
-            if val > 0:
-                self.difficultyPercentage.setStyleSheet("color: red")
-            else:
-                self.difficultyPercentage.setStyleSheet("color: blue")
+        #(the label's font stays, only its color changes)
+        color = "green" if val == 0 else "red" if val > 0 else "blue"
+        self.difficultyPercentage.setStyleSheet(f"{self.difficultyTextStyleSheet} color: {color};")
         self.activeDifficulty = val + 10
         self.difficultyChangedBool = True
 
@@ -1235,8 +1232,8 @@ class HUDWindow(QWidget):
             AppState.workoutPowerRequestsSeconds.append(AppState.secondsPassed)
             AppState.workoutPowerRequestsSysTime.append(datetime.datetime.now())
         # increase elapsed time
-        newCurrentTime = datetime.datetime.now()
-        self.timeDelta = (newCurrentTime - self.lastTimestamp).total_seconds()
+        newCurrentTime = time.monotonic()
+        self.timeDelta = newCurrentTime - self.lastTimestamp
         AppState.secondsPassed += self.timeDelta
         self.lastTimestamp = newCurrentTime
         self.timeElapsed.setText(MinimizedDuration(AppState.secondsPassed))
@@ -1259,7 +1256,7 @@ class HUDWindow(QWidget):
         if not (self.workoutUnpausedBool and self.startedBool) or self.newWorkoutStart:
             return
         #time since the last 100ms tick, capped at a tick-and-a-half so a stalled tick can't run the bars ahead
-        sinceTick = min((datetime.datetime.now() - self.lastTimestamp).total_seconds(), 0.15)
+        sinceTick = min(time.monotonic() - self.lastTimestamp, 0.15)
         musicSeconds = self.music_seconds() if self.cadenceMode else None
         if musicSeconds is not None:
             #how far the music has got past the last tick
@@ -1841,7 +1838,7 @@ class HUDWindow(QWidget):
             return
         remaining = math.ceil(FtpTest.RAMP_PAUSE_SECONDS - (time.monotonic() - self.rampPausedAt))
         text = f"PAUSE\n{remaining}s" if remaining > 0 else "PAUSE\nRESET"
-        if self.pauseButton.text() != text:
+        if getattr(self.pauseButton, "_themeOrigText", self.pauseButton.text()) != text:
             self.pauseButton.setText(text)
 
     def restart_ramp(self):
@@ -2138,9 +2135,7 @@ class HUDWindow(QWidget):
         for savedName, plot, pen in series:
             self.plot_saved_vals(savedName, plot, pen)
         self.zero_gauges_on_dropout()
-        #control what data is shown
-        #todo
-        self.progressGraph.updateViews()
+        #(the graph's extra views follow its size through sigResized, see __init__)
 
     def plot_saved_vals(self, savedName, plot, pen):
         """One sensor's curve, and its current reading diamond at the newest point. Only redone when there's
@@ -2170,9 +2165,9 @@ class HUDWindow(QWidget):
         if AppState.shows_cadence():
             gauges.append((self.cadenceGaugeDisplay, AppState.savedCadenceVals))
         for gauge, savedVals in gauges:
-            #(the gauge clamps to its minimum, e.g. 40 on the HR gauge, so compare against that)
+            #(the reading in the middle, which shows the 0: the needle stops at the gauge's minimum, e.g. 40 on the HR gauge)
             if len(savedVals[0]) and AppState.secondsPassed - savedVals[0][-1] > DROPOUT_ZERO_SECONDS \
-                    and gauge.ui.widget.value > gauge.ui.widget.minValue:
+                    and gauge.ui.widget.reading > 0:
                 gauge.ui.widget.setValue(0)
         #the speed too: a stopped wheel sends no new revolutions, so the poller never reports the 0 itself
         if self.speedMph > 0 and AppState.secondsPassed - self.speedReadAt > DROPOUT_ZERO_SECONDS:
@@ -2271,8 +2266,9 @@ class HUDWindow(QWidget):
                 self.targetGauge.ui.widget.setEnableDrawNewArc()
 
     def end_available(self):
-        #the START/END button reads END: a free ride, or a workout once it's started (finished or not)
-        return self.startEndButton.text() == "END"
+        #the START/END button reads END: a free ride, or a workout once it's started (finished or not). Its text as
+        #set: shown as a symbol (AppLayout.set_symbol) the button itself has none
+        return getattr(self.startEndButton, "_themeOrigText", self.startEndButton.text()) == "END"
 
     #End Workout handler
     def confirm_end_workout(self):

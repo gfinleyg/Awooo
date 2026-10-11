@@ -4,6 +4,8 @@ from AppState import AppState
 
 
 def MinimizedDuration(duration):
+    #(a time just past its end, e.g. the remaining time on the tick a workout ends, shows as 0s)
+    duration = max(0, duration)
     if duration < 60:
         return time.strftime("%#Ss", time.gmtime(duration))
     elif duration < 3600:
@@ -82,8 +84,17 @@ def GetMaxOrZeroAndIndex(lst):
     if len(lst) == 0:
         return 0, 0
     else:
-        return max(lst), max(range(len(lst)), key=lst.__getitem__)
+        index = max(range(len(lst)), key=lst.__getitem__)
+        return lst[index], index
     
+#Hold-last-value smoothing, the same live (AntDevicesPoller) and in the synopsis' replay of the ride: a 0 reading (for
+#cadence under 10 RPM, for speed under 5 MPH) is taken as a possible misread and shows the last good value instead,
+#for up to this many readings in a row
+HOLD_POWER_READINGS = 3
+HOLD_HR_READINGS = 10
+HOLD_CADENCE_READINGS = 30
+HOLD_SPEED_READINGS = 3
+
 #Sensor dropouts on the graphs: a gap between readings up to DROPOUT_ZERO_SECONDS long is drawn as a
 #straight line from the last reading to the next; anything longer drops to zero DROPOUT_EDGE_SECONDS
 #(about one ANT+ message period) after the last reading and stays there until the sensor is heard again

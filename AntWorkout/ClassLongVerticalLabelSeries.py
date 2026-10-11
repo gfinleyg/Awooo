@@ -1,8 +1,7 @@
 import math
 
 from PyQt6.QtWidgets import QLabel, QWidget, QVBoxLayout
-from PyQt6.QtCore import pyqtSignal, QMetaObject, QCoreApplication, QSize
-from PyQt6.QtTest import QTest
+from PyQt6.QtCore import pyqtSignal, QMetaObject, QCoreApplication, QSize, QTimer
 
 import FtpColors
 from WorkoutHelpers import TargetsFromText, IsSongHeader, SONG_HEADER_CSS
@@ -39,6 +38,12 @@ class LongVLabelSerial(QWidget):
         self.layoutMain.addLayout(self.layoutH)
         self.setLayout(self.layoutMain)
 
+        #the lines are laid out once the widget has its size for the new text (and again on each resize): a
+        #render queued for the event loop, however many changes come in before it runs
+        self.renderTimer = QTimer(self)
+        self.renderTimer.setSingleShot(True)
+        self.renderTimer.setInterval(0)
+        self.renderTimer.timeout.connect(self.render_lines)
         self.textChanged.connect(self.make_reduced_lines_text)
         #redrawn when the power zone colors change (see FtpColors.py)
         FtpColors.watch(self, "render_lines")
@@ -55,8 +60,8 @@ class LongVLabelSerial(QWidget):
         return QSize(super().minimumSizeHint().width(), math.ceil(self.row_height()))
 
     def make_reduced_lines_text(self):
-        QTest.qWait(20) #wait for the screen to resize completely
-        self.render_lines()
+        #(not right away: the layout may still be resizing this, see renderTimer)
+        self.renderTimer.start()
 
     #show the window of lines starting at scrollOffset, with a "more..." block in the top/bottom
     #slot whenever there are lines scrolled out of view above/below

@@ -27,8 +27,8 @@ def duration_checker(duration, line, lnNum, filename):
     if duration.isdigit() == False:
         print(f"Invalid workout: file;line\n{filename};{lnNum}\nBlock durations must be integers:\n{line}")
         return False
-    if 0 > int(duration) > 1800: #max block length of 30m
-        print(f"Invalid workout: file;line\n{filename};{lnNum}\nBlock durations must be non-negative and less than 1800s:\n{line}")
+    if not 1 <= int(duration) <= 1800: #max block length of 30m, as the app (WorkoutSetupWindow.duration_checker)
+        print(f"Invalid workout: file;line\n{filename};{lnNum}\nBlock durations must be between 1 and 1800s:\n{line}")
         return False
     return True
 

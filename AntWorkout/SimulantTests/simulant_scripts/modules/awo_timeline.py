@@ -23,7 +23,7 @@ except ImportError:
         return (DateTime.UtcNow - _UNIX_EPOCH).TotalSeconds
 
 #where the harness and the scripts meet; the harness checks this matches its own folder
-RUN_DIR = r"C:\Users\gfinl\Documents\AntWorkout\SimulantTests\run"
+RUN_DIR = r"C:\Users\gfinl\Documents\Awooo\AntWorkout\SimulantTests\run"
 CONTROL_FILE = RUN_DIR + "\\control.txt"
 
 #wheel circumference both sides use, so speed can be compared exactly

@@ -97,7 +97,8 @@ class AnalogGaugeWidget(QWidget):
         # DEFAULT START VALUE
         ################################################################################################
         self.value = self.minValue
-        #the reading the number in the middle shows: unlike value (and the needle), not stopped at maxValue
+        #the reading the number in the middle shows: unlike value (and the needle), not stopped at minValue or
+        #maxValue (a heart rate gauge's 0 after a dropout reads 0, not its 40 BPM minimum)
         self.reading = self.value
         #where the needle is drawn; eases toward self.value (the real reading) so the needle glides between readings
         self.displayValue = self.value
@@ -286,7 +287,7 @@ class AnalogGaugeWidget(QWidget):
             self.update()
 
     def setValue(self, value):
-        self.reading = max(value, self.minValue)
+        self.reading = max(value, 0)
         if value <= self.minValue:
             self.value = self.minValue
         elif value >= self.maxValue:
@@ -1370,6 +1371,15 @@ class AnalogGaugeWidget(QWidget):
 
 
     def fitted_value_fontsize(self):
+        #worked out again only when something it depends on changes, not on every needle frame
+        key = (self.widget_diameter, self.big_needle_center_size, self.maxValue, self.value_decimals,
+               self.value_fontsize, self.value_fontname)
+        cached = getattr(self, "_fittedValueFontsize", None)
+        if cached is None or cached[0] != key:
+            cached = self._fittedValueFontsize = (key, self.fit_value_fontsize())
+        return cached[1]
+
+    def fit_value_fontsize(self):
         #largest font size (up to value_fontsize) where the widest possible value's
         #glyphs stay inside the needle center circle drawn by draw_big_needle_center_point
         radius = (self.widget_diameter / self.big_needle_center_size - 1) * 0.92
@@ -1417,7 +1427,7 @@ class AnalogGaugeWidget(QWidget):
         text = str(self.units)
         w = fm.horizontalAdvance(text) + 1
         h = fm.height()
-        painter.setFont(QFont(self.value_fontname, int(self.value_fontsize / 2.5), QFont.Weight.Bold))
+        painter.setFont(font)
 
       
         angle_end = float(self.scale_angle_start_value + self.scale_angle_size + unitPosition)

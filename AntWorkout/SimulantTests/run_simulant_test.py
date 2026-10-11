@@ -268,6 +268,7 @@ def main():
             "power": gauge("wattGaugeDisplay"), "powerReading": hud.wattGaugeDisplay.ui.widget.reading,
             "cadence": gauge("cadenceGaugeDisplay"), "hr": gauge("hrGaugeDisplay"),
             "hrMin": hud.hrGaugeDisplay.ui.widget.minValue if hasattr(hud, "hrGaugeDisplay") else None,
+            "hrReading": hud.hrGaugeDisplay.ui.widget.reading if hasattr(hud, "hrGaugeDisplay") else None,
             "speedKph": round(hud.speedMph*KPH_PER_MPH, 3), "distKm": round(hud.distanceMiles*KPH_PER_MPH, 4),
             "cadenceSource": getattr(poller, "_cadenceSource", None), "speedSource": getattr(poller, "_speedSource", None),
             "power_dev": device("power"), "sc_dev": device("speed_cadence"), "hr_dev": device("hrm"),
@@ -325,7 +326,10 @@ def main():
     if state["stage"] != "done":
         bridge.stop()
         bridge.wait(5000)
-    sys.exit(code)
+    #(out without Python's teardown, as AntWorkout.py does)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
 
 
 ###----------------------------------------------------------------------------------------------
@@ -484,6 +488,9 @@ def check(scenario, rows, logs, phases, logText=""):
         hrRows = window("hr dropout")
         ok(hrRows and all(r["hr"] <= r["hrMin"] for r in hrRows),
            f"hr dropout: heart rate gauge at its minimum (max {max(r['hr'] for r in hrRows) if hrRows else '-'})")
+        #(the number in the middle reads 0, not the needle's minimum)
+        ok(hrRows and all(r["hrReading"] == 0 for r in hrRows),
+           f"hr dropout: heart rate reads 0 (max {max(r['hrReading'] for r in hrRows) if hrRows else '-'})")
         near("hr back", "hr", 140, 1, "heart rate")
         #power meter gone: power drops to 0, cadence/speed carry on from their own sensor
         near("pm dropout", "power", 0, 0, "power")

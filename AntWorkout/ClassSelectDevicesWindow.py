@@ -6,7 +6,6 @@ from PyQt6.QtWidgets import QButtonGroup, QPushButton, QVBoxLayout, QWidget
 import AppLayout
 
 from ClassAnalogGauge import *
-from ClassLongVerticalLabel import *
 from ClassLongVerticalLabelSeries import *
 from ClassSpiralProgressBar import *
 from ClassWorkoutGraph import *
