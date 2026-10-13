@@ -475,7 +475,7 @@ class HUDWindow(QWidget):
         self.progressGraph.plotScreen.showAxis(axis='left', show=False)
         self.progressGraph.plotScreen.showAxis(axis='right', show=False)
         self.progressGraph.plotScreen.hideButtons()
-        #the time ticks ("5m") at half the graph's font size, "Time (minutes)" at 3/4 its usual 18px
+        #the time ticks ("5m") at 0.8x the graph's font size, "Time (minutes)" at 16px (its usual is 18px)
         #(set before the theme first styles the graph, which scales from these)
         timeAxis = self.progressGraph.plotScreen.getAxis('bottom')
         tickFont = QFont(self.progressGraph.font())
