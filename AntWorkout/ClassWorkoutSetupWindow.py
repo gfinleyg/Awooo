@@ -1599,21 +1599,20 @@ class WorkoutSetupWindow(QWidget):
                 if not self.add_block_messages(messageFields, duration, blockStartSeconds, line, lnNum, filename):
                     return False
                 blockStartSeconds += duration
-                #(2,duration,(start, stop),position)
-                AppState.workoutList.append((2,
-                                               duration,
-                                               (tuple((int(self.watts_at(powerStart, i, ftpIncrement)),
-                                                       int(self.watts_at(powerEnd, i, ftpIncrement))) for i in range(21))),
-                                                position))
-                #now add the ramp power change events after the block event
-                #(4,durationEvent,(power))
-                rampPowerChangeTuples = self.process_ramp(duration, powerStart, powerEnd, ftpIncrement)
-                AppState.workoutList.extend(rampPowerChangeTuples)
+                block, rampEvents = self.ramp_block(duration, powerStart, powerEnd, position, ftpIncrement)
+                AppState.workoutList.append(block)
+                #a ramp's power change events go after its block event: (4,durationEvent,(power))
+                AppState.workoutList.extend(rampEvents)
             elif line[0] == "3":
                 #interval sub-blocks carry their own messages, so pass the whole line
                 successBool, multiplier, intvBlocks, rampList, intvMessages = self.valid_interval(line, lnNum, filename, ftpIncrement)
                 if successBool == False:
                     return False
+                if len(intvBlocks) == 1:
+                    #one block repeated: written out as the one block it amounts to (see single_block_interval)
+                    blockStartSeconds = self.single_block_interval(multiplier, intvBlocks[0], intvMessages[0],
+                                                                   blockStartSeconds)
+                    continue
                 #each sub-block's messages show on every repeat
                 for _ in range(multiplier):
                     for iBlock, iMessages in zip(intvBlocks, intvMessages):
@@ -1646,6 +1645,28 @@ class WorkoutSetupWindow(QWidget):
             self.render_init_status()
         self.show_workout_text()
         return True
+
+    #a ramp block and its power change events: (2,duration,(start, stop),position) and [(4,durationEvent,(power)),...];
+    #a "ramp" with the same start and end power is the steady block it amounts to, (1,duration,(power),position), with
+    #no events
+    def ramp_block(self, duration, powerStart, powerEnd, position, ftpIncrement):
+        if powerStart == powerEnd:
+            return (1, duration, tuple(int(self.watts_at(powerStart, i, ftpIncrement)) for i in range(21)), position), []
+        block = (2, duration, tuple((int(self.watts_at(powerStart, i, ftpIncrement)),
+                                     int(self.watts_at(powerEnd, i, ftpIncrement))) for i in range(21)), position)
+        return block, self.process_ramp(duration, powerStart, powerEnd, ftpIncrement)
+
+    #an interval of a single block, 3:<repeats>;<block>, as the one block it amounts to (the workout screen shows
+    #intervals of 2 or 3 blocks): a free ride or steady block that long (valid_interval only lets through ones that
+    #fit in a block). The block's messages show every repeat, as in an interval. Returns the workout time after it
+    def single_block_interval(self, multiplier, block, messages, blockStartSeconds):
+        duration = block[1]
+        AppState.workoutList.append(block[:1] + (duration*multiplier,) + block[2:])
+        for rep in range(multiplier):
+            for msgStart, msgEnd, msgText in messages:
+                AppState.workoutMessages.append((blockStartSeconds + msgStart, blockStartSeconds + msgEnd, msgText))
+            blockStartSeconds += duration
+        return blockStartSeconds
 
     #the loaded workout's blocks, listed beside the settings column
     def show_workout_text(self, more=False):
@@ -1941,9 +1962,7 @@ class WorkoutSetupWindow(QWidget):
         powerEnd = self.power_value(blockDataList[2], line, lnNum, filename)
         if powerEnd is None:
             return False, duration, powerStart, powerEnd, position
-        if powerStart == powerEnd:
-            self.reject_workout(filename, "Ramp start and end power must differ", lnNum, line)
-            return False, duration, powerStart, powerEnd, position
+        #(the same start and end power is a steady block, see ramp_block)
         if len(blockDataList) == 4: #position data exists
             success, position = self.position_checker(blockDataList[3], line, lnNum, filename)
             if success == False:
@@ -1951,7 +1970,8 @@ class WorkoutSetupWindow(QWidget):
         return True, duration, powerStart, powerEnd, position
 
 
-    #<interval = 3>:<multiplier>;<workout block 1>;<workout block 2>;<workout block 3 (max)>
+    #<interval = 3>:<multiplier>;<workout block 1>;<workout block 2 (optional)>;<workout block 3 (optional)>
+    #(a single block has to amount to one free ride or steady block, see single_block_interval)
     # Intervals Repeat=2 (Steady State 30s 1.85xFTP standing) (Ramp 60s from 0.25xFTP to 0.75xFTP seated high cadence)
         #3:2;1:30,1.85,3;2:60,0.25,0.75,1
     #returnIntervalList returned is 21 element array:
@@ -1966,8 +1986,8 @@ class WorkoutSetupWindow(QWidget):
         rampList = []
         intvMessages = [] #per interval block list of (start, end, text), relative to that block's start
         blockData = line.split(";")
-        if len(blockData) not in [3,4]:
-            self.reject_workout(filename, "Interval needs 2 or 3 blocks after 3:<repeats>", lnNum, line)
+        if len(blockData) not in [2,3,4]:
+            self.reject_workout(filename, "Interval needs 1 to 3 blocks after 3:<repeats>", lnNum, line)
             return False, multiplier, intvBlocks, rampList, intvMessages
         if "|" in blockData[0]:
             self.reject_workout(filename, "Put messages on interval blocks, not on 3:<repeats>", lnNum, line)
@@ -2017,14 +2037,10 @@ class WorkoutSetupWindow(QWidget):
                 successBool, duration, powerStart, powerEnd, position = self.valid_ramp(intervalBlock, lnNum, filename, multiplier)
                 if successBool == False:
                     return False, multiplier, intvBlocks, rampList, intvMessages
-                #add the ramp rides at each difficulty
-                intvBlocks.append((2,
-                                    duration,
-                                    (tuple((int(self.watts_at(powerStart, i, ftpIncrement)),
-                                            int(self.watts_at(powerEnd, i, ftpIncrement))) for i in range(21))),
-                                    position))
-                #now get the ramp power change events
-                rampList.append(self.process_ramp(duration, powerStart, powerEnd, ftpIncrement))
+                #add the ramp rides at each difficulty, and its power change events (none if it's really steady)
+                block, rampEvents = self.ramp_block(duration, powerStart, powerEnd, position, ftpIncrement)
+                intvBlocks.append(block)
+                rampList.append(rampEvents or 0)
             else:
                 self.reject_workout(filename, f"Invalid block type in interval: {intervalBlock[0]}", lnNum, line)
                 return False, multiplier, intvBlocks, rampList, intvMessages
@@ -2034,6 +2050,16 @@ class WorkoutSetupWindow(QWidget):
                 return False, multiplier, intvBlocks, rampList, intvMessages
             intvMessages.append(messages)
             ##Now update the duration power workout list with the multiplier
+        #a single block repeated has to be one free ride or steady block (see single_block_interval)
+        if len(intvBlocks) == 1:
+            if intvBlocks[0][0] == 2:
+                self.reject_workout(filename, "A one block interval can't be a ramp: write the ramps out, or add a "
+                                              "second block", lnNum, line)
+                return False, multiplier, intvBlocks, rampList, intvMessages
+            if intvBlocks[0][1]*multiplier > self.maxBlockSeconds:
+                self.reject_workout(filename, f"A one block interval is one block, at most {self.maxBlockSeconds}s "
+                                              f"in all", lnNum, line)
+                return False, multiplier, intvBlocks, rampList, intvMessages
         return True, multiplier, intvBlocks, rampList, intvMessages
 
     #function to check if FTP and Max HR have been set, and if the devices are connected

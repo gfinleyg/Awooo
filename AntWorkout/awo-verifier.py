@@ -152,7 +152,30 @@ def valid_ramp(line, lnNum, filename):
         if position_checker(blockDataList[3], line, lnNum, filename) == False:
             return
 
-#<interval = 3>:<multiplier>;<workout block 1>;<workout block 2>;<workout block 3 (max)>
+#the same power, written either way (0.5 and 0.50, 250W and 250w)
+def same_power(a, b):
+    a, b = a.strip().lower(), b.strip().lower()
+    if a.endswith("w") or b.endswith("w"):
+        return a == b or (a.endswith("w") and b.endswith("w") and a[:-1].strip() == b[:-1].strip())
+    try:
+        return float(a) == float(b)
+    except ValueError:
+        return False
+
+#an interval's only block: not a ramp (one with the same start and end power is steady), and no longer than a block
+#can be in all
+def single_block_ok(block, repeats, line, lnNum, filename):
+    block = block.split("|")[0]
+    fields = block[2:].split(",")
+    if block[:2] == "2:" and len(fields) >= 3 and not same_power(fields[1], fields[2]):
+        print(f"Invalid workout: file;line\n{filename};{lnNum}\nA one block interval can't be a ramp:\n{line}")
+        return False
+    if fields[0].isdigit() and int(fields[0])*repeats > 1800:
+        print(f"Invalid workout: file;line\n{filename};{lnNum}\nA one block interval is one block, at most 1800s in all:\n{line}")
+        return False
+    return True
+
+#<interval = 3>:<multiplier>;<workout block 1>;<workout block 2 (optional)>;<workout block 3 (optional)>
 # Intervals Repeat=2 (Steady State 30s 1.85xFTP standing) (Ramp 60s from 0.25xFTP to 0.75xFTP seated high cadence)
     #3:2;1:30,1.85,3;2:60,0.25,0.75,1
 def valid_interval(line, lnNum, filename):
@@ -163,6 +186,7 @@ def valid_interval(line, lnNum, filename):
     firstBlockList = blockData[0].split(":")
     if len(firstBlockList) != 2:
         print(f"Invalid workout: file;line\n{filename};{lnNum}\nFirst component before semicolons in an Interval\nblock must be 3:<multiplier>\n{line}")
+        return
     if firstBlockList[0] != "3":
         print(f"Invalid workout: file;line\n{filename};{lnNum}\nInvalid block type, must be an int 0 to 3:\n{line}")
         return
@@ -173,6 +197,9 @@ def valid_interval(line, lnNum, filename):
         print(f"Invalid workout: file;line\n{filename};{lnNum}\nComponent between the first colon and semicolon in an Interval\nblock must be a positive integer multiplier\n{line}")
         return
     blockData.pop(0) #remove the first element, 3:<multiplier>, from the interval workout block
+    #a single block repeated has to amount to one free ride or steady block, as the app reads it
+    if len(blockData) == 1 and not single_block_ok(blockData[0], int(firstBlockList[1]), line, lnNum, filename):
+        return
     for intervalBlock in blockData:
         intervalBlock, messagesOk = split_messages(intervalBlock, lnNum, filename)
         if not messagesOk or intervalBlock == "":
@@ -238,6 +265,6 @@ def processAwo(fn):
 
 
 mypath = "./"
-awoFiles = [f for f in os.listdir(mypath) if os.path.isfile(os.path.join(mypath, f)) and f.split(".")[1]=="awo"]
+awoFiles = [f for f in os.listdir(mypath) if os.path.isfile(os.path.join(mypath, f)) and f.lower().endswith(".awo")]
 for fn in awoFiles:
     processAwo(fn)

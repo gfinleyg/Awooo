@@ -545,6 +545,16 @@ class RecoveryManager:
         connectivity problem.
         """
 
+        #
+        # A stalled reading that moved again was cleared by
+        # ANTDevice.update() the moment it did - reported here
+        #
+        if device.data_resumed:
+
+            device.data_resumed = False
+
+            self._log_data_recovered(device)
+
         data_age = now - device.last_new_data_seen
 
         timeout = (
@@ -575,15 +585,20 @@ class RecoveryManager:
 
         elif device.data_stalled:
 
-            self.stats["stalled_recovered"] += 1
-
-            self._log(
-                "DEVICE_DATA_RECOVERED "
-                f"id={device.device_number} "
-                f"type={device.device_type}"
-            )
+            self._log_data_recovered(device)
 
             device.clear_stalled()
+
+
+    def _log_data_recovered(self, device):
+
+        self.stats["stalled_recovered"] += 1
+
+        self._log(
+            "DEVICE_DATA_RECOVERED "
+            f"id={device.device_number} "
+            f"type={device.device_type}"
+        )
 
 
     def _frozen_value_is_suspicious(self, device):

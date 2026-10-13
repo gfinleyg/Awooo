@@ -1,0 +1,2 @@
+# Only needed to run the unit tests (tests\, see "Running the tests" in README.md), on top of requirements.txt
+pytest>=8

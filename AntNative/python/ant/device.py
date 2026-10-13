@@ -61,6 +61,14 @@ class ANTDevice:
     stalled_since: float = 0.0
 
     #
+    # Set when new data clears data_stalled (see update()), until
+    # RecoveryManager has logged that the reading is moving again - the
+    # flag itself is cleared right away, so whatever reads it (the gauges'
+    # fallbacks) sees the sensor as fine from the very next reading.
+    #
+    data_resumed: bool = False
+
+    #
     # Latest battery status per battery id (a dual-sided power meter
     # reports each side separately). See battery.py; the `battery`
     # property below gives the weakest one.
@@ -131,6 +139,8 @@ class ANTDevice:
                 # RecoveryManager._check_data_freshness): the moment the
                 # reading actually moves again, it's no longer frozen.
                 self.last_new_data_seen = now
+                if self.data_stalled:
+                    self.data_resumed = True
                 self.clear_stalled()
 
             return changed

@@ -58,7 +58,10 @@ or explicit watts like `250W`.
 | `3:<repeats>;<block>;<block>;<block>`      | Intervals (1 to 3 blocks, repeated)       |
 
 Position is optional: 0 seated (default), 1 seated high cadence, 2 seated low cadence, 3 standing, 4 single leg,
-5 switch single leg. Blocks can be at most 1800 seconds.
+5 switch single leg. Blocks can be at most 1800 seconds. Any block in an interval can be a free ride, steady or ramp.
+
+A ramp with the same start and end power is ridden as a steady block. An interval of a single block is ridden as one
+longer block, so it has to be a free ride or steady block, and 1800 seconds or less in all.
 
 A block can show a message by adding `|<message>|<seconds shown>|<start second in block>` to the end of it.
 
@@ -84,6 +87,21 @@ T:Short Intervals
 | `awo-verifier.py`              | Validate the `.awo` files in the current folder                         |
 | `zwo2awo.py`                   | Convert Zwift `.zwo` workouts in the current folder to `.awo`           |
 | `SimulantTests/`               | Hardware tests against SimulANT+ simulated sensors (see its README)     |
+| `tests/`                       | Unit tests, no ANT stick needed (see Running the tests)                 |
+
+## Running the tests
+
+```
+py -3.x -m pip install -r requirements.txt -r requirements-test.txt
+py -3.x -m pytest tests
+```
+
+Run from this folder. No ANT stick or SimulANT+ needed: the ANT layer runs on a fake stick (`tests\fakes.py`) and
+the screens are built offscreen. Each test runs in its own empty folder, so your settings, log and caches aren't
+touched. It takes about 35 seconds; `-m "not whole_app"` skips the slower tests that build the real screens.
+
+The SimulANT+ tests in `SimulantTests\` are still the ones that check the radio side (real channels, timing and
+dropouts over the air).
 
 ## Building the exe
 
