@@ -91,6 +91,8 @@ class MainWindow(QMainWindow):
 
         #Esc: the End Workout prompt during a ride (it pauses the ride), otherwise the same as the X (the exit prompt)
         QShortcut(QKeySequence(Qt.Key.Key_Escape), self, activated=self.escape_pressed)
+        #no text box focused to start with: the first Tab goes to the first one (see KeyShortcuts.tab_cycle)
+        self.setFocus()
 
         #HUD will be set up once we're sure that FTP and Max HR are set
 
@@ -201,6 +203,10 @@ class MainWindow(QMainWindow):
    
 
     def escape_pressed(self):
+        #the synopsis' Block Grades sheet or an open block grade closes first
+        synopsis = getattr(self, "synopsisWidget", None)
+        if synopsis is not None and synopsis.isVisible() and synopsis.close_overlays():
+            return
         hud = getattr(self, "workoutHudWidget", None)
         if hud is not None and hud.isVisible() and hud.end_available():
             prompt = getattr(hud, "w", None)

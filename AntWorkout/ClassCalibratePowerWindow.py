@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushB
                              QStackedWidget, QVBoxLayout, QWidget)
 
 import AppLayout
+import KeyShortcuts
 
 from ClassCustomTitleBar import CustomTitleBar
 from ClassAntDevices import ROLE_POWER
@@ -83,6 +84,16 @@ class CalibratePowerWindow(QWidget):
         nav.addWidget(self.nextButton)
         layout.addLayout(nav)
         self.setLayout(layout)
+
+        #keys (Ctrl shows them; Esc is the X and Cancel). Each page's own buttons only work on that page (they're
+        #hidden on the others); Enter in the reference watts box is Apply
+        KeyShortcuts.add(self.nextButton, (Qt.Key.Key_N,) + KeyShortcuts.ENTER, label="N")
+        KeyShortcuts.add(self.backButton, Qt.Key.Key_B, label="B")
+        for button, key in ((self.sendZeroButton, Qt.Key.Key_Z), (self.measureRestButton, Qt.Key.Key_M),
+                            (self.measureRideButton, Qt.Key.Key_S), (self.applyScaleButton, Qt.Key.Key_A),
+                            (self.skipRideButton, Qt.Key.Key_K), (self.clearButton, Qt.Key.Key_R)):
+            KeyShortcuts.add(button, key, label=chr(key))
+        KeyShortcuts.add(self.applyScaleButton, KeyShortcuts.ENTER, field=self.referenceEdit)
 
         #scaled for this screen, its text fitted to it (see AppLayout.py)
         AppLayout.fit_dialog(self)

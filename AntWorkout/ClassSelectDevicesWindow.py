@@ -4,6 +4,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QButtonGroup, QPushButton, QVBoxLayout, QWidget
 
 import AppLayout
+import KeyShortcuts
 
 from ClassAnalogGauge import *
 from ClassLongVerticalLabelSeries import *
@@ -122,6 +123,11 @@ class SelectDevicesWindow(QWidget):
         self.selectDevicesButton.clicked.connect(self.exit_selection)
         selectionLayout.addWidget(self.selectDevicesButton)
         self.setLayout(selectionLayout)
+
+        #keys (Ctrl shows them): 1-9 the devices in order
+        for number, button in enumerate(self.buttonList[:9], 1):
+            KeyShortcuts.add(button, Qt.Key(Qt.Key.Key_0 + number), label=str(number))
+        KeyShortcuts.add(self.selectDevicesButton, KeyShortcuts.ENTER, label="Enter")
 
         #scaled for this screen, its text fitted to it (see AppLayout.py)
         AppLayout.fit_dialog(self)

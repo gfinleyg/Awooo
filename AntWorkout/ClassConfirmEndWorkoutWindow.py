@@ -2,6 +2,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QGridLayout, QPushButton, QWidget
 
 import AppLayout
+import KeyShortcuts
 
 from ClassAnalogGauge import *
 from ClassLongVerticalLabelSeries import *
@@ -58,6 +59,13 @@ class ConfirmEndWorkoutWindow(QWidget):
         endLayout.addWidget(self.endWorkoutConfirmButton,3,0)
         endLayout.addWidget(self.endWorkoutCancelButton,3,1)
         self.setLayout(endLayout)
+
+        #keys (Ctrl shows them): Space keeps going, as it pauses/resumes on the workout screen; Esc is the X
+        if AppState.workoutMode:
+            KeyShortcuts.add(self.endWorkoutRestartButton, Qt.Key.Key_R, label="R")
+        KeyShortcuts.add(self.endWorkoutSetupButton, Qt.Key.Key_B, label="B")
+        KeyShortcuts.add(self.endWorkoutConfirmButton, Qt.Key.Key_E, label="E")
+        KeyShortcuts.add(self.endWorkoutCancelButton, Qt.Key.Key_Space, label="Spacebar")
 
         #scaled for this screen, its text fitted to it (see AppLayout.py)
         AppLayout.fit_dialog(self)

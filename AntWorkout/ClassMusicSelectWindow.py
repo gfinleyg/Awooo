@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 
 from ClassCustomTitleBar import CustomTitleBar
 import AppLayout
+import KeyShortcuts
 import MusicCadence
 import SavedSettings
 from WorkoutHelpers import MinimizedDuration
@@ -74,12 +75,14 @@ class MusicSelectWindow(QDialog):
         layout.addWidget(self.title_bar)
 
         addRow = QHBoxLayout()
+        addButtons = {}
         for text, slot in (("Add Folder", self.add_folder), ("Add Songs", self.add_songs),
                            ("Add Playlist (.m3u)", self.add_playlist), ("Remove", self.remove_selected),
                            ("Clear", self.clear_songs)):
             button = QPushButton(text)
             button.clicked.connect(slot)
             addRow.addWidget(button)
+            addButtons[text] = button
         layout.addLayout(addRow)
 
         self.songList = QListWidget()
@@ -134,6 +137,22 @@ class MusicSelectWindow(QDialog):
         buttons.addWidget(self.okButton)
         buttons.addWidget(cancelButton)
         layout.addLayout(buttons)
+
+        #keys (Ctrl shows them; Esc is the X and Cancel; Space checks the current song with the list focused).
+        #Enter in the minutes box picks random songs
+        for text, key, label in (("Add Folder", Qt.Key.Key_D, "D"), ("Add Songs", Qt.Key.Key_A, "A"),
+                                 ("Add Playlist (.m3u)", Qt.Key.Key_P, "P"), ("Remove", Qt.Key.Key_Delete, "Del"),
+                                 ("Clear", Qt.Key.Key_C, "C")):
+            KeyShortcuts.add(addButtons[text], key, label=label)
+        KeyShortcuts.add(self.randomButton, Qt.Key.Key_R, label="R")
+        KeyShortcuts.add(self.randomButton, KeyShortcuts.ENTER, field=self.randomMinutes)
+        KeyShortcuts.add(allButton, Qt.Key.Key_K, label="K")
+        KeyShortcuts.add(noneButton, Qt.Key.Key_U, label="U")
+        KeyShortcuts.add(self.okButton, KeyShortcuts.ENTER, label="Enter")
+        KeyShortcuts.add(self.songList, Qt.Key.Key_Up, label="↑ ↓", place="inside", repeat=True,
+                         action=lambda: KeyShortcuts.step_list(self.songList, -1))
+        KeyShortcuts.add(self.songList, Qt.Key.Key_Down, repeat=True,
+                         action=lambda: KeyShortcuts.step_list(self.songList, 1))
 
         #the songs and settings from last time
         settings = SavedSettings.load()

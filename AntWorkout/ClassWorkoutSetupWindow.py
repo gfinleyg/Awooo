@@ -3,7 +3,7 @@ import html
 import os
 
 from PyQt6.QtCore import QEvent, Qt, QTimer
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QKeySequence
 from PyQt6.QtWidgets import (
     QFileDialog,
     QGridLayout,
@@ -36,6 +36,7 @@ from WorkoutHelpers import MinimizedDuration, ProcessWorkoutLine, is_float, Read
 
 import ClassAntLogger
 import FtpTest
+import KeyShortcuts
 import MusicCadence
 import SavedSettings
 import Units
@@ -464,6 +465,25 @@ class WorkoutSetupWindow(QWidget):
         self.workoutDisplayLabel.hide()
 
         self.setLayout(self.introductoryLayout)
+
+        #keys for the buttons (Ctrl shows them, see KeyShortcuts.py)
+        for button, key in ((self.powerButton, Qt.Key.Key_P), (self.hrmButton, Qt.Key.Key_H),
+                            (self.speedCadenceButton, Qt.Key.Key_C), (self.connectButton, Qt.Key.Key_N),
+                            (self.restartScanButton, Qt.Key.Key_R), (self.calibratePowerButton, Qt.Key.Key_L),
+                            (self.setWheelC, Qt.Key.Key_W), (self.setFtp, Qt.Key.Key_F),
+                            (self.setMaxHr, Qt.Key.Key_M), (self.setWeight, Qt.Key.Key_G),
+                            (self.workoutFileButton, Qt.Key.Key_O), (self.introStartButton, Qt.Key.Key_S)):
+            KeyShortcuts.add(button, key, label=QKeySequence(key).toString())
+        #the modes, top to bottom
+        for number, (button, _) in enumerate(self.modeButtons, 1):
+            KeyShortcuts.add(button, Qt.Key(Qt.Key.Key_F1 + number - 1), label=f"F{number}")
+        #Tab goes around just the text boxes, and Enter in one presses its Set button (Max Watts has none, Enter or
+        #leaving it applies it)
+        KeyShortcuts.tab_cycle((self.textMaxWatts, self.textWheelC, self.textFtp, self.textMaxHr, self.textWeight),
+                               self.textWheelC)
+        for field, button in ((self.textWheelC, self.setWheelC), (self.textFtp, self.setFtp),
+                              (self.textMaxHr, self.setMaxHr), (self.textWeight, self.setWeight)):
+            KeyShortcuts.add(button, KeyShortcuts.ENTER, field=field)
 
         # Read saved Wheel Circumference, FTP and Max HR (savedSettingsANT.json), anything missing or out of range
         # has to be entered; each is checked on its own so one bad value doesn't throw away the others
@@ -1219,6 +1239,8 @@ class WorkoutSetupWindow(QWidget):
 
     #function to set the Wheel Circumference to the selected value
     def set_wheel_c(self):
+        #(checked here too: pressing Set, by click or key, leaves the box focused so it hasn't been checked yet)
+        self.text_wheelC_validator()
         if self.textWheelC.text() != "0":
             self.displayWheelC.setText(self.textWheelC.text() + "m")
             AppState.wheelCircumference = self.textWheelC.text()
@@ -1227,6 +1249,7 @@ class WorkoutSetupWindow(QWidget):
 
     #function to set the FTP to the selected value
     def set_ftp(self):
+        self.text_ftp_validator()
         if self.textFtp.text() != "0":
             self.displayFtp.setText(self.textFtp.text() + " Watts")
             AppState.ftp = self.textFtp.text()
@@ -1238,6 +1261,7 @@ class WorkoutSetupWindow(QWidget):
 
     #function to set the Max HR to the selected value
     def set_max_hr(self):
+        self.text_max_hr_validator()
         if self.textMaxHr.text() != "0":
             self.displayMaxHr.setText(self.textMaxHr.text() + " BPM")
             AppState.maxHr = self.textMaxHr.text()

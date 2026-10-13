@@ -37,6 +37,7 @@ from WorkoutHelpers import (MinimizedDuration, ProcessWorkoutLine, ProcessNonInt
                             WithDropoutsAsZero, DROPOUT_ZERO_SECONDS, TargetsFromText, IsSongHeader,
                             SONG_HEADER_CSS)
 import WorkoutGrading
+import KeyShortcuts
 import FtpTest
 import ClassAntLogger
 import MusicCadence
@@ -51,6 +52,9 @@ BEAT_SECONDS = 0.2
 #the nested circles in the power gauge's middle show the power over this many seconds: the outermost the
 #power now, the innermost the power this long ago (see set_power_rings)
 POWER_RING_SECONDS = 4
+
+#Space starts a workout and then pauses it: it doesn't pause for this long after the start
+SPACE_PAUSE_GUARD_SECONDS = 0.5
 
 
 def new_power_gauge():
@@ -213,6 +217,7 @@ class HUDWindow(QWidget):
         self.blockOverage = 0.0
 
         #Flags
+        self.startedAt = 0.0 #time.monotonic() of the last START (see space_pause)
         self.startedBool = False # apply workout if in workout mode, enable pause button usage which sets requested power to 0 temporarily; picks up again when unpaused
         self.workoutUnpausedBool = False # active once HUD is open, show and record power, cadence, HR, speed/distance
         self.difficultyChangedBool = False #tracks if the difficulty has changed
@@ -702,6 +707,7 @@ class HUDWindow(QWidget):
             self.difficultySlider.installEventFilter(self)
             QShortcut(QKeySequence(Qt.Key.Key_Up), self, activated=lambda: self.nudge_slider(1))
             QShortcut(QKeySequence(Qt.Key.Key_Down), self, activated=lambda: self.nudge_slider(-1))
+            KeyShortcuts.add(self.difficultySlider, label="↑ ↓")
 
         if AppState.workoutMode:
             self.pauseStartEndLayout = QGridLayout()
@@ -715,11 +721,17 @@ class HUDWindow(QWidget):
             self.pauseStartEndLayout.addWidget(self.startEndButton,1,0)
             self.hudLayout.addLayout(self.pauseStartEndLayout,15,30,9,2)
             self.startButtonBlink = True
+            #Space starts the workout, then pauses/resumes it; Esc (MainWindow.escape_pressed) is END
+            KeyShortcuts.add(self.startEndButton, Qt.Key.Key_Space, label="Spacebar", when=lambda: not self.startedBool)
+            KeyShortcuts.add(self.pauseButton, Qt.Key.Key_Space, label="Spacebar", when=lambda: self.startedBool,
+                             action=self.space_pause)
+            KeyShortcuts.add(self.startEndButton, label="Esc", when=self.end_available)
         else:
             self.startEndButton = QPushButton("END")
             self.startEndButton.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
             self.startEndButton.clicked.connect(self.confirm_end_workout)
             self.hudLayout.addWidget(self.startEndButton,20,30,4,2)
+            KeyShortcuts.add(self.startEndButton, label="Esc")
 
         self.setLayout(self.hudLayout)
 
@@ -1236,6 +1248,7 @@ class HUDWindow(QWidget):
 
         #timer and pause tracking booleans set
         self.startedBool = True
+        self.startedAt = time.monotonic()
         self.workoutUnpausedBool = True
 
         #set the workout initialization boolean
@@ -2291,6 +2304,11 @@ class HUDWindow(QWidget):
                 #set the current power arc
                 self.targetGauge.ui.widget.arcCenterValue = 0
                 self.targetGauge.ui.widget.setEnableDrawNewArc()
+
+    def space_pause(self):
+        #(not straight after START: a held or doubled Space that started the workout doesn't pause it too)
+        if time.monotonic() - self.startedAt >= SPACE_PAUSE_GUARD_SECONDS:
+            self.pauseButton.click()
 
     def end_available(self):
         #the START/END button reads END: a free ride, or a workout once it's started (finished or not). Its text as

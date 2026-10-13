@@ -2,6 +2,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QGridLayout, QLabel, QPushButton, QSlider, QVBoxLayout
 
 import AppLayout
+import KeyShortcuts
 
 from ClassCustomTitleBar import CustomTitleBar
 import Performance
@@ -61,6 +62,12 @@ class PerformanceWindow(QDialog):
         doneButton = QPushButton("Done")
         doneButton.clicked.connect(self.accept)
         layout.addWidget(doneButton, alignment=Qt.AlignmentFlag.AlignCenter)
+        #keys (Ctrl shows them): Left/Right move the slider wherever the focus is
+        KeyShortcuts.add(self.slider, Qt.Key.Key_Left, label="← →", repeat=True,
+                         action=lambda: self.slider.setValue(self.slider.value() - 1))
+        KeyShortcuts.add(self.slider, Qt.Key.Key_Right, repeat=True,
+                         action=lambda: self.slider.setValue(self.slider.value() + 1))
+        KeyShortcuts.add(doneButton, KeyShortcuts.ENTER, label="Enter")
 
         #scaled for this screen, its text fitted to it (see AppLayout.py)
         AppLayout.fit_dialog(self)

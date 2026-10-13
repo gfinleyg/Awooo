@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 import ClassAntLogger
+import KeyShortcuts
 
 #letting go of a title bar drag with the cursor this close to the top of a screen maximizes the window there
 SNAP_DISTANCE = 6
@@ -83,21 +84,24 @@ class CustomTitleBar(QWidget):
                 }
                 """
             )
-            show_logs_action = settings_menu.addAction("Show Logs")
+            #each item's letter (underlined, and shown on its right) picks it while the menu is open
+            show_logs_action = settings_menu.addAction("Show &Logs	L")
             show_logs_action.triggered.connect(self.show_logs)
-            clear_logs_action = settings_menu.addAction("Clear Logs")
+            clear_logs_action = settings_menu.addAction("&Clear Logs	C")
             clear_logs_action.triggered.connect(self.clear_logs)
             settings_menu.addSeparator()
-            load_theme_action = settings_menu.addAction("Load Theme...")
+            load_theme_action = settings_menu.addAction("Load &Theme...	T")
             load_theme_action.triggered.connect(self.load_theme)
-            clear_theme_action = settings_menu.addAction("Clear Theme")
+            clear_theme_action = settings_menu.addAction("Clea&r Theme	R")
             clear_theme_action.triggered.connect(self.clear_theme)
             settings_menu.addSeparator()
-            measurements_action = settings_menu.addAction("Measurements...")
+            measurements_action = settings_menu.addAction("&Measurements...	M")
             measurements_action.triggered.connect(self.measurements)
-            performance_action = settings_menu.addAction("Performance...")
+            performance_action = settings_menu.addAction("&Performance...	P")
             performance_action.triggered.connect(self.performance)
             self.settings_button.setMenu(settings_menu)
+            #F10 opens it, Windows' key for a window's menu
+            KeyShortcuts.add(self.settings_button, Qt.Key.Key_F10, label="F10", action=self.settings_button.showMenu)
 
         # Min button
         self.min_button = QToolButton(self)
@@ -125,6 +129,7 @@ class CustomTitleBar(QWidget):
         #Esc doubles as the X on the popup windows (the main window's X asks to exit the app, so it's left off there)
         if not mainWindow:
             QShortcut(QKeySequence(Qt.Key.Key_Escape), self.window(), activated=self.close_button.click)
+            KeyShortcuts.add(self.close_button, label="Esc", place="left")
 
         buttons = [
             self.min_button,

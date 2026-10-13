@@ -44,6 +44,7 @@ if __name__ == "__main__":
     from AppState import AppState
     import AppStyle
     import AppTheme
+    import KeyShortcuts
     import SavedSettings
     import SoundEffects
 
@@ -53,6 +54,9 @@ if __name__ == "__main__":
     #every stylesheet/color/font set from here on goes through the current theme (the app's own,
     #AppTheme.BUILT_IN_THEME, until one is loaded), so a theme from the settings menu can be applied on the fly
     AppTheme.install()
+
+    #a key for every button, Ctrl shows them (see KeyShortcuts.py)
+    KeyShortcuts.install(app)
 
     #UI sound effects (button clicks, screen changes, workout complete)
     SoundEffects.init(app)

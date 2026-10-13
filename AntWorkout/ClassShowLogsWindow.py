@@ -10,6 +10,7 @@ from ClassWorkoutGraph import *
 from ClassCustomTitleBar import *
 
 import ClassAntLogger
+import KeyShortcuts
 
 
 ###Show Logs QWidget Window - the unified antWorkoutLog.txt viewer opened
@@ -65,6 +66,9 @@ class ShowLogsWindow(QWidget):
         exitLogsButton = QPushButton("Exit")
         exitLogsButton.clicked.connect(self.hide_logs_window)
         buttonRow.addWidget(exitLogsButton)
+        #keys (Ctrl shows them; Ctrl+C still copies a selection). Esc is the X, and Exit
+        KeyShortcuts.add(copyLogsButton, Qt.Key.Key_C, label="C")
+        KeyShortcuts.add(clearLogsButton, Qt.Key.Key_L, label="L")
 
         #add the widgets to the layout and the layout to the window
         logsWindowLayout.addWidget(title_bar)

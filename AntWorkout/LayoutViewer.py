@@ -60,6 +60,7 @@ import AppTheme
 import AppLayout
 import AppStyle
 import FtpColors
+import KeyShortcuts
 from FtpColorsEditor import FtpColorsTab, FtpMockupWindow
 from AppLayout import TASKBAR_HEIGHT
 from AppTheme import ROLE_MAIN, ROLE_GAUGE, ROLE_TITLES, WEIGHTS, colors_in_css, colors_in_value
@@ -1097,6 +1098,14 @@ class ControlWindow(QWidget):
         self.messageCheck.setToolTip("What an .awo file's timed |message| lines look like during a workout")
         self.messageCheck.toggled.connect(self.apply_example_message)
         form.addRow(self.messageCheck)
+        self.keysCheck = QCheckBox("Show key bindings (the labels holding Ctrl shows in the app)")
+        self.keysCheck.setToolTip("The keyboard keys for the buttons on the view showing, see KeyShortcuts.py")
+        self.keysCheck.toggled.connect(self.keys_toggled)
+        form.addRow(self.keysCheck)
+        #(kept up to date while shown: buttons clicked here change which keys apply)
+        self.keyLabelTimer = QTimer(self)
+        self.keyLabelTimer.setInterval(500)
+        self.keyLabelTimer.timeout.connect(self.update_key_labels)
         rebuildButton = QPushButton("Rebuild views")
         rebuildButton.setToolTip("Puts the screens back as they were built, e.g. after clicking their buttons")
         rebuildButton.clicked.connect(self.rebuild)
@@ -1120,8 +1129,9 @@ class ControlWindow(QWidget):
         self.viewButtons.button(VIEWS.index("Workout" if name == "Free Ride" else name)).setChecked(True)
         self.refresh_color_list()
         self.update_fit_report()
+        #once the newly shown view has laid itself out: its key labels, then the preview
+        QTimer.singleShot(250, self.update_key_labels)
         if self.is_oversize():
-            #once the newly shown view has laid itself out
             QTimer.singleShot(300, lambda: self.preview.refresh(self.display))
 
     def rebuild(self):
@@ -1145,6 +1155,20 @@ class ControlWindow(QWidget):
             hud.set_workout_message(self.EXAMPLE_MESSAGE if self.messageCheck.isChecked() else "")
             if self.is_oversize():
                 QTimer.singleShot(300, lambda: self.preview.refresh(self.display))
+
+    def keys_toggled(self, show):
+        if show:
+            self.keyLabelTimer.start()
+            self.update_key_labels()
+        else:
+            self.keyLabelTimer.stop()
+            KeyShortcuts.unpin_labels()
+        if self.is_oversize():
+            QTimer.singleShot(100, lambda: self.preview.refresh(self.display))
+
+    def update_key_labels(self):
+        if self.keysCheck.isChecked() and self.display.views:
+            KeyShortcuts.pin_labels(self.display)
 
     def trainer_changed(self, trainer):
         self.display.startExe.trainer = trainer
@@ -1269,6 +1293,7 @@ class ControlWindow(QWidget):
         QTimer.singleShot(250, self.after_layout)
     def after_layout(self):
         self.update_fit_report()
+        self.update_key_labels()
         if self.is_oversize():
             self.preview.refresh(self.display)
 
@@ -1309,6 +1334,7 @@ class ControlWindow(QWidget):
     def screenshot(self):
         _os.makedirs(SCREENSHOT_DIR, exist_ok=True)
         path = _os.path.join(SCREENSHOT_DIR, f"{self.screen_tag()}_{self.display.current.replace(' ', '')}.png")
+        self.update_key_labels()
         self.display.grab().save(path)
         self.statusLabel.setText(f"Saved {_os.path.relpath(path, PROJECT_DIR)}")
 

@@ -26,6 +26,7 @@ import AppTheme
 import WorkoutGrading
 import FtpTest
 import Units
+import KeyShortcuts
 from ClassGradeWidgets import GradeList
 
 
@@ -377,12 +378,12 @@ class SynopsisWindow(QWidget):
         self.synopsisGridLayout.addLayout(self.statsLayout, 0,2,14,1)
         self.synopsisGridLayout.setColumnStretch(0, 1)
         self.synopsisGridLayout.setColumnStretch(1, 1)
-        #RESTART and END split the full width, including under the stats column
+        #Return to Setup and Exit split the full width, including under the stats column
         self.bottomButtonsLayout = QHBoxLayout()
-        self.SynopsisRestartButton = QPushButton("RESTART")
+        self.SynopsisRestartButton = QPushButton("Return to Setup")
         self.SynopsisRestartButton.clicked.connect(self.restart_action)
         self.bottomButtonsLayout.addWidget(self.SynopsisRestartButton)
-        self.SynopsisEndButton = QPushButton("END")
+        self.SynopsisEndButton = QPushButton("Exit")
         self.SynopsisEndButton.clicked.connect(self.confirm_exit)
         self.bottomButtonsLayout.addWidget(self.SynopsisEndButton)
         self.synopsisGridLayout.addLayout(self.bottomButtonsLayout, 15,0,1,3)
@@ -396,6 +397,25 @@ class SynopsisWindow(QWidget):
         self.blockGradesOverlay = None
         if self.grading:
             self.setup_grade_regions()
+
+        #keys (Ctrl shows them), none of them while the Block Grades sheet covers the screen. Left/Right step through
+        #the graded blocks; Esc closes an open grade or the sheet first (MainWindow.escape_pressed)
+        noSheet = lambda: not self.block_grades_shown()
+        KeyShortcuts.add(self.SynopsisRestartButton, Qt.Key.Key_R, label="R", when=noSheet)
+        KeyShortcuts.add(self.SynopsisEndButton, Qt.Key.Key_E, label="E", when=noSheet)
+        if self.grading:
+            KeyShortcuts.add(self.blockGradesButton, Qt.Key.Key_B, label="B", when=noSheet)
+            stepping = lambda: bool(self.gradeRegions) and noSheet()
+            KeyShortcuts.add(self.synopsisGraphFrame, Qt.Key.Key_Right, label="← →", place="inside", when=stepping,
+                             repeat=True, action=lambda: self.step_grade(1))
+            KeyShortcuts.add(self.synopsisGraphFrame, Qt.Key.Key_Left, when=stepping, repeat=True,
+                             action=lambda: self.step_grade(-1))
+        if self.ftpTestMode:
+            KeyShortcuts.add(self.applyFtpButton, Qt.Key.Key_A, label="A", when=noSheet)
+        KeyShortcuts.add(self.setMaxHrButton, Qt.Key.Key_M, label="M", when=noSheet)
+        #Enter in a time box applies it and leaves it, so Left/Right step through the blocks again
+        for edit in (self.startTimeEdit, self.endTimeEdit):
+            KeyShortcuts.add(edit, KeyShortcuts.ENTER, field=edit, action=self.parent.setFocus)
 
         #zooming/panning refreshes the selection stats, max labels and time boxes once it settles
         self.selectionTimer = QTimer(self)
@@ -584,6 +604,7 @@ class SynopsisWindow(QWidget):
                                   " font: 18pt 'Segoe UI Black'; color: black; }")
         closeButton.setCursor(Qt.CursorShape.PointingHandCursor)
         closeButton.clicked.connect(self.close_grade_popup)
+        KeyShortcuts.add(closeButton, label="Esc")
         header.addWidget(closeButton, 0, Qt.AlignmentFlag.AlignTop)
         layout.addLayout(header)
         details = QLabel(self.grade_details_html(record))
@@ -666,6 +687,43 @@ class SynopsisWindow(QWidget):
         if hasattr(self, "gradeHighlight"):
             self.gradeHighlight.hide()
 
+    def step_grade(self, step):
+        """Left/Right: the next/previous graded block's grade opens (the first or last with none open), the graph
+        scrolled to it if it's out of view"""
+        regions = sorted(self.gradeRegions, key=lambda region: region.rect().left())
+        if self.gradePopupRegion in regions:
+            index = regions.index(self.gradePopupRegion) + step
+            if not 0 <= index < len(regions):
+                return
+        else:
+            index = 0 if step > 0 else len(regions) - 1
+        region = regions[index]
+        self.scroll_to(region.rect())
+        self.open_grade_popup(region)
+
+    def scroll_to(self, rect):
+        #zoomed in with the block out of view: the same span, centered on it (its start, if it's longer than that)
+        start, end = self.view_range()
+        if rect.left() >= start and rect.right() <= end:
+            return
+        span = end - start
+        newStart = rect.left() if rect.width() >= span else rect.center().x() - span/2
+        newStart = max(0.0, min(newStart, self.totalSeconds - span))
+        self.synopsisGraphLabel.plotScreen.vb.setXRange(newStart, newStart + span, padding=0)
+
+    def block_grades_shown(self):
+        return getattr(self, "blockGradesOverlay", None) is not None and self.blockGradesOverlay.isVisible()
+
+    def close_overlays(self):
+        """Esc: closes the Block Grades sheet, else an open grade; False if neither was open"""
+        if self.block_grades_shown():
+            self.show_block_grades(False)
+            return True
+        if self.gradePopup is not None:
+            self.close_grade_popup()
+            return True
+        return False
+
     def show_block_grades(self, show):
         """Every block's grade over the synopsis (the Block Grades button), the same list the HUD shows once a
         workout is complete"""
@@ -693,6 +751,7 @@ class SynopsisWindow(QWidget):
             layout.addWidget(self.blockGradeList, 1)
             closeButton = QPushButton("CLOSE")
             closeButton.clicked.connect(lambda: self.show_block_grades(False))
+            KeyShortcuts.add(closeButton, Qt.Key.Key_B, label="B")
             layout.addWidget(closeButton)
             self.blockGradesOverlay, self.blockGradesSheet = overlay, sheet
         self.blockGradeList.refresh(self.blockGrades)

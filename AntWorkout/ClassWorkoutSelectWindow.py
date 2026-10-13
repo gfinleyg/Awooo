@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
 
 from AppState import AppState
 import AppLayout
+import KeyShortcuts
 from ClassCustomTitleBar import CustomTitleBar
 from ClassLongVerticalLabelSeries import LongVLabels
 from ClassMusicSelectWindow import PICKER_STYLE, MIN_RANDOM_MINUTES, MAX_RANDOM_MINUTES
@@ -84,12 +85,14 @@ class WorkoutSelectWindow(QDialog):
         layout.addWidget(self.title_bar)
 
         addRow = QHBoxLayout()
+        addButtons = {}
         for text, slot in (("Add Folder", self.add_folder), ("Add Workouts", self.add_files),
                            ("Remove", self.remove_selected), ("Clear", self.clear_workouts),
                            ("Convert to .awo", self.convert_selected)):
             button = QPushButton(text)
             button.clicked.connect(slot)
             addRow.addWidget(button)
+            addButtons[text] = button
         #(only for a .zwo file)
         self.convertButton = button
         layout.addLayout(addRow)
@@ -139,10 +142,25 @@ class WorkoutSelectWindow(QDialog):
         buttons.addWidget(cancelButton)
         layout.addLayout(buttons)
 
+        #keys (Ctrl shows them; Esc is the X and Cancel). Enter in the minutes box picks a random workout
+        for text, key, label in (("Add Folder", Qt.Key.Key_D, "D"), ("Add Workouts", Qt.Key.Key_A, "A"),
+                                 ("Remove", Qt.Key.Key_Delete, "Del"), ("Clear", Qt.Key.Key_C, "C"),
+                                 ("Convert to .awo", Qt.Key.Key_V, "V")):
+            KeyShortcuts.add(addButtons[text], key, label=label)
+        KeyShortcuts.add(randomButton, Qt.Key.Key_R, label="R")
+        KeyShortcuts.add(randomButton, KeyShortcuts.ENTER, field=self.randomMinutes)
+        KeyShortcuts.add(self.okButton, KeyShortcuts.ENTER, label="Enter")
+        KeyShortcuts.add(self.workoutList, Qt.Key.Key_Up, label="↑ ↓", place="inside", repeat=True,
+                         action=lambda: KeyShortcuts.step_list(self.workoutList, -1))
+        KeyShortcuts.add(self.workoutList, Qt.Key.Key_Down, repeat=True,
+                         action=lambda: KeyShortcuts.step_list(self.workoutList, 1))
+
         #the list from last time (or the workouts folder), with the workout picked last time (or the loaded one) picked
         self.randomMinutes.setValue(int(SavedSettings.load().get("workoutRandomMinutes", 60)))
         saved = self.load_list()
-        files = [f for f in saved.get("files", []) if os.path.isfile(f)]
+        #(a damaged list's entries that aren't file names are skipped)
+        files = saved.get("files")
+        files = [f for f in files if isinstance(f, str) and os.path.isfile(f)] if isinstance(files, list) else []
         if not files and os.path.isdir(DEFAULT_FOLDER):
             files = [os.path.abspath(f).replace("\\", "/") for f in folder_workouts(DEFAULT_FOLDER)]
         self.add_to_list(files)

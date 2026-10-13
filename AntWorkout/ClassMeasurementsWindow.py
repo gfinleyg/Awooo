@@ -2,6 +2,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QButtonGroup, QDialog, QGridLayout, QLabel, QPushButton, QRadioButton, QVBoxLayout
 
 import AppLayout
+import KeyShortcuts
 
 from ClassCustomTitleBar import CustomTitleBar
 import Units
@@ -13,6 +14,9 @@ class MeasurementsWindow(QDialog):
     ROWS = (("Weight", "weight", Units.WEIGHT_UNITS, {"lbs": "lbs", "kg": "kg"}),
             ("Power to weight", "powerWeight", Units.POWER_WEIGHT_UNITS, {"W/kg": "W/kg", "W/lb": "W/lb"}),
             ("Distance", "distance", Units.DISTANCE_UNITS, {"mi": "Miles (MPH)", "km": "Km (KM/H)"}))
+
+    #the key that steps through each row's choices
+    KEYS = {"weight": Qt.Key.Key_W, "powerWeight": Qt.Key.Key_P, "distance": Qt.Key.Key_D}
 
     def __init__(self, parent=None):
         super(MeasurementsWindow, self).__init__(parent)
@@ -36,7 +40,8 @@ class MeasurementsWindow(QDialog):
         grid.setHorizontalSpacing(12)
         self.groups = {}
         for row, (label, key, units, names) in enumerate(self.ROWS):
-            grid.addWidget(QLabel(label + ":"), row, 0, alignment=Qt.AlignmentFlag.AlignRight)
+            rowLabel = QLabel(label + ":")
+            grid.addWidget(rowLabel, row, 0, alignment=Qt.AlignmentFlag.AlignRight)
             group = QButtonGroup(self)
             for column, unit in enumerate(units, 1):
                 radio = QRadioButton(names[unit])
@@ -46,6 +51,9 @@ class MeasurementsWindow(QDialog):
                 grid.addWidget(radio, row, column)
             group.buttonClicked.connect(lambda radio, k=key: Units.set_units(**{k: radio.unit}))
             self.groups[key] = group
+            #a key steps through the row's choices
+            letter = self.KEYS[key]
+            KeyShortcuts.add(rowLabel, letter, label=chr(letter), action=lambda g=group: self.next_choice(g))
         layout.addLayout(grid)
 
         note = QLabel("Your weight is set on the setup screen (0 leaves it out).\n"
@@ -56,6 +64,14 @@ class MeasurementsWindow(QDialog):
         doneButton = QPushButton("Done")
         doneButton.clicked.connect(self.accept)
         layout.addWidget(doneButton, alignment=Qt.AlignmentFlag.AlignCenter)
+        KeyShortcuts.add(doneButton, KeyShortcuts.ENTER, label="Enter")
 
         #scaled for this screen, its text fitted to it (see AppLayout.py)
         AppLayout.fit_dialog(self)
+
+    @staticmethod
+    def next_choice(group):
+        #the row's next choice, wrapping (a click, so it applies as a mouse click does)
+        radios = group.buttons()
+        checked = group.checkedButton()
+        radios[(radios.index(checked) + 1) % len(radios) if checked in radios else 0].click()

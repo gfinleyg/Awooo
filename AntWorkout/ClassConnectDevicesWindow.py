@@ -2,6 +2,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 import AppLayout
+import KeyShortcuts
 
 from ClassAnalogGauge import *
 from ClassLongVerticalLabelSeries import *
@@ -127,6 +128,10 @@ class ConnectDevicesWindow(QWidget):
         self.goBackToReselectButton.clicked.connect(self.exit_selection)
         connectLayout.addWidget(self.goBackToReselectButton)
         self.setLayout(connectLayout)
+
+        #keys (Ctrl shows them)
+        KeyShortcuts.add(self.connectForSureButton, (Qt.Key.Key_C,) + KeyShortcuts.ENTER, label="Enter")
+        KeyShortcuts.add(self.goBackToReselectButton, Qt.Key.Key_R, label="R")
 
         #scaled for this screen, its text fitted to it (see AppLayout.py)
         AppLayout.fit_dialog(self)

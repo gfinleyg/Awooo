@@ -2,6 +2,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
 
 import AppLayout
+import KeyShortcuts
 
 from ClassAnalogGauge import *
 from ClassLongVerticalLabelSeries import *
@@ -45,6 +46,10 @@ class ConfirmExitWindow(QWidget):
         exitLayout.addWidget(self.exitSynopsisConfirmButton)
         exitLayout.addWidget(self.exitSynopsisCancelButton)
         self.setLayout(exitLayout)
+
+        #keys (Ctrl shows them)
+        KeyShortcuts.add(self.exitSynopsisConfirmButton, Qt.Key.Key_Y, label="Y")
+        KeyShortcuts.add(self.exitSynopsisCancelButton, Qt.Key.Key_N, label="N")
 
         #scaled for this screen, its text fitted to it (see AppLayout.py)
         AppLayout.fit_dialog(self)
