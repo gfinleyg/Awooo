@@ -61,16 +61,11 @@ def fitted_font(font, text, width, height):
 def label_gradient_colors(text):
     """A block label's background colors (start, end), the same as its label everywhere else (see
     FtpColors.block_css): by the watts (or RPM) in its text, or the free ride colors"""
-    blocks = FtpColors.get("blocks")
     targets = TargetsFromText(text)
     if targets is None:
-        start, end = blocks["free"]
+        start, end = FtpColors.get("blocks")["free"]
     else:
-        low, high = targets
-        if high:
-            start, end = blocks[FtpColors._block_zone(low, None)][0], blocks[FtpColors._block_zone(high, None)][1]
-        else:
-            start, end = blocks[FtpColors._block_zone(low, None)][0], FtpColors.get("blockSingleEnd")
+        start, end = FtpColors.block_colors(*targets)
     return theme_color(start), theme_color(end)
 
 

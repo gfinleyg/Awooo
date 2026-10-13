@@ -191,12 +191,27 @@ def all_colors():
 BLOCK_TEXT = "#111111"
 
 
-def block_css(power0, power1=0, ranges=None):
-    """A block label's background: a range from its low power's start color to its high power's end
-    color, a single power from its start color to blockSingleEnd"""
+def block_colors(power0, power1=0, ranges=None):
+    """A block label's background colors (start, end) as "#rrggbb": a range from its low power's start color to
+    its high power's end color, a single power from its start color to blockSingleEnd. In Musical Cadence Mode
+    (with the ride's own zones, not ranges given for something else) the colors are the cadence gauge band's
+    at those RPM (see cadence_scale_stops), so the blocks match the band"""
+    if ranges is None:
+        ranges = AppState.ftpRanges
+    if AppState.workoutMode and AppState.cadenceMode and ranges is AppState.ftpRanges:
+        stops = cadence_scale_stops(ranges)
+        start = stops_color(stops, power0).name()
+        end = stops_color(stops, power1).name() if power1 else _current("blockSingleEnd")
+        return start, end
     blocks = _current("blocks")
     start = blocks[_block_zone(power0, ranges)][0]
     end = blocks[_block_zone(power1, ranges)][1] if power1 else _current("blockSingleEnd")
+    return start, end
+
+
+def block_css(power0, power1=0, ranges=None):
+    """A block label's background (see block_colors)"""
+    start, end = block_colors(power0, power1, ranges)
     return f"background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 {start} stop:1 {end}); color:{BLOCK_TEXT};"
 
 
