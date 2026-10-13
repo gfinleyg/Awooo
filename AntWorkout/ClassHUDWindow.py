@@ -681,9 +681,10 @@ class HUDWindow(QWidget):
                 self.difficultySlider.valueChanged.connect(self.difficulty_changed)
             else:
                 self.difficultySlider.valueChanged.connect(self.trainer_watts_changed)
+            #no vertical margin on the handle: a negative one let it hang past the groove's ends, cut off at the top/bottom
             self.difficultySlider.setStyleSheet("""
                                                     QSlider::groove:vertical { background:#bdd6de; width:10px; position:absolute; left:20px; right:20px}
-                                                    QSlider::handle:vertical { background:%s; width:40px; height:40px; margin:-20px -40px; border-style:solid; border-color:#9fc5d1; border-width:1px; border-radius:15px}
+                                                    QSlider::handle:vertical { background:%s; width:40px; height:40px; margin:0px -40px; border-style:solid; border-color:#9fc5d1; border-width:1px; border-radius:15px}
                                                     QSlider::handle:vertical:disabled { background:transparent}
                                                 """ % AppState.gaugeRed)
             #workout mode enables it on START, free mode has no START so it's live right away, as is the volume
