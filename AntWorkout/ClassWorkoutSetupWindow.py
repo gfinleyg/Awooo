@@ -681,7 +681,12 @@ class WorkoutSetupWindow(QWidget):
                 self.statusString += "\n\nUnselected Scanned Device:\n"
                 self.statusString += unselectedScannedDevStrList[0]
             #end set up status text
-            self.set_init_status(self.statusString.strip() or "Scanning for ANT+ devices,\nhang on for a bit...")
+            #no usable stick yet: say so (and that plugging one in is enough) rather than claim to be scanning
+            waitingForStick = bridge.waiting_for_stick()
+            if waitingForStick:
+                self.set_init_status(waitingForStick)
+            else:
+                self.set_init_status(self.statusString.strip() or "Scanning for ANT+ devices,\nhang on for a bit...")
             #check if the connect button is ready to be pressed, blinked
             self.check_for_selected_scanned()
 

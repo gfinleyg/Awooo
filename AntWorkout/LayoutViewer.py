@@ -130,6 +130,7 @@ class FakeBridge(QObject):
     def is_initialized(self): return True
     def scan_settle_remaining(self): return 0
     def take_error(self): return None
+    def waiting_for_stick(self): return None
     def selected_roles(self): return {ROLE_POWER, ROLE_HRM, ROLE_SPEED_CADENCE}
     def selected_device(self, role): return SimpleNamespace(device_type=self.power_type, device_number=12345, battery=None)
     def is_connect_requested(self): return True

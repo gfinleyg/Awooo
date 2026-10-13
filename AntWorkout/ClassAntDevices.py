@@ -31,6 +31,8 @@ bridge, read through plain methods:
                              initANT.txt existing)
   take_error()             - initialization failure text, handed out once
                              (was errorANT.txt, deleted once shown)
+  waiting_for_stick()      - status text while initialization has failed
+                             and a newly plugged in stick is awaited
   is_connect_requested()   - request_connect() called and not undone yet
                              (was connectANT.txt existing)
   is_ready()               - that connect has been processed (was
@@ -156,6 +158,10 @@ TRAINER_BATTERY_NAME = "Trainer"
 # INIT_ATTEMPTS times in total, waiting these delays between attempts
 INIT_ATTEMPTS = 4
 INIT_RETRY_DELAYS_S = (1.0, 2.0, 4.0)
+# Once those all fail (no stick plugged in, usually), the USB device list
+# is checked this often for a newly plugged in stick, which gets a fresh
+# set of INIT_ATTEMPTS - see _wait_for_new_stick()
+STICK_POLL_S = 2.0
 
 
 # Files older versions used to pass setup state and sensor data through;
@@ -322,6 +328,9 @@ class AntWorkoutBridge(QThread):
         # and _ready are only changed under _request_lock.
         self._initialized = False
         self._error = None
+        # Status text while initialization has failed and a stick is being
+        # waited for, None otherwise - see waiting_for_stick()
+        self._waiting_message = None
         self._connect_requested = False
         self._ready = False
 
@@ -404,6 +413,11 @@ class AntWorkoutBridge(QThread):
         """The initialization failure text, or None - returned only once."""
         error, self._error = self._error, None
         return error
+
+    def waiting_for_stick(self):
+        """While initialization has failed and a newly plugged in ANT USB
+        stick is being waited for, the status text to show; else None."""
+        return self._waiting_message
 
     def selected_roles(self):
         """The roles latched in by the last processed connect request."""
@@ -539,51 +553,24 @@ class AntWorkoutBridge(QThread):
 
         self._startup_cleanup()
 
-        # A stick left in a bad state (e.g. by a previous session that
-        # didn't shut down cleanly) can open fine but ignore the reset at
-        # the start of configure_scan(). Rather than giving up, drive a
-        # reset: close the stick, give it a moment, reopen and reconfigure
-        # (configure_scan() sends a fresh system reset every time), backing
-        # off a little more each attempt. Only the final failure is
-        # reported to the UI.
-        error = None
-        for attempt in range(1, INIT_ATTEMPTS + 1):
+        # No stick plugged in at startup (or one that won't initialize)
+        # isn't the end: report it, then wait for a stick to be plugged in
+        # (or unplugged and plugged back in) and start over with it, so
+        # the app doesn't have to be restarted.
+        while True:
+            error = self._initialize_with_retries()
             if not self.running:
                 return
-            if attempt > 1:
-                delay = INIT_RETRY_DELAYS_S[min(attempt - 2, len(INIT_RETRY_DELAYS_S) - 1)]
-                ClassAntLogger.log_event(
-                    "ANT",
-                    f"Resetting ANT USB stick and retrying initialization "
-                    f"(attempt {attempt}/{INIT_ATTEMPTS}) in {delay}s",
-                )
-                try:
-                    self.ant.close()
-                except Exception as e:
-                    ClassAntLogger.log_event("ANT", f"Closing ANT USB stick before retry failed: {e}")
-                # interruptible so stop() during a retry isn't held up
-                self._wake_event.wait(timeout=delay)
-                self._wake_event.clear()
-                if not self.running:
-                    return
-            error = self._initialize_ant()
             if error is None:
                 break
-            ClassAntLogger.log_event("ANT", error)
-
-        if error is not None:
-            try:
-                self.ant.close()
-            except Exception:
-                pass
-            ClassAntLogger.log_event(
-                "ANT",
-                f"ANT initialization failed after {INIT_ATTEMPTS} attempts, giving up: {error}",
-            )
+            self._waiting_message = f"{error}\nPlug in an ANT USB stick, it will be detected automatically"
             self._error = error
             self.errorOccurred.emit(error)
-            self.running = False
-            return
+            if not self._wait_for_new_stick():
+                return
+            self._waiting_message = None
+            ClassAntLogger.log_event("ANT", "New ANT USB stick detected, initializing")
+            self.statusMessage.emit("New ANT USB stick detected, initializing")
 
         self.recovery.start()
 
@@ -607,6 +594,83 @@ class AntWorkoutBridge(QThread):
             self._service_trainer_target()
 
         self._shutdown()
+
+    def _initialize_with_retries(self):
+        """Open and configure the stick, up to INIT_ATTEMPTS times. Returns
+        None on success, otherwise the last error text (the stick is left
+        closed). Also returns early if stop() is called."""
+        # A stick left in a bad state (e.g. by a previous session that
+        # didn't shut down cleanly) can open fine but ignore the reset at
+        # the start of configure_scan(). Rather than giving up, drive a
+        # reset: close the stick, give it a moment, reopen and reconfigure
+        # (configure_scan() sends a fresh system reset every time), backing
+        # off a little more each attempt. Only the final failure is
+        # reported to the UI.
+        error = None
+        for attempt in range(1, INIT_ATTEMPTS + 1):
+            if not self.running:
+                return error
+            if attempt > 1:
+                delay = INIT_RETRY_DELAYS_S[min(attempt - 2, len(INIT_RETRY_DELAYS_S) - 1)]
+                ClassAntLogger.log_event(
+                    "ANT",
+                    f"Resetting ANT USB stick and retrying initialization "
+                    f"(attempt {attempt}/{INIT_ATTEMPTS}) in {delay}s",
+                )
+                try:
+                    self.ant.close()
+                except Exception as e:
+                    ClassAntLogger.log_event("ANT", f"Closing ANT USB stick before retry failed: {e}")
+                # interruptible so stop() during a retry isn't held up
+                self._wake_event.wait(timeout=delay)
+                self._wake_event.clear()
+                if not self.running:
+                    return error
+            error = self._initialize_ant()
+            if error is None:
+                break
+            ClassAntLogger.log_event("ANT", error)
+
+        if error is not None:
+            try:
+                self.ant.close()
+            except Exception:
+                pass
+            ClassAntLogger.log_event(
+                "ANT",
+                f"ANT initialization failed after {INIT_ATTEMPTS} attempts, "
+                f"waiting for an ANT USB stick to be plugged in: {error}",
+            )
+        return error
+
+    def _wait_for_new_stick(self):
+        """Block until an ANT USB stick that wasn't there before shows up
+        in the USB device list (plugged in, or unplugged and plugged back
+        in). Returns False if stop() is called first.
+
+        Only a newly appeared stick triggers another initialization - one
+        that's present but failing isn't retried over and over.
+        """
+        present = self._stick_ids()
+        while self.running:
+            self._wake_event.wait(timeout=STICK_POLL_S)
+            self._wake_event.clear()
+            if not self.running:
+                return False
+            current = self._stick_ids()
+            if current - present:
+                return True
+            # an unplugged stick drops out here, so plugging it back in counts as new
+            present = current
+        return False
+
+    def _stick_ids(self):
+        """(vid, pid, serial_number) of every ANT USB stick currently attached."""
+        try:
+            devices = self.ant.native.list_devices()
+        except Exception:
+            return frozenset()
+        return frozenset((d.get("vid"), d.get("pid"), d.get("serial_number")) for d in devices)
 
     def _initialize_ant(self):
         """One open + scan configure + message pump start. Returns None on
@@ -873,6 +937,7 @@ class AntWorkoutBridge(QThread):
         self._connected = False
         self._initialized = False
         self._error = None
+        self._waiting_message = None
 
         with self._request_lock:
             self._pending_connect = None
