@@ -434,8 +434,8 @@ def theme_graph(graph):
     if not hasattr(graph, "_themeTitle"):
         graph._themeTitle = (title.text, title.opts.get("size", "20pt"), title.opts.get("color"))
     text, size, color = graph._themeTitle
-    #a graph with a title (the synopsis) has its axis labels ("Power (Watts)", ...) at the title's size
-    #too; the tick numbers keep their own size
+    #a graph with a title has its axis labels ("Power (Watts)", ...) at the title's size too, unless it
+    #sets its own (axisTitlePoints, the synopsis: its max labels' size); the tick numbers keep their own size
     titlePoints = None
     if text and title.isVisible():
         titlePoints = float(str(size).rstrip("pt"))*factor
@@ -445,6 +445,7 @@ def theme_graph(graph):
         height = math.ceil(title.itemRect().height())
         title.setMaximumHeight(height)
         graph.plotScreen.layout.setRowFixedHeight(0, height)
+    labelPoints = graph.axisTitlePoints*factor if getattr(graph, "axisTitlePoints", None) else titlePoints
     #the tick numbers: pyqtgraph's own grey unless the theme changes black, then that
     black = THEME.colors.get("#000000")
     for name in ("left", "right", "bottom"):
@@ -467,15 +468,15 @@ def theme_graph(graph):
         if labelText:
             style = {**labelStyle, "font-family": settings["family"]}
             match = re.match(r"\s*(\d+(?:\.\d+)?)px", str(labelStyle.get("font-size", "")))
-            if titlePoints:
-                style["font-size"] = f"{titlePoints:.1f}pt"
+            if labelPoints:
+                style["font-size"] = f"{labelPoints:.1f}pt"
             elif match:
                 style["font-size"] = f"{float(match.group(1))*factor:.1f}px"
             if settings["weight"] != "Original":
                 style["font-weight"] = settings["weight"]
             labelFont = QFont(font)
-            if titlePoints:
-                labelFont.setPointSizeF(titlePoints)
+            if labelPoints:
+                labelFont.setPointSizeF(labelPoints)
             axis.label.setFont(labelFont)
             axis.setLabel(labelText, labelUnits, **style)
 

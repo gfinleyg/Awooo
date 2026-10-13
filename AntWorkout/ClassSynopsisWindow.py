@@ -36,6 +36,8 @@ class PlotLabel(QGraphicsSimpleTextItem):
     PADX = 7
     PADY = 3
     RADIUS = 7
+    #Orbitron size of the max labels (the synopsis' axis titles match it)
+    FONT_POINTS = 11
     #called on a left click (pyqtgraph's scene delivers clicks to any item with mouseClickEvent)
     onClick = None
     borderColor = QColor(40, 40, 40)
@@ -138,6 +140,8 @@ class SynopsisWindow(QWidget):
         self.synopsisGraphLabel.updateViews()
         self.synopsisGraphLabel.plotScreen.vb.sigResized.connect(self.synopsisGraphLabel.updateViews)
         self.synopsisGraphLabel.plotScreen.hideButtons() #removes the little a in the bottom left of the screen
+        #axis titles at the max labels' size, see AppTheme.theme_graph
+        self.synopsisGraphLabel.axisTitlePoints = PlotLabel.FONT_POINTS
         #axis titles and tick values start at the system default font's size; their font (family, size %
         #and weight) follows the theme's Text font row, see AppTheme.theme_graph
         if AppState.defaultFont is not None:
@@ -725,7 +729,7 @@ class SynopsisWindow(QWidget):
         line.setZValue(999)
         scene.addItem(line)
         label = PlotLabel(self.marker_text(fmt, value))
-        font = QFont("Orbitron", 11)
+        font = QFont("Orbitron", PlotLabel.FONT_POINTS)
         font.setBold(True)
         label.setFont(font)
         label.setZValue(1000)

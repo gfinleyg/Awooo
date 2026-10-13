@@ -37,7 +37,9 @@ class WorkoutGraph(pg.PlotWidget):
         # Expected Power, power, hr, cadence vs time plot
 
         styles = {"color": "#000000", "font-size": "18px"}
-        
+        #axis titles' point size before theme scaling, if not the title's (see AppTheme.theme_graph)
+        self.axisTitlePoints = None
+
         ## Set up the power axis
         self.plotScreen = self.plotItem
         self.setBackground("#bdd6de")

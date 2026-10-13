@@ -1,12 +1,13 @@
 import bisect
 import datetime
 import math
+import re
 import time
 
 import pyqtgraph as pg
 
 from PyQt6.QtCore import QEvent, QPoint, QPointF, QRect, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QKeySequence, QPainter, QPen, QShortcut
+from PyQt6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen, QShortcut
 from PyQt6.QtWidgets import (
     QGridLayout,
     QLabel,
@@ -474,6 +475,17 @@ class HUDWindow(QWidget):
         self.progressGraph.plotScreen.showAxis(axis='left', show=False)
         self.progressGraph.plotScreen.showAxis(axis='right', show=False)
         self.progressGraph.plotScreen.hideButtons()
+        #the time ticks ("5m") at half the graph's font size, "Time (minutes)" at 3/4 its usual 18px
+        #(set before the theme first styles the graph, which scales from these)
+        timeAxis = self.progressGraph.plotScreen.getAxis('bottom')
+        tickFont = QFont(self.progressGraph.font())
+        if tickFont.pointSizeF() > 0:
+            tickFont.setPointSizeF(tickFont.pointSizeF()*0.5)
+        else:
+            tickFont.setPixelSize(max(1, round(tickFont.pixelSize()*0.5)))
+        timeAxis.setTickFont(tickFont)
+        self.progressGraph.plotScreen.setLabel("bottom", "Time (minutes)",
+                                               **{**self.progressGraph.axisStyles, "font-size": "13.5px"})
         #the workout's target bars; Musical Cadence Mode's targets are cadences, drawn on the cadence axis
         targetVBox = self.progressGraph.hrCadenceVBox if self.cadenceMode else self.progressGraph.powerVBox
         self.workoutPowerPlot = SolidColoredColumns(x=[0], y=[],ranges=[],colors=[0])
@@ -1015,6 +1027,20 @@ class HUDWindow(QWidget):
                 plot.update()
     
     def getLabelColor(self, txt):
+        #a label's own sheet beats the HUD's QLabel:disabled rule, so it carries its own: an interval's
+        #inactive blocks dim, their background halfway to grey
+        css = self.labelColorCss(txt)
+        background = re.search(r"background-color:[^;]*;", css)
+        dimmed = re.sub(r"#[0-9a-fA-F]{6}", lambda m: self.dimColor(m.group(0)), background.group(0)) if background else ""
+        return "QLabel{%s} QLabel:disabled{color:#6a6a6a; %s}" % (css, dimmed)
+
+    def dimColor(self, hexColor, grey=QColor("#b4b5b8"), amount=0.5):
+        color = QColor(hexColor)
+        return QColor(round(color.red() + (grey.red() - color.red())*amount),
+                      round(color.green() + (grey.green() - color.green())*amount),
+                      round(color.blue() + (grey.blue() - color.blue())*amount)).name()
+
+    def labelColorCss(self, txt):
         if txt in ["", "You're on the last block, way to go!", 
                    "Press Start to begin workout", 
                    "Workout Complete!\nCooldown, or press END for more options"]:
