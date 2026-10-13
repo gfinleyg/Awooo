@@ -480,12 +480,12 @@ class HUDWindow(QWidget):
         timeAxis = self.progressGraph.plotScreen.getAxis('bottom')
         tickFont = QFont(self.progressGraph.font())
         if tickFont.pointSizeF() > 0:
-            tickFont.setPointSizeF(tickFont.pointSizeF()*0.5)
+            tickFont.setPointSizeF(tickFont.pointSizeF()*0.8)
         else:
-            tickFont.setPixelSize(max(1, round(tickFont.pixelSize()*0.5)))
+            tickFont.setPixelSize(max(1, round(tickFont.pixelSize()*0.8)))
         timeAxis.setTickFont(tickFont)
         self.progressGraph.plotScreen.setLabel("bottom", "Time (minutes)",
-                                               **{**self.progressGraph.axisStyles, "font-size": "13.5px"})
+                                               **{**self.progressGraph.axisStyles, "font-size": "16px"})
         #the workout's target bars; Musical Cadence Mode's targets are cadences, drawn on the cadence axis
         targetVBox = self.progressGraph.hrCadenceVBox if self.cadenceMode else self.progressGraph.powerVBox
         self.workoutPowerPlot = SolidColoredColumns(x=[0], y=[],ranges=[],colors=[0])
