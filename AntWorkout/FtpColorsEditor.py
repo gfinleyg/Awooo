@@ -2,8 +2,8 @@
 FtpColorsEditor.py
 
 LayoutViewer.py's FTP Colors tab and its mockup window (not part of AntWorkout): the colors that follow
-the power zones (FtpColors.py) on the power gauge, the workout block labels, the workout graph's bars and
-the spiral, edited on the tab and shown on the mockup for any FTP (40 - 500 W) and power.
+the power zones (FtpColors.py) on the power gauge, the workout block labels and the workout graph's bars,
+edited on the tab and shown on the mockup for any FTP (40 - 500 W) and power.
 """
 
 from PyQt6.QtCore import QRectF, Qt
@@ -15,15 +15,12 @@ import AppTheme
 import FtpColors
 from AppState import AppState
 from ClassAnalogGauge import Gauge
-from ClassSpiralProgressBar import SpiralProgressBar
 
 #the zones' limits as % of FTP (ClassWorkoutSetupWindow.py sets AppState.ftpRanges the same way)
 ZONE_LIMITS = (36, 87, 119, 187)
 ZONE_NAMES = {"0": f"Zone 1  (under {ZONE_LIMITS[0]}%)", "1": f"Zone 2  ({ZONE_LIMITS[0]}–{ZONE_LIMITS[1]}%)",
               "2": f"Zone 3  ({ZONE_LIMITS[1]}–{ZONE_LIMITS[2]}%)", "3": f"Zone 4  ({ZONE_LIMITS[2]}–{ZONE_LIMITS[3]}%)",
               "4": f"Zone 5  ({ZONE_LIMITS[3]}% and up)", "free": "Free ride  (0 W)"}
-#the spiral's other lines (ClassHUDWindow.py)
-SPIRAL_PROGRESS = "#1f15e1"
 GRAPH_BACKGROUND = "#bdd6de" #ClassWorkoutGraph.py
 DEFAULT_FTP = 220
 
@@ -107,9 +104,6 @@ class FtpColorsTab(QScrollArea):
                                             "By the power being ridden (shown see-through)"))
         layout.addWidget(self.build_blocks())
         layout.addWidget(self.build_graph())
-        layout.addWidget(self.build_pairs("spiral", "Spiral: current block's line",
-                                          ("Line", "Blinking"), "The block's line, and its color while it blinks "
-                                          "(shown see-through)", preview=False))
         resetAll = QPushButton("Reset all FTP colors")
         resetAll.clicked.connect(self.reset_all)
         layout.addWidget(resetAll)
@@ -195,21 +189,20 @@ class FtpColorsTab(QScrollArea):
         grid.setColumnStretch(0, 1)
         return box, grid, row
 
-    def build_pairs(self, key, title, headers, note, preview=True):
+    def build_pairs(self, key, title, headers, note):
         zones = list(FtpColors.DEFAULTS[key])
         def cells(zone):
             swatches = [Swatch(f"{ZONE_NAMES[zone]}: {header}", lambda c, z=zone, i=i: self.set_part(key, z, i, c))
                         for i, header in enumerate(headers)]
-            bar = GradientBar() if preview else None
+            bar = GradientBar()
             def refresh():
                 colors = FtpColors.get(key)[zone]
                 for swatch, color in zip(swatches, colors):
                     swatch.set_color(color)
-                if bar:
-                    bar.set_colors(colors)
+                bar.set_colors(colors)
             self.refreshers.append(refresh)
-            return swatches + ([bar] if bar else [])
-        box, _, _ = self.zone_rows(title, note, key, list(headers) + (["Looks like"] if preview else []), zones, cells)
+            return swatches + [bar]
+        box, _, _ = self.zone_rows(title, note, key, list(headers) + ["Looks like"], zones, cells)
         return box
 
     def build_singles(self, key, title, note):
@@ -350,21 +343,6 @@ class FtpMockupWindow(QWidget):
         self.gauge.setMinimumSize(420, 420)
         parts.addWidget(self.titled("Power gauge (target and power ridden both at the power above)", self.gauge), 0, 0, 2, 1)
 
-        spirals = QWidget()
-        spiralRow = QHBoxLayout(spirals)
-        spiralRow.setContentsMargins(0, 0, 0, 0)
-        self.spirals = []
-        for title in ("Line", "Blinking"):
-            spiral = SpiralProgressBar()
-            spiral.ui.widget.spb_setNoProgressBar(2)
-            spiral.ui.widget.spb_setGap(20)
-            spiral.ui.widget.pathWidth = 1
-            spiral.ui.widget.spb_setValue((65, 40))
-            spiral.setMinimumSize(190, 190)
-            self.spirals.append(spiral)
-            spiralRow.addWidget(self.titled(title, spiral))
-        parts.addWidget(self.titled("Spiral (workout progress, then the current block)", spirals), 0, 1)
-
         blocks = QWidget()
         blockColumn = QVBoxLayout(blocks)
         blockColumn.setContentsMargins(0, 0, 0, 0)
@@ -376,7 +354,7 @@ class FtpMockupWindow(QWidget):
             label.setFont(QFont(AppTheme.THEME.fonts[AppTheme.ROLE_MAIN]["family"], 13))
             blockColumn.addWidget(label)
             self.blockLabels.append(label)
-        parts.addWidget(self.titled("Workout blocks", blocks), 1, 1)
+        parts.addWidget(self.titled("Workout blocks", blocks), 0, 1, 2, 1)
 
         self.graph = GraphMock()
         parts.addWidget(self.titled("Workout graph bars", self.graph), 2, 0, 1, 2)
@@ -425,13 +403,6 @@ class FtpMockupWindow(QWidget):
         widget.setEnableDrawNewArc()
         widget.outer_circle_bg = [[0.25, QColor(0, 0, 0, 0)], [0.18, QColor("#44" + FtpColors.gauge_ring(power, ranges))]]
         widget.update()
-
-        ##spirals: as the HUD draws them (ClassHUDWindow.updateSpiralColors / updateSpiralColorsBlockBlinkOn)
-        line, blink = FtpColors.spiral(power, ranges)
-        self.spirals[0].ui.widget.spb_lineColor((SPIRAL_PROGRESS, "#" + line))
-        self.spirals[1].ui.widget.spb_lineColor((SPIRAL_PROGRESS, "#22" + blink))
-        for spiral in self.spirals:
-            spiral.ui.widget.update()
 
         ##block labels: a single block per zone, a range and free ride
         samples = [(round(ftp*pct/100), 0) for pct in (25, 60, 100, 150, 200)]

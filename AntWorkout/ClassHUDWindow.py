@@ -23,6 +23,7 @@ from ClassAnalogGauge import *
 from ClassLongVerticalLabelSeries import *
 from ClassSolidColoredColumns import SolidColoredColumns
 from ClassSpiralProgressBar import *
+from ClassPowerSpiral import PowerSpiral
 from ClassSmoothProgressBar import SmoothProgressBar
 from ClassWorkoutGraph import *
 from ClassCustomTitleBar import *
@@ -123,6 +124,8 @@ class HUDWindow(QWidget):
     BLINK_WINDOW_SECONDS = 10
     BLINK_HALF_PERIOD_SECONDS = 0.5
     BLINK_MIN_DURATION_SECONDS = 2
+    #the spiral's power and cadence: each the average over the last this many seconds (see record_spiral_sample)
+    SPIRAL_AVERAGE_SECONDS = 3.0
     
     def __init__(self, parent):
         super(HUDWindow, self).__init__()
@@ -554,19 +557,14 @@ class HUDWindow(QWidget):
 
         if AppState.workoutMode:
             self.durationLayout = QGridLayout()
-            self.spiralWorkoutProgress = SpiralProgressBar()
+            #the workout and the block being ridden, drawn with the power and cadence ridden (see ClassPowerSpiral.py);
             #centered over the timer boxes below it, whatever shape its space is
-            self.spiralWorkoutProgress.ui.widget.spb_centered = True
-            self.spiralWorkoutProgress.ui.widget.spb_setNoProgressBar(2)
-            self.spiralWorkoutProgress.ui.widget.spb_setValue((0,0))
-            self.spiralWorkoutProgress.ui.widget.spb_setGap(20)
-            self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", "#1f15e1"))
-            self.spiralWorkoutProgress.ui.widget.pathWidth = 1
+            self.spiralWorkoutProgress = PowerSpiral()
+            self.spiralWorkoutProgress.clear(AppState.workoutDurationSeconds)
             #take all spare room between the block info and the FTP slider
             self.spiralWorkoutProgress.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-            self.spiralWorkoutProgress.ui.verticalLayout.setContentsMargins(0,0,0,0) #let the spiral draw right to its edges
             #each block's grade shows in the middle of the spiral as it ends
-            self.gradeOverlay = GradeOverlay(self.spiralWorkoutProgress.ui.widget)
+            self.gradeOverlay = GradeOverlay(self.spiralWorkoutProgress)
             self.durationLayout.addWidget(self.spiralWorkoutProgress, 0,0,10,1)
             self.durationLayout.addWidget(self.batteryWarningLabel,10,0,1,1)
             #rounded timer boxes; Qt draws square corners when the radius is more than half the height,
@@ -780,7 +778,7 @@ class HUDWindow(QWidget):
         if hasattr(self, "upNextLabelDescription"):
             for widget in (self.blockNonIntLabel, self.blockInt2Label0, self.blockInt2Label1, self.blockInt3Label0,
                            self.blockInt3Label1, self.blockInt3Label2, self.upNextLabelDescription,
-                           self.spiralWorkoutProgress.ui.widget):
+                           self.spiralWorkoutProgress):
                 widget._ftpColored = True
 
         
@@ -1017,9 +1015,7 @@ class HUDWindow(QWidget):
             #reset graph index
             self.pastPowerIndex = 0
             #reset spiral progress
-            self.spiralWorkoutProgress.ui.widget.spb_setNoProgressBar(2)
-            self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", "#1f15e1"))
-            self.spiralWorkoutProgress.ui.widget.spb_setValue((0,0))
+            self.spiralWorkoutProgress.clear(AppState.workoutDurationSeconds)
             #clear the grades, the left column goes back to Up Next
             self.grader = None
             self.gradeKey = None
@@ -1106,65 +1102,45 @@ class HUDWindow(QWidget):
         self.updateSpiralColors()
 
     def updateSpiralColors(self):
-        c0, _ = FtpColors.spiral(self.currentPower)
-        c0 = "#"+c0
-        if self.currentEventText == None:
-            return
-        elif self.currentEventText[0] != 3: #not an interval block
-            self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", c0))
-        else: #interval block
-            if len(self.currentEventText) == 4: #2 blocks
-                if self.currentIntervalBlockIndex == 0:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", c0, "#9fc5d1"))
-                else:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", "#9fc5d1", c0))
-            else: #3 blocks
-                if self.currentIntervalBlockIndex == 0:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", c0, "#9fc5d1", "#9fc5d1"))
-                elif self.currentIntervalBlockIndex == 1:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", "#9fc5d1", c0, "#9fc5d1"))
-                else:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", "#9fc5d1", "#9fc5d1", c0))
+        #(the spiral colors itself from the power ridden: redrawn for new power zone colors)
+        self.spiralWorkoutProgress.update()
 
-    def updateSpiralColorsBlockBlinkOn(self):
-        #blink on will make the block line more transparent
-        _, c0 = FtpColors.spiral(self.currentPower)
-        c0 = "#22"+c0
-        if self.currentEventText[0] != 3: #not an interval block
-            self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", c0))
-        else: #interval block
-            if len(self.currentEventText) == 4: #2 blocks
-                if self.currentIntervalBlockIndex == 0:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", c0, "#9fc5d1"))
-                else:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", "#9fc5d1", c0))
-            else: #3 blocks
-                if self.currentIntervalBlockIndex == 0:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", c0, "#9fc5d1", "#9fc5d1"))
-                elif self.currentIntervalBlockIndex == 1:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", "#9fc5d1", c0, "#9fc5d1"))
-                else:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", "#9fc5d1", "#9fc5d1", c0))
+    def spiral_block_time(self, sinceTick=0.0):
+        """(seconds along, seconds long) of the whole block for the spiral: an interval's every rep of every
+        sub-block"""
+        if self.currentEventText is not None and self.currentEventText[0] == 3:
+            blockCount = len(self.currentEventText) - 2 #descriptor, multiplier and block count of 2 or 3
+            passedTimes = [self.int0PassedTime, self.int1PassedTime, self.int2PassedTime][:blockCount]
+            totalDurations = [self.int0TotalDuration, self.int1TotalDuration, self.int2TotalDuration][:blockCount]
+            return sum(passedTimes) + sinceTick, sum(totalDurations)
+        return self.blockSecondsPassed + sinceTick, self.blockDuration
 
-    def updateSpiralColorsWorkoutBlinkOn(self):
-        #blink on will make all lines more transparent
-        _, c0 = FtpColors.spiral(self.currentPower)
-        c0 = "#88"+c0
-        if self.currentEventText[0] != 3: #not an interval block
-            self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#221f15e1", c0))
-        else: #interval block
-            if len(self.currentEventText) == 4: #2 blocks
-                if self.currentIntervalBlockIndex == 0:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#221f15e1", c0, "#229fc5d1"))
-                else:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#221f15e1", "#229fc5d1", c0))
-            else: #3 blocks
-                if self.currentIntervalBlockIndex == 0:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#221f15e1", c0, "#229fc5d1", "#229fc5d1"))
-                elif self.currentIntervalBlockIndex == 1:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#221f15e1", "#229fc5d1", c0, "#229fc5d1"))
-                else:
-                    self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#221f15e1", "#229fc5d1", "#229fc5d1", c0))
+    def record_spiral_sample(self):
+        """The power and cadence being ridden (each a short average) into the spiral's ring and spiral"""
+        power = self.recent_average(AppState.savedPowerVals)
+        cadence = None #(no cadence to show: the spiral's lines are drawn full width)
+        if AppState.shows_cadence():
+            cadence = self.recent_average(AppState.savedCadenceVals)
+            #the cadence sensor gone quiet: full width while the power's still coming in, else not pedaling
+            if cadence is None and power is None:
+                cadence = 0
+        power = 0 if power is None else power
+        self.spiralWorkoutProgress.add_sample(self.workoutSecondsPassed, self.spiral_block_time()[0], power, cadence)
+
+    def recent_average(self, saved, seconds=SPIRAL_AVERAGE_SECONDS):
+        """The average of the readings in the last seconds (saved is one of AppState's ([times], [values])), or None
+        if there's been none for WorkoutGrading.DROPOUT_SECONDS"""
+        times, values = saved
+        now = AppState.secondsPassed
+        if WorkoutGrading.latest_power(times, values, now) is None:
+            return None
+        total, count = 0.0, 0
+        for i in range(len(times) - 1, -1, -1):
+            if now - times[i] > seconds:
+                break
+            total += values[i]
+            count += 1
+        return total/count if count else values[-1]
 
 
     def difficulty_changed(self, val):
@@ -1337,19 +1313,10 @@ class HUDWindow(QWidget):
 
     #sinceTick is how far past the last 100ms tick to draw, so update_smooth_bars() can move the spiral between ticks
     def update_spiral_progress(self, sinceTick=0.0):
-        workoutPercent = 100*((self.workoutSecondsPassed + sinceTick)/AppState.workoutDurationSeconds)
-        if self.currentEventText[0] == 3:
-            #interval, only the current interval block's ring is moving
-            passedTimes = [self.int0PassedTime, self.int1PassedTime, self.int2PassedTime]
-            passedTimes[min(self.currentIntervalBlockIndex, 2)] += sinceTick
-            totalDurations = [self.int0TotalDuration, self.int1TotalDuration, self.int2TotalDuration]
-            if len(self.currentEventText) in (4, 5): #descriptor, multiplier and block count of 2 or 3
-                blockCount = len(self.currentEventText) - 2
-                self.spiralWorkoutProgress.ui.widget.spb_setValue((workoutPercent,) + 
-                                                                   tuple(100*(passedTimes[i]/totalDurations[i]) for i in range(blockCount)))
-        else: #non interval spiral duration update
-            self.spiralWorkoutProgress.ui.widget.spb_setValue((workoutPercent,
-                                                               100*((self.blockSecondsPassed + sinceTick)/self.blockDuration)))
+        if self.currentEventText is None:
+            return
+        self.spiralWorkoutProgress.set_progress(self.workoutSecondsPassed + sinceTick, AppState.workoutDurationSeconds,
+                                                *self.spiral_block_time(sinceTick))
 
     def process_workout_events(self):
         #a paused ramp test's countdown on the pause button
@@ -1422,9 +1389,8 @@ class HUDWindow(QWidget):
             self.currentBlockProgressBar.setValue(1)
             self.timeProgressBar.setRange(0,1)
             self.timeProgressBar.setValue(1)
-            self.spiralWorkoutProgress.ui.widget.spb_setNoProgressBar(2)
-            self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", "#1f15e1"))
-            self.spiralWorkoutProgress.ui.widget.spb_setValue((100,0))
+            self.spiralWorkoutProgress.set_progress(AppState.workoutDurationSeconds, AppState.workoutDurationSeconds,
+                                                    *self.spiral_block_time())
             #Workout is no longer started
             self.startedBool = False
         #handle workout power = 0 while paused
@@ -1455,6 +1421,7 @@ class HUDWindow(QWidget):
                     else:
                         self.int2PassedTime += self.workoutDelta
                 self.update_spiral_progress()
+                self.record_spiral_sample()
             #increase progress bars and text
             self.timeProgressBar.setValue(int(self.workoutSecondsPassed*100))
             self.currentBlockProgressBar.setValue(int(self.blockSecondsPassed*100))
@@ -1504,10 +1471,6 @@ class HUDWindow(QWidget):
                         if not self.newWorkoutStart:
                             self.blockSecondsPassed = self.blockOverage
                         self.currentPower = 0
-                        #spiral duration initialization
-                        self.spiralWorkoutProgress.ui.widget.spb_setNoProgressBar(2)
-                        self.spiralWorkoutProgress.ui.widget.spb_lineColor(("#1f15e1", "#1f15e1"))
-                        self.spiralWorkoutProgress.ui.widget.spb_setValue((100*(self.workoutSecondsPassed/AppState.workoutDurationSeconds),0))
                         # free ride (0,duration,position)
                         if currentBlock[0] == 0:
                             self.blockDuration = currentBlock[1]
@@ -1570,10 +1533,6 @@ class HUDWindow(QWidget):
                                 self.blockInt2Label1.setStyleSheet(self.getLabelColor(intervalText[2]))
                                 self.blockInt2Label1.show()
                                 self.blockInt2Label1.setEnabled(False)
-                                #set spiral duration paths
-                                self.spiralWorkoutProgress.ui.widget.spb_setNoProgressBar(3)
-                                self.spiralWorkoutProgress.ui.widget.spb_lineColor(((252,186,3), "#1f15e1", "#1f15e1"))
-                                self.spiralWorkoutProgress.ui.widget.spb_setValue((100*(self.workoutSecondsPassed/AppState.workoutDurationSeconds),0,0))
                             if len(currentBlock) == 5: #descriptor, multiplier and block count of 3
                                 self.blockInt3Label0.setText(intervalText[1])
                                 self.blockInt3Label0.setStyleSheet(self.getLabelColor(intervalText[1]))
@@ -1587,10 +1546,6 @@ class HUDWindow(QWidget):
                                 self.blockInt3Label2.setStyleSheet(self.getLabelColor(intervalText[3]))
                                 self.blockInt3Label2.show()
                                 self.blockInt3Label2.setEnabled(False)
-                                #set spiral duration paths
-                                self.spiralWorkoutProgress.ui.widget.spb_setNoProgressBar(4)
-                                self.spiralWorkoutProgress.ui.widget.spb_lineColor(((252,186,3), "#1f15e1", "#1f15e1", "#1f15e1"))
-                                self.spiralWorkoutProgress.ui.widget.spb_setValue((100*(self.workoutSecondsPassed/AppState.workoutDurationSeconds),0,0,0))
                                 #get remaining spiral duration
                                 self.int2TotalDuration = currentBlock[1] * currentBlock[4][1]
                             # next workout list element will have will have power and duration start info, block ramp will have another jump
@@ -1613,6 +1568,8 @@ class HUDWindow(QWidget):
                             #set default blink state for the interval
                             self.block_blink_default()
                         # end interval handling ; elif currentBlockRaw[0] == "3":
+                        #the new block's spiral (an interval's: all its reps)
+                        self.spiralWorkoutProgress.set_block(self.spiral_block_time()[1])
 
                         if gradedBlock[0] == 3:
                             self.gradeInterval = (gradedIndex, gradedBlock[1])
@@ -2078,12 +2035,7 @@ class HUDWindow(QWidget):
             spiralState = "default"
         if spiralState != self.spiralBlinkState:
             self.spiralBlinkState = spiralState
-            if spiralState == "workout":
-                self.updateSpiralColorsWorkoutBlinkOn()
-            elif spiralState == "block":
-                self.updateSpiralColorsBlockBlinkOn()
-            else:
-                self.updateSpiralColors()
+            self.spiralWorkoutProgress.set_blink(spiralState)
 
     def blink_phase_on(self, secondsRemaining):
         if not 0 < secondsRemaining < self.BLINK_WINDOW_SECONDS:

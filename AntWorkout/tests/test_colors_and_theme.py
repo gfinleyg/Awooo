@@ -83,7 +83,6 @@ def test_theme_changes_are_picked_up():
 def test_part_colors():
     ranges = [10, 20, 30, 40]
     assert FtpColors.gauge_arc(25, ranges) == ("e0d151", "fdec5a")
-    assert FtpColors.spiral(50, ranges) == ("f2161a", "d11e14")
     assert "#38813b" in FtpColors.all_colors()
 
 

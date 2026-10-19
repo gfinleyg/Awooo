@@ -85,7 +85,8 @@ def draw_badge(painter, rect, grade, points):
 ### The spiral's grade
 ###----------------------------------------------------------------------------------------------
 class GradeOverlay(QWidget):
-    """Covers the spiral (a QSpiralProgressBar), drawing the last block's grade inside its innermost ring"""
+    """Covers the spiral (the HUD's PowerSpiral, or a QSpiralProgressBar), drawing the last block's grade inside its
+    innermost ring"""
     MAX_SECONDS = 5.0
     MAX_FADE_SECONDS = 1.0
 
@@ -161,6 +162,10 @@ class GradeOverlay(QWidget):
     def inner_circle(self):
         """(center, radius) of the space inside the spiral's innermost ring"""
         s = self.spiral
+        if hasattr(s, "inner_circle"): #(the HUD's PowerSpiral says where its hole is)
+            center, radius = s.inner_circle()
+            if radius > 10:
+                return center, radius
         try:
             ring = s.noProgBar - 1
             offset = s.spb_cngSize*ring*s.spb_gap

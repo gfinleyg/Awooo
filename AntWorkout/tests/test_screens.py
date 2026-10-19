@@ -122,6 +122,28 @@ def test_scratchpad_workouts_ride_to_the_end(viewer, workout):
     assert rows and all(row["kind"] == "interval" or row["label"] for row in rows)
 
 
+def test_spiral_follows_the_ride(viewer):
+    """The workout screen's spiral: the workout's ring and the block's spiral as far along as the ride (an interval's
+    spiral all its reps), with what was ridden in them"""
+    LayoutViewer, display, errors = viewer
+    #(10x 4s/2s, then 3x 2s/2s/2s: 40% of the way is in the first interval's reps)
+    display.build("workout", os.path.join(LayoutViewer.WORKOUT_DIR, "scratchpad", "ten_x.awo"), 40)
+    QApplication.processEvents()
+    assert errors == []
+    hud = display.workout_hud()
+    spiral = hud.spiralWorkoutProgress
+    assert hud.currentEventText[0] == 3 and len(hud.currentEventText) == 4
+    assert spiral.workout.duration == AppState.workoutDurationSeconds
+    assert spiral.workout.fraction() == pytest.approx(hud.workoutSecondsPassed/AppState.workoutDurationSeconds)
+    #the interval's every rep along the one spiral
+    assert spiral.block.duration == 10*(4 + 2)
+    assert spiral.block.seconds == pytest.approx(hud.int0PassedTime + hud.int1PassedTime)
+    #what was ridden is in them
+    assert spiral.workout.values()[0][0] is not None and spiral.block.samples
+    assert all(0 <= seconds <= timeline.duration
+               for timeline in (spiral.workout, spiral.block) for seconds, _, _ in timeline.samples)
+
+
 def test_converted_blocks_ride_to_the_end(viewer, tmp_path):
     """One block intervals and same power ramps, as the setup screen writes them out, ridden start to finish"""
     LayoutViewer, display, errors = viewer

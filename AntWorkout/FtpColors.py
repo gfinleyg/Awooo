@@ -4,7 +4,8 @@ FtpColors.py
 The colors that follow the power zones (by % of FTP), all in one place:
 
   gaugeScale      the power gauge's colored band: [% of FTP, color] stops. A stop sits exactly where
-                  the needle points at that % of FTP, whatever the FTP (see gauge_scale_stops)
+                  the needle points at that % of FTP, whatever the FTP (see gauge_scale_stops). The HUD's
+                  spiral colors the power ridden with it too (ClassPowerSpiral.py)
   gaugeArc        the power gauge's Ride At target arc, per zone: [color, color] (a gradient)
                   (Musical Cadence Mode's cadence gauge band is the second colors, see cadence_scale_stops)
   gaugeRing       the power gauge's ring behind the reading, by the power being ridden, per zone
@@ -14,7 +15,6 @@ The colors that follow the power zones (by % of FTP), all in one place:
   blockSingleEnd  see blocks
   graph           the workout graph's bars per zone: [paused (or not started), upcoming, past]; the
                   synopsis graph uses past
-  spiral          the HUD spiral's line for the current block, per zone: [line, blink]
 
 Zones "0" to "4" split power at AppState.ftpRanges (36/87/119/187% of FTP, see
 ClassWorkoutSetupWindow.py); "free" is power 0 (free ride). Transparency is added where the colors are
@@ -58,8 +58,6 @@ DEFAULTS = {
     "graph": {"0": ["#ffffff", "#c1c1c1", "#969696"], "1": ["#dfffd9", "#42ff45", "#42a045"],
               "2": ["#fffac0", "#ffff88", "#e1e500"], "3": ["#ffe7b8", "#ffb464", "#ff5e14"],
               "4": ["#ff9ea6", "#ff1c06", "#c02100"]},
-    "spiral": {"0": ["#ececec", "#38813b"], "1": ["#42ee45", "#38813b"], "2": ["#fdec5a", "#e0d151"],
-               "3": ["#f37d04", "#d77004"], "4": ["#f2161a", "#d11e14"], "free": ["#ffffff", "#d9d9d9"]},
 }
 #the graph's bars are see-through
 GRAPH_ALPHA = "#88"
@@ -162,11 +160,6 @@ def gauge_arc(power, ranges=None):
 def gauge_ring(power, ranges=None):
     """The ring color for the power being ridden, without the "#" """
     return _current("gaugeRing")[zone_of(power, ranges)][1:]
-
-
-def spiral(power, ranges=None):
-    """(line, blink) for the current block's power, without the "#" """
-    return tuple(c[1:] for c in _current("spiral")[zone_of(power, ranges)])
 
 
 def all_colors():

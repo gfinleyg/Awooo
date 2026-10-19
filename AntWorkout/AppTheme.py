@@ -406,6 +406,8 @@ def apply():
         if hasattr(widget, "_themeOrigLine"):
             _origSpbLineColor(widget, tuple(THEME.map_color(c) for c in widget._themeOrigLine))
             widget.update()
+        if hasattr(widget, "_themeColors"): #(draws its _themeColors through the theme itself, e.g. the HUD's spiral)
+            widget.update()
         if _AnalogGaugeWidget is not None and isinstance(widget, _AnalogGaugeWidget):
             widget.rescale_method()
             widget.paintCacheDirty = True #(its tick marks and numbers may have changed color)
