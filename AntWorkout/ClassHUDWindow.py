@@ -177,6 +177,7 @@ class HUDWindow(QWidget):
         self.lastGradeTarget = 0 #target power at the last tick, the step into the next block sets its start grace
         self.workoutGraded = False #the end of workout grades are showing
         AppState.blockGrades = {}
+        AppState.musicPlayed = []
 
         #an FTP test (see FtpTest.py) isn't graded; its effort's (last block's) average power shows in the spiral instead
         self.ftpTest = FtpTest.test()
@@ -870,8 +871,7 @@ class HUDWindow(QWidget):
         text = f"{appTitle}: {AppState.workout_display_name()}"
         seconds = self.music_seconds()
         if seconds is not None and AppState.musicTracks:
-            starts = [track[2] for track in AppState.musicTracks]
-            _, title, start, duration = AppState.musicTracks[max(0, bisect.bisect_right(starts, seconds) - 1)]
+            _, title, start, duration = AppState.musicTracks[self.song_at(seconds)]
             into = min(max(seconds - start, 0.0), duration)
             text += f": {title} : {self.song_time(into)}/{self.song_time(duration)}"
         if text != getattr(self, "songTitle", None):
@@ -879,6 +879,30 @@ class HUDWindow(QWidget):
             self.parent.setWindowTitle("   " + text)
             if hasattr(self.parent, "title_bar"):
                 self.parent.title_bar.set_title("   " + text)
+
+    @staticmethod
+    def song_at(seconds):
+        """The index in AppState.musicTracks of the song playing at seconds into the music"""
+        starts = [track[2] for track in AppState.musicTracks]
+        return max(0, bisect.bisect_right(starts, seconds) - 1)
+
+    def record_song(self):
+        """Where in the ride each song was heard (AppState.musicPlayed), for the synopsis' song strip. A paused
+        song's span runs on through the pause; a skipped one is never heard, so it has none"""
+        seconds = self.music_seconds()
+        if seconds is None or not AppState.musicTracks:
+            return
+        index = self.song_at(seconds)
+        _, _, start, duration = AppState.musicTracks[index]
+        #(the music is over)
+        if seconds >= start + duration:
+            return
+        played = AppState.musicPlayed
+        if played:
+            #(up to now: the song before ends where this one starts, with no gap of a tick between them)
+            played[-1][2] = AppState.secondsPassed
+        if not played or played[-1][0] != index:
+            played.append([index, AppState.secondsPassed, AppState.secondsPassed])
 
     @staticmethod
     def song_time(seconds):
@@ -1001,6 +1025,7 @@ class HUDWindow(QWidget):
             self.gradeKey = None
             self.lastGradeTarget = 0
             AppState.blockGrades = {}
+            AppState.musicPlayed = []
             self.gradeOverlay.clear()
             self.show_workout_grades(False)
             #and the FTP test's effort
@@ -1285,6 +1310,7 @@ class HUDWindow(QWidget):
             self.update_trainer_target()
         if self.cadenceMode:
             self.update_song_title()
+            self.record_song()
 
         # with open("deltaLog.txt", "a") as f:
         #     f.write(str(self.timeDelta)+"\n")

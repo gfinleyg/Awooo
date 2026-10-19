@@ -299,6 +299,11 @@ def watch(obj, methodName):
     _watchers.append((weakref.ref(obj), methodName))
 
 
+def unwatch(obj):
+    """obj isn't redrawn when the colors change any more (it redraws itself, e.g. PreviewRide.WorkoutPreview's)"""
+    _watchers[:] = [(ref, methodName) for ref, methodName in _watchers if ref() is not obj]
+
+
 def notify():
     global _lastApplied
     _values.clear()

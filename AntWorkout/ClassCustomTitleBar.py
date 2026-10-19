@@ -1,13 +1,10 @@
-import os
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QFileDialog,
     QMenu,
-    QMessageBox,
     QStyle,
     QToolButton,
     QWidget,
@@ -90,8 +87,8 @@ class CustomTitleBar(QWidget):
             clear_logs_action = settings_menu.addAction("&Clear Logs	C")
             clear_logs_action.triggered.connect(self.clear_logs)
             settings_menu.addSeparator()
-            load_theme_action = settings_menu.addAction("Load &Theme...	T")
-            load_theme_action.triggered.connect(self.load_theme)
+            pick_theme_action = settings_menu.addAction("Pick &Theme...	T")
+            pick_theme_action.triggered.connect(self.pick_theme)
             clear_theme_action = settings_menu.addAction("Clea&r Theme	R")
             clear_theme_action.triggered.connect(self.clear_theme)
             settings_menu.addSeparator()
@@ -168,28 +165,12 @@ class CustomTitleBar(QWidget):
     def clear_logs(self):
         ClassAntLogger.clear_log()
 
-    def load_theme(self):
-        #a theme, colors or gradients .json saved from LayoutViewer.py; applies right away and is remembered for
-        #next time (a whole theme replaces everything, a colors/gradients file just that part, see AppTheme.py)
-        import AppTheme
-        import SavedSettings
-        folder = AppTheme.THEMES_DIR if os.path.isdir(AppTheme.THEMES_DIR) else os.getcwd()
-        path, _ = QFileDialog.getOpenFileName(self, "Load Theme, Colors or Gradients", folder,
-                                              "Theme files (*.json)")
-        if not path:
-            return
-        try:
-            kind = AppTheme.load_file(path)
-        except (OSError, ValueError) as e:
-            ClassAntLogger.log_event("ERROR", f"Failed to load theme {path}: {e}")
-            QMessageBox.warning(self, "Load Theme", f"Couldn't load {os.path.basename(path)}:\n{e}")
-            return
-        if kind == "theme":
-            SavedSettings.update(themeFile=path, themePartFiles=AppTheme.part_files())
-        else:
-            SavedSettings.update(themePartFiles=AppTheme.part_files())
-        what = "theme" if kind == "theme" else AppTheme.PARTS[kind]
-        ClassAntLogger.log_event("SETUP", f"Loaded {what} {path}")
+    def pick_theme(self):
+        #the theme picker: the colors and power/cadence gradients from themes/, each tried on the app as it's picked
+        #(with a preview of the workout screen), or any theme .json saved from LayoutViewer.py; kept for next time
+        #(see ClassThemeSelectWindow.py)
+        from ClassThemeSelectWindow import ThemeSelectWindow
+        ThemeSelectWindow(self.window()).exec()
 
     def clear_theme(self):
         #back to the default theme (defaultTheme.json), or the app's own fonts and colors without one

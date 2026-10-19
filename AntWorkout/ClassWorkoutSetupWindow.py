@@ -1696,9 +1696,11 @@ class WorkoutSetupWindow(QWidget):
                     workoutText = workoutText + " " + "\n      ".join(returnedList[1:]) + "\n" #add the remaining interval blocks, comma separated
         return workoutText
 
-    def preview_workout(self, filePath):
+    def preview_workout(self, filePath, keep=False):
         """A workout file read as if it were being loaded, without loading it (the workout picker's list and preview):
-        {"ok", "title", "seconds", "text" (workout_text()), "error" (why it was rejected, None if it wasn't)}"""
+        {"ok", "title", "seconds", "text" (workout_text()), "error" (why it was rejected, None if it wasn't)}.
+        keep: its blocks are left in AppState (a simulated ride's own, see PreviewRide.RideSandbox), the screen still
+        as it was"""
         saved = (AppState.workoutList, AppState.workoutDurationSeconds, AppState.workoutTitle, AppState.workoutMessages)
         self.previewing = True
         self.previewError = None
@@ -1708,7 +1710,8 @@ class WorkoutSetupWindow(QWidget):
                     "text": self.workout_text() if ok else "", "error": self.previewError}
         finally:
             self.previewing = False
-            AppState.workoutList, AppState.workoutDurationSeconds, AppState.workoutTitle, AppState.workoutMessages = saved
+            if not keep:
+                AppState.workoutList, AppState.workoutDurationSeconds, AppState.workoutTitle, AppState.workoutMessages = saved
 
     def eventFilter(self, obj, event):
         #keep the left (device) column exactly as tall as the center column so the

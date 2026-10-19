@@ -23,12 +23,9 @@ if _ant_native_python_dir not in _sys.path:
 import ant.manager as _ant_manager_preload  # noqa: F401  (import order guard, see above)
 
 import datetime
-import math
-import random
 import re
 import sys
 import time
-from types import SimpleNamespace
 
 #settings, workouts and themes are all relative to the project folder (a frozen build's: the exe's folder,
 #same as AntWorkout.py; __file__ points inside the bundle there)
@@ -37,7 +34,7 @@ _os.chdir(_os.path.dirname(_sys.executable) if getattr(_sys, "frozen", False) el
 if "--directwrite" in sys.argv and "QT_QPA_PLATFORM" not in _os.environ:
     _os.environ["QT_QPA_PLATFORM"] = "windows:fontengine=directwrite"
 
-from PyQt6.QtCore import QEvent, QObject, QPoint, QRect, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QRect, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (QColor, QFont, QFontDatabase, QLinearGradient, QPainter, QPalette, QPen, QShortcut,
                          QKeySequence)
 from PyQt6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QColorDialog, QComboBox, QFileDialog,
@@ -48,7 +45,6 @@ from PyQt6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QColorDialog
 from AppState import AppState
 import WorkoutData
 from WorkoutHelpers import WriteSelectedDeviceLines, ClearSelectedDeviceLines
-from ClassAntDevices import ROLE_POWER, ROLE_HRM, ROLE_SPEED_CADENCE, ROLE_BATTERY_NAMES
 from ClassCustomTitleBar import CustomTitleBar
 from ClassWorkoutSetupWindow import WorkoutSetupWindow
 from ClassHUDWindow import HUDWindow
@@ -64,6 +60,9 @@ import KeyShortcuts
 from FtpColorsEditor import FtpColorsTab, FtpMockupWindow
 from AppLayout import TASKBAR_HEIGHT
 from AppTheme import ROLE_MAIN, ROLE_GAUGE, ROLE_TITLES, WEIGHTS, colors_in_css, colors_in_value
+#the fake ANT bridge, simulated rider and ride stepping are shared with the app's theme picker
+from PreviewRide import (FakeBridge, Rider, ViewerMusicPlayer, save_reading, show_reading, run_hud,
+                         reset_ride_state)
 
 
 PROJECT_DIR = _os.getcwd()
@@ -80,8 +79,7 @@ MODES = (("workout", "Workout Mode (workout file)"), ("free", "Free Mode"), ("20
 FREE_RIDE_SECONDS = 45*60
 SCREENSHOT_DIR = _os.path.join(PROJECT_DIR, "layoutScreenshots")
 #where colors and gradients files are saved by default (see AppTheme.PARTS)
-PART_DIRS = {"colors": _os.path.join(AppTheme.THEMES_DIR, "colors"),
-             "ftpColors": _os.path.join(AppTheme.THEMES_DIR, "gradients")}
+PART_DIRS = AppTheme.PART_DIRS
 
 #simulated screens: effective (after Windows display scaling) size, and what typically has it
 SCREEN_SIZES = [
@@ -101,73 +99,6 @@ SCREEN_SIZES = [
 
 AppTheme.install()
 THEME = AppTheme.THEME
-
-
-###----------------------------------------------------------------------------------------------
-### Fake ANT bridge: everything connected, nothing ever changes
-###----------------------------------------------------------------------------------------------
-class FakeBridge(QObject):
-    deviceDiscovered = pyqtSignal(int, int)
-    devicesConnected = pyqtSignal()
-    devicesDisconnected = pyqtSignal()
-    dataUpdated = pyqtSignal(str)
-    statusMessage = pyqtSignal(str)
-    errorOccurred = pyqtSignal(str)
-    calibrationUpdate = pyqtSignal(int, str, object, int)
-    batteryChanged = pyqtSignal()
-
-    def __init__(self, batteryWarnings=False, trainer=False):
-        super().__init__()
-        self.batteryWarnings = batteryWarnings
-        #FE-C trainer as the power device: free mode gets the Watts slider, the setup screen its Max Watts box
-        self.trainer = trainer
-
-    @property
-    def power_type(self): return 17 if self.trainer else 11
-    @property
-    def devices(self): return [f"{self.power_type} 12345", "120 23456", "121 34567"]
-
-    def found_devices(self): return list(self.devices)
-    def is_initialized(self): return True
-    def scan_settle_remaining(self): return 0
-    def take_error(self): return None
-    def waiting_for_stick(self): return None
-    def selected_roles(self): return {ROLE_POWER, ROLE_HRM, ROLE_SPEED_CADENCE}
-    def selected_device(self, role): return SimpleNamespace(device_type=self.power_type, device_number=12345, battery=None)
-    def is_connect_requested(self): return True
-    def is_ready(self): return True
-    def low_battery_warnings(self):
-        return [f"{name} battery low (5%)" for name in ROLE_BATTERY_NAMES.values()] if self.batteryWarnings else []
-    def trainer_selected(self): return self.trainer
-    def start(self): pass
-    def stop(self): pass
-    def clear_connection_flags(self): pass
-    def request_connect(self, selected): pass
-    def request_disconnect(self): pass
-    def request_power_calibration(self, device_number): pass
-    def cancel_power_calibration(self): pass
-    def set_trainer_target_power(self, watts): pass
-    def release_trainer_power(self): pass
-
-
-###----------------------------------------------------------------------------------------------
-### Simulated rider
-###----------------------------------------------------------------------------------------------
-class Rider:
-    def __init__(self, seed=7):
-        self.rng = random.Random(seed)
-        self.hr = 95.0
-
-    def sample(self, seconds, requestedPower, cadenceTarget=False):
-        #(Musical Cadence Mode asks for a cadence, not watts)
-        base = requestedPower if requestedPower > 0 and not cadenceTarget else 140
-        power = max(0, base + self.rng.gauss(0, 8) + 6*math.sin(seconds/7))
-        targetHr = 95 + 85*min(power/max(int(AppState.ftp), 1), 1.1)
-        self.hr += (targetHr - self.hr)*0.04
-        cadence = ((requestedPower if cadenceTarget and requestedPower > 0 else 88)
-                   + 4*math.sin(seconds/23) + self.rng.gauss(0, 1.5))
-        speed = 3.2*power**0.33 #MPH
-        return int(power), int(self.hr + self.rng.gauss(0, 0.6)), cadence, speed
 
 
 #Musical Cadence Mode without music: made-up songs, each (title, [(seconds, rpm - 0 is free ride)])
@@ -192,124 +123,6 @@ def viewer_music_workout(songs, analyses, preferred=None, minSegmentSeconds=None
             blockStart += seconds
         start += duration
     return blocks, tracks, songStarts, pulses
-
-
-class ViewerMusicPlayer:
-    """Stands in for MusicCadence.MusicPlayer: silent, its clock moved along by run_hud, or by real time while
-    the viewer plays (see run_clock)"""
-    def __init__(self, seconds=0.0):
-        self.seconds = seconds
-        self._paused = False
-        self.skipped = []
-        self.since = None #while the clock runs: when seconds was last brought up to date
-
-    def _catch_up(self):
-        if self.since is None:
-            return
-        now = time.monotonic()
-        if not self._paused:
-            self.seconds += now - self.since
-        self.since = now
-
-    def run_clock(self, running):
-        self._catch_up()
-        self.since = time.monotonic() if running else None
-
-    @property
-    def paused(self):
-        return self._paused
-
-    @paused.setter
-    def paused(self, paused):
-        self._catch_up()
-        self._paused = paused
-
-    def position(self):
-        self._catch_up()
-        return self.seconds
-
-    def stop(self):
-        pass
-
-
-def save_reading(t, reading):
-    """A reading into the graph's recent values, as AntDevicesPoller keeps them"""
-    power, hr, cadence, speed = reading
-    window = AppState.graphSecondsShown - AppState.graphBreakpoint
-    for saved, value in ((AppState.savedPowerVals, power), (AppState.savedHRVals, hr),
-                         (AppState.savedCadenceVals, int(cadence))):
-        saved[0].append(t)
-        saved[1].append(value)
-        while saved[0][-1] - saved[0][0] > window:
-            saved[0].pop(0)
-            saved[1].pop(0)
-
-
-def show_reading(hud, reading):
-    """A reading on the HUD's gauges and speed/distance (the distance from hud.viewerRevolutions)"""
-    power, hr, cadence, speed = reading
-    hud.wattGaugeDisplay.ui.widget.setValue(power)
-    hud.hrGaugeDisplay.ui.widget.setValue(hr)
-    hud.cadenceGaugeDisplay.ui.widget.setValue(cadence)
-    hud.set_speed(str(round(speed, 1)))
-    hud.set_distance(str(round(float(AppState.wheelCircumference)*hud.viewerRevolutions*0.000621371, 2)))
-
-
-def run_hud(hud, untilSeconds, rider, record=None):
-    """Steps a HUDWindow's own process_events() one simulated second at a time until the workout
-    timer (free mode: the elapsed time) reaches untilSeconds, or the workout ends.
-    record(seconds, power, hr, cadence, speed) gets every reading; the HUD's own graph/gauges get
-    them like AntDevicesPoller would."""
-    hud.timer.stop()
-    if hasattr(hud, "smoothBarTimer"):
-        hud.smoothBarTimer.stop()
-    workoutMode = AppState.workoutMode
-    if hud.cadenceMode:
-        hud.music_start = lambda: setattr(hud, "musicPlayer", ViewerMusicPlayer())
-    if workoutMode:
-        hud.start_workout()
-    drawGraph = hud.hud_graph_data_update
-    hud.hud_graph_data_update = lambda: None #only the final state is drawn
-    reading = (0, 0, 0, 0)
-    revolutions = 0.0
-    for _ in range(int(untilSeconds) + 5):
-        if workoutMode and (not hud.startedBool or hud.workoutSecondsPassed >= untilSeconds):
-            break
-        if not workoutMode and AppState.secondsPassed >= untilSeconds:
-            break
-        hud.lastTimestamp = time.monotonic() - 1
-        if hud.cadenceMode and hud.musicPlayer is not None:
-            hud.musicPlayer.seconds += 1
-        hud.process_events()
-        t = AppState.secondsPassed
-        reading = rider.sample(t, hud.currentPower, hud.cadenceMode)
-        revolutions += reading[3]/2.23694/float(AppState.wheelCircumference)
-        save_reading(t, reading)
-        if record:
-            record(t, *reading)
-    hud.hud_graph_data_update = drawGraph
-    drawGraph()
-    #(to play on from here, see DisplayWindow.play)
-    hud.viewerRider = rider
-    hud.viewerRevolutions = revolutions
-    show_reading(hud, reading)
-    hud.update_power_rings()
-    if hud.cadenceMode:
-        #the beat caught at its brightest
-        hud.cadenceGaugeDisplay.ui.widget.displayValue = hud.cadenceGaugeDisplay.ui.widget.value #(no easing in)
-        hud.update_center_rings(1.0)
-
-
-def reset_ride_state():
-    AppState.secondsPassed = 0.0
-    AppState.workoutPowerRequestsSeconds.clear()
-    AppState.workoutPowerRequestsWatts.clear()
-    AppState.workoutPowerRequestsSysTime.clear()
-    AppState.savedPowerVals = ([], [])
-    AppState.savedHRVals = ([], [])
-    AppState.savedCadenceVals = ([], [])
-    AppState.totalRevolutions = 0
-    WorkoutData.clear()
 
 
 class ViewerSynopsis(SynopsisWindow):

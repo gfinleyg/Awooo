@@ -1,12 +1,13 @@
 import bisect
 import math
+from html import escape
 
 import pyqtgraph as pg
 
 from PyQt6.QtCore import QEvent, QTime, QTimer, Qt, QPointF, QRectF, QLineF
-from PyQt6.QtGui import QColor, QFont, QPen, QPainter, QPainterPath
+from PyQt6.QtGui import QColor, QFont, QFontMetricsF, QPen, QPainter, QPainterPath
 from PyQt6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QPushButton, QVBoxLayout, QWidget, QLabel, QTimeEdit,
-                             QGraphicsSimpleTextItem, QGraphicsLineItem, QGraphicsRectItem)
+                             QGraphicsSimpleTextItem, QGraphicsLineItem, QGraphicsRectItem, QGraphicsObject)
 
 from ClassAnalogGauge import *
 from ClassLongVerticalLabelSeries import *
@@ -83,6 +84,88 @@ class GradeRegion(QGraphicsRectItem):
         if ev.button() == Qt.MouseButton.LeftButton:
             ev.accept()
             self.onClick(self)
+
+
+class SongStrip(QGraphicsObject):
+    """Musical Cadence Mode's songs along the top of the graph, as they were heard: a band for each in alternating
+    shades of the song headers' colors, its "Artist - Title" inside (cut short, or left out, where it doesn't fit).
+    Hovering one shows its whole title and when it played; clicking one zooms the graph to it"""
+    COLORS = (QColor(40, 39, 94, 215), QColor(72, 98, 140, 215))
+    FONT_POINTS = 9
+    PADX = 6
+
+    def __init__(self, songs, vbox, onClick):
+        super().__init__()
+        self.songs = songs #[(start, end, title)] in the graph's seconds
+        self.vbox = vbox
+        self.onClick = onClick
+        self.font = QFont("Segoe UI", self.FONT_POINTS)
+        self.font.setBold(True)
+        self.height = round(QFontMetricsF(self.font).height() + 8)
+        self.width = 0.0
+        self.setAcceptHoverEvents(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        #over the curves, under the max labels and their leader lines
+        self.setZValue(998)
+
+    def layout(self, *_):
+        """Across the top of the plot area (as it's moved, resized or zoomed)"""
+        area = self.vbox.sceneBoundingRect()
+        self.prepareGeometryChange()
+        self.width = area.width()
+        self.setPos(area.topLeft())
+        self.update()
+
+    def boundingRect(self):
+        return QRectF(0, 0, self.width, self.height)
+
+    def spans(self):
+        """(index, left, right) in the strip's own pixels of each song in view, cut to the strip's ends"""
+        start, end = self.vbox.viewRange()[0]
+        if end <= start or self.width <= 0:
+            return []
+        scale = self.width/(end - start)
+        spans = []
+        for index, (songStart, songEnd, _) in enumerate(self.songs):
+            left, right = max((songStart - start)*scale, 0.0), min((songEnd - start)*scale, self.width)
+            if right > left:
+                spans.append((index, left, right))
+        return spans
+
+    def song_at(self, x):
+        return next((index for index, left, right in self.spans() if left <= x < right), None)
+
+    def paint(self, painter, option, widget=None):
+        painter.setFont(self.font)
+        metrics = QFontMetricsF(self.font)
+        #(too narrow for a few letters: no title, hovering still shows it)
+        minText = metrics.horizontalAdvance("Abc…")
+        for index, left, right in self.spans():
+            rect = QRectF(left, 0, right - left, self.height)
+            painter.fillRect(rect, self.COLORS[index % 2])
+            textWidth = rect.width() - 2*self.PADX
+            if textWidth < minText:
+                continue
+            text = metrics.elidedText(self.songs[index][2], Qt.TextElideMode.ElideRight, textWidth)
+            painter.setPen(QColor("white"))
+            painter.drawText(rect.adjusted(self.PADX, 0, -self.PADX, 0),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
+
+    def hoverMoveEvent(self, ev):
+        index = self.song_at(ev.pos().x())
+        if index is None:
+            self.setToolTip("")
+            return
+        start, end, title = self.songs[index]
+        self.setToolTip(f"{title}\n{hourMinuteSecondFromSecond(start)} to {hourMinuteSecondFromSecond(end)}"
+                        f"  ({MinimizedDuration(round(end - start))})")
+
+    def mouseClickEvent(self, ev):
+        if ev.button() == Qt.MouseButton.LeftButton:
+            index = self.song_at(ev.pos().x())
+            if index is not None:
+                ev.accept()
+                self.onClick(index)
 
 
 def grade_badge_css(grade, points):
@@ -256,6 +339,11 @@ class SynopsisWindow(QWidget):
         if AppState.has_speed_sensor():
             self.speedSeriesIndex = len(self.plotSeries) #(redrawn in another unit, see units_changed)
             self.plotSeries.append(("curve", self.synopsisGraphLabel.hrCadenceVBox, *drawn(self.speedPlot)))
+
+        #Musical Cadence Mode: the songs heard, along the top (before the max labels, which keep clear of it)
+        self.songStrip = None
+        if AppState.cadenceMode:
+            self.setup_song_strip()
 
         #add max value markers; their labels are placed by layout_max_labels() so they never overlap or leave the plot
         #label texts are formats for the max value, so a zoomed-in selection can show its own max
@@ -530,18 +618,56 @@ class SynopsisWindow(QWidget):
         graph = self.synopsisGraphLabel
         return graph.hrCadenceVBox if self.cadence_ride() else graph.powerVBox
 
+    def ride_offset(self):
+        """What to add to an AppState.secondsPassed time for the graph's (seconds since AppState.startTimestamp);
+        the workout's power requests have both"""
+        if AppState.workoutPowerRequestsSeconds and AppState.workoutPowerRequestsSysTime:
+            return ((AppState.workoutPowerRequestsSysTime[0] - AppState.startTimestamp).total_seconds()
+                    - AppState.workoutPowerRequestsSeconds[0])
+        return 0.0
+
+    ###Musical Cadence Mode's songs (AppState.musicPlayed, see HUDWindow.record_song)
+    def setup_song_strip(self):
+        offset = self.ride_offset()
+        songs = [(start + offset, end + offset, AppState.musicTracks[index][1])
+                 for index, start, end in AppState.musicPlayed if end > start and index < len(AppState.musicTracks)]
+        if not songs:
+            return
+        vb = self.synopsisGraphLabel.plotScreen.vb
+        self.songStrip = SongStrip(songs, vb, self.song_clicked)
+        self.synopsisGraphLabel.scene().addItem(self.songStrip)
+        self.songStrip.layout()
+        vb.sigResized.connect(self.songStrip.layout)
+        vb.sigXRangeChanged.connect(self.songStrip.layout)
+
+    def song_clicked(self, index):
+        """Zooms the graph to the song (no closer than the narrowest zoom), or back out to the whole ride if it's
+        already showing just that"""
+        start, end, _ = self.songStrip.songs[index]
+        start, end = max(start, 0.0), min(end, self.totalSeconds)
+        span = max(end - start, self.MIN_ZOOM_SECONDS)
+        newStart = max(0.0, min(start - (span - (end - start))/2, self.totalSeconds - span))
+        viewStart, viewEnd = self.view_range()
+        if abs(viewStart - newStart) < 0.5 and abs(viewEnd - (newStart + span)) < 0.5:
+            newStart, span = 0.0, self.totalSeconds
+        self.synopsisGraphLabel.plotScreen.vb.setXRange(newStart, newStart + span, padding=0)
+
+    @staticmethod
+    def song_during(start, end):
+        """The title of the song heard longest from start to end (AppState.secondsPassed), or None"""
+        overlaps = [(min(end, songEnd) - max(start, songStart), index)
+                    for index, songStart, songEnd in AppState.musicPlayed if index < len(AppState.musicTracks)]
+        overlap, index = max(overlaps, default=(0, None))
+        return AppState.musicTracks[index][1] if overlap > 0 else None
+
     ###Block grades (see WorkoutGrading.py)
     def setup_grade_regions(self):
         """A clickable region over each graded block's span on the graph, as tall as its highest target power
         (free ride and low power blocks get a minimum height so they can still be clicked)"""
         powerVBox = self.target_vbox()
         minHeight = 0.12*powerVBox.viewRange()[1][1]
-        #grades are timed in AppState.secondsPassed, the graph in seconds since AppState.startTimestamp; the
-        #workout's power requests have both
-        offset = 0.0
-        if AppState.workoutPowerRequestsSeconds and AppState.workoutPowerRequestsSysTime:
-            offset = ((AppState.workoutPowerRequestsSysTime[0] - AppState.startTimestamp).total_seconds()
-                      - AppState.workoutPowerRequestsSeconds[0])
+        #(grades are timed in AppState.secondsPassed)
+        offset = self.ride_offset()
         for key, record in self.blockGrades.items():
             if record["end"] <= record["start"]:
                 continue
@@ -640,7 +766,12 @@ class SynopsisWindow(QWidget):
             #only the part ridden before END was graded
             rows.append(("Workout ended at", f"{MinimizedDuration(round(record['ridden']))} of {MinimizedDuration(round(record['duration']))}"))
         rows.append(("Graded time", f"{MinimizedDuration(round(record['graded']))} of {MinimizedDuration(round(record['ridden']))}"))
-        html = "<table width='100%' cellspacing='0' cellpadding='1'>"
+        html = ""
+        #Musical Cadence Mode: the block's song
+        song = self.song_during(record["start"], record["end"]) if AppState.cadenceMode else None
+        if song:
+            html += f"<div>♪ {escape(song)}</div>"
+        html += "<table width='100%' cellspacing='0' cellpadding='1'>"
         html += "".join(f"<tr><td>{label}</td><td align='right'>{value}</td></tr>" for label, value in rows)
         html += "</table>"
         notes = []
@@ -983,6 +1114,8 @@ class SynopsisWindow(QWidget):
         #place each max label in the free spot nearest its marker: inside the plot area, not overlapping
         #another label, and not covering any plot line or workout power column
         area = self.synopsisGraphLabel.plotScreen.vb.sceneBoundingRect()
+        if self.songStrip is not None:
+            area.setTop(area.top() + self.songStrip.height)
         if area.width() < 20 or area.height() < 20:
             return
         gap = 12

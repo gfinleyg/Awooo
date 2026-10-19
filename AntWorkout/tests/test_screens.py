@@ -135,3 +135,34 @@ def test_converted_blocks_ride_to_the_end(viewer, tmp_path):
     #(LayoutViewer's simulated ride stops a tick before the workout's end: its last block isn't graded there. The
     #whole thing is graded in test_app_flow.py's ride of the same workout)
     assert len(AppState.blockGrades) >= 7
+
+
+def test_cadence_synopsis_shows_the_songs_heard(viewer):
+    """Musical Cadence Mode's synopsis: a band for each song along the top of the graph, where it was heard"""
+    LayoutViewer, display, errors = viewer
+    display.build("cadence", os.path.join(LayoutViewer.WORKOUT_DIR, LayoutViewer.DEFAULT_WORKOUT), 100)
+    QApplication.processEvents()
+    assert errors == []
+    synopsis = display.views["Synopsis"]
+    strip = synopsis.songStrip
+    assert strip is not None
+    assert [title for _, _, title in strip.songs] == [title for title, _ in LayoutViewer.VIEWER_SONGS]
+    #back to back, each as long as the song (the ride stops before the last one is over)
+    for (_, end, _), (nextStart, _, _) in zip(strip.songs, strip.songs[1:]):
+        assert end == nextStart
+    for (start, end, _), (_, blocks) in zip(strip.songs[:-1], LayoutViewer.VIEWER_SONGS):
+        assert abs((end - start) - sum(seconds for seconds, _ in blocks)) <= 1
+
+    #clicking a song zooms to it, clicking it again zooms back out
+    start, end, _ = strip.songs[1]
+    synopsis.song_clicked(1)
+    viewStart, viewEnd = synopsis.view_range()
+    assert abs(viewStart - start) < 0.5 and abs(viewEnd - end) < 0.5
+    assert [index for index, _, _ in strip.spans()] == [1]
+    synopsis.song_clicked(1)
+    viewStart, viewEnd = synopsis.view_range()
+    assert viewStart < 0.5 and abs(viewEnd - synopsis.totalSeconds) < 0.5
+
+    #a block's grade names its song
+    key = min(AppState.blockGrades, key=lambda key: AppState.blockGrades[key]["start"])
+    assert LayoutViewer.VIEWER_SONGS[0][0] in synopsis.grade_details_html(AppState.blockGrades[key])

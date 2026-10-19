@@ -13,8 +13,9 @@ stick, and shows a live HUD with power, cadence, speed and heart rate while you 
   analyzed and turned into target cadences (RPM), so you pedal to the beat. Analysis results are cached, so each song
   is only analyzed once.
 - **Synopsis**: a post-ride summary with graphs and grading.
-- **Themes**: fonts and colors can be changed from the settings menu, and theme files can be made with
-  `LayoutViewer.py`.
+- **Themes**: the settings menu's Pick Theme opens a full screen picker: a theme's colors (`themes/colors`) and
+  power/cadence gradients (`themes/gradients`), each tried on as it's picked, beside a preview of the workout screen
+  in that look. Theme files (fonts too) can be made with `LayoutViewer.py`.
 
 Supported ANT+ devices: heart rate monitors, speed/cadence sensors, power meters, and FE-C smart trainers.
 

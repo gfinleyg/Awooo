@@ -69,6 +69,8 @@ DEFAULT_THEME_FILE = "defaultTheme.json"
 #the colors/ and gradients/ files to pick from, next to the settings file (the exe's folder in a frozen
 #build, so they can be added to without a rebuild)
 THEMES_DIR = os.path.abspath("themes")
+#where each of PARTS' files are
+PART_DIRS = {"colors": os.path.join(THEMES_DIR, "colors"), "ftpColors": os.path.join(THEMES_DIR, "gradients")}
 
 #the synopsis max value labels paint this background themselves
 PLOT_LABEL_BG = "#bdd6de"
@@ -191,6 +193,8 @@ THEME = Theme()
 PARTS = {"colors": "colors", "ftpColors": "power/cadence gradients"}
 #the colors/gradients files loaded on top of the theme: part -> path (see load_file)
 _partFiles = {}
+#the whole theme file loaded (None: none picked, the default theme, see clear)
+_themeFile = None
 
 
 ###----------------------------------------------------------------------------------------------
@@ -524,12 +528,14 @@ def load_file(path):
     """Loads a theme .json (picked by the user) and applies it right away: a whole theme replaces the theme
     (and drops any colors/gradients files loaded on top of the old one), a colors or gradients file replaces
     just that part. Returns the file's kind (see file_kind); raises OSError/ValueError for a bad file"""
+    global _themeFile
     data = _read(path)
     kind = file_kind(data)
     register_fonts()
     if kind == "theme":
         THEME.from_json(data)
         _partFiles.clear()
+        _themeFile = path
     else:
         THEME.set_part(kind, data[kind])
         _partFiles[kind] = path
@@ -550,6 +556,47 @@ def _reload_part_files():
 def part_files():
     """{part: path} of the colors/gradients files loaded on top of the theme"""
     return dict(_partFiles)
+
+
+def theme_file():
+    """The whole theme file in use (None: the default theme)"""
+    return _themeFile
+
+
+def base_part(part):
+    """The theme's own colors or gradients (one of PARTS, as a theme file holds it), without any colors/gradients
+    file on top"""
+    path = _themeFile or default_source()
+    data = BUILT_IN_THEME
+    if path:
+        try:
+            data = _read(path)
+        except (OSError, ValueError) as e:
+            ClassAntLogger.log_event("ERROR", f"Failed to reload {PARTS[part]} from {path}: {e}")
+    return copy.deepcopy(data[part]) if isinstance(data.get(part), dict) else {}
+
+
+def drop_part(part):
+    """Back to the theme's own colors or gradients (one of PARTS): the colors/gradients file loaded on top of it is
+    taken off, applied right away"""
+    _partFiles.pop(part, None)
+    THEME.set_part(part, base_part(part))
+    refresh()
+
+
+def snapshot():
+    """The theme in use, to go back to with restore()"""
+    return copy.deepcopy(THEME.to_json()), dict(_partFiles), _themeFile
+
+
+def restore(saved):
+    """Back to a snapshot(), applied right away"""
+    global _themeFile
+    data, parts, _themeFile = saved
+    THEME.from_json(data)
+    _partFiles.clear()
+    _partFiles.update(parts)
+    refresh()
 
 
 def save_file(path, part=None):
@@ -597,6 +644,8 @@ def _load_default():
 def clear(keepParts=False):
     """No theme picked: the default theme, applied right away; without the colors/gradients files loaded
     on top unless keepParts"""
+    global _themeFile
+    _themeFile = None
     if not keepParts:
         _partFiles.clear()
     _load_default()

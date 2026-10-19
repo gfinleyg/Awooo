@@ -25,6 +25,8 @@ class AppState:
     musicTracks = []
     #{workoutList index: the song's header line} for each song's first block, shown before it in the workout lists
     musicSongStarts = {}
+    #each song as it was heard: [musicTracks index, start, end] in AppState.secondsPassed, for the synopsis
+    musicPlayed = []
     #beat pulse times (workout seconds), one per pedal stroke, for the cadence gauge's pulse
     musicPulses = []
 
