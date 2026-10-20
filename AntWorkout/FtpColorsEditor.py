@@ -1,9 +1,9 @@
 """
 FtpColorsEditor.py
 
-LayoutViewer.py's FTP Colors tab and its mockup window (not part of AntWorkout): the colors that follow
-the power zones (FtpColors.py) on the power gauge, the workout block labels and the workout graph's bars,
-edited on the tab and shown on the mockup for any FTP (40 - 500 W) and power.
+LayoutViewer.py's FTP Colors tab and its mockup window (not part of AntWorkout): the power zones' colors
+(FtpColors.py), edited on the tab and shown on the mockup (the power gauge, the workout block labels and the
+workout graph's bars) for any FTP (40 - 500 W) and power.
 """
 
 from PyQt6.QtCore import QRectF, Qt
@@ -86,24 +86,21 @@ class GradientBar(QWidget):
 ### The tab
 ###----------------------------------------------------------------------------------------------
 class FtpColorsTab(QScrollArea):
-    """Every power zone color, grouped by the part that shows it"""
+    """Each power zone's color, and free ride's"""
     def __init__(self):
         super().__init__()
         self.setWidgetResizable(True)
         self.refreshers = [] #redraw the rows from FtpColors
         body = QWidget()
         layout = QVBoxLayout(body)
-        note = QLabel("Colors that follow the power zones (by % of FTP). The FTP Colors window shows them "
-                      "on the parts for any FTP and power. Saved with the theme.")
+        note = QLabel("One color per power zone (by % of FTP; RPM in Musical Cadence Mode). Each zone fades from "
+                      "pale where it starts to its color where it ends, on the gauges, spiral, block labels and "
+                      "workout graph. A color too close to the theme's background is moved until it stands out "
+                      "(adjusted). The FTP Colors window shows them on the parts for any FTP and power. "
+                      "Saved with the theme.")
         note.setWordWrap(True)
         layout.addWidget(note)
-        layout.addWidget(self.build_gauge_band())
-        layout.addWidget(self.build_pairs("gaugeArc", "Power gauge: Ride At target arc",
-                                          ("Arc start", "Arc end"), "The arc around the target power on the gauge"))
-        layout.addWidget(self.build_singles("gaugeRing", "Power gauge: ring behind the reading",
-                                            "By the power being ridden (shown see-through)"))
-        layout.addWidget(self.build_blocks())
-        layout.addWidget(self.build_graph())
+        layout.addWidget(self.build_zones())
         resetAll = QPushButton("Reset all FTP colors")
         resetAll.clicked.connect(self.reset_all)
         layout.addWidget(resetAll)
@@ -129,131 +126,39 @@ class FtpColorsTab(QScrollArea):
         self.refreshers.append(lambda: button.setEnabled(not FtpColors.is_default(key, zone)))
         return button
 
-    def build_gauge_band(self):
-        box = QGroupBox("Power gauge: colored band")
+    def build_zones(self):
+        box = QGroupBox("Zone colors")
         grid = QGridLayout(box)
-        note = QLabel("Each color sits exactly where the needle points at its % of FTP, for any FTP. "
-                      "When a color is past the end of the dial (1000 W), the end of the dial is that color.")
-        note.setWordWrap(True)
-        grid.addWidget(note, 0, 0, 1, 4)
-        spins, swatches = [], []
-        def changed(index, pct=None, color=None):
-            stops = FtpColors.get("gaugeScale")
-            if pct is not None:
-                stops[index][0] = pct
-            if color is not None:
-                stops[index][1] = color
-            FtpColors.set_value("gaugeScale", stops)
-        for i in range(len(FtpColors.DEFAULTS["gaugeScale"])):
-            spin = QSpinBox()
-            spin.setRange(1, 500)
-            spin.setSuffix("% of FTP")
-            spin.setMinimumWidth(130)
-            spin.valueChanged.connect(lambda v, i=i: changed(i, pct=v))
-            swatch = Swatch(f"Band color {i + 1}", lambda c, i=i: changed(i, color=c))
-            grid.addWidget(spin, i + 1, 0)
-            grid.addWidget(swatch, i + 1, 1)
-            spins.append(spin)
-            swatches.append(swatch)
-        grid.addWidget(self.reset_button("gaugeScale"), 1, 3)
-        grid.setColumnStretch(2, 1)
-        def refresh():
-            for (pct, color), spin, swatch in zip(FtpColors.get("gaugeScale"), spins, swatches):
-                spin.blockSignals(True)
-                spin.setValue(int(pct))
-                spin.blockSignals(False)
-                swatch.set_color(color)
-        self.refreshers.append(refresh)
-        return box
-
-    def zone_rows(self, title, note, key, headers, zones, makeCells):
-        box = QGroupBox(title)
-        grid = QGridLayout(box)
-        row = 0
-        if note:
-            label = QLabel(note)
-            label.setWordWrap(True)
-            grid.addWidget(label, row, 0, 1, len(headers) + 3)
-            row += 1
-        for col, header in enumerate(headers):
-            grid.addWidget(QLabel(f"<small>{header}</small>"), row, col + 1)
-        row += 1
-        for zone in zones:
+        for col, header in enumerate(("Color", "Looks like (on this theme)", "")):
+            grid.addWidget(QLabel(f"<small>{header}</small>"), 0, col + 1)
+        for row, zone in enumerate(FtpColors.ZONES, start=1):
+            swatch = Swatch(ZONE_NAMES[zone], lambda c, z=zone: FtpColors.set_value("zones", c, z))
+            bar = GradientBar()
+            adjusted = QLabel()
+            def refresh(zone=zone, swatch=swatch, bar=bar, adjusted=adjusted):
+                swatch.set_color(FtpColors.get("zones")[zone])
+                pale, color, moved = FtpColors.palette()[int(zone)]
+                bar.set_colors((pale, color))
+                adjusted.setText("<small>adjusted</small>" if moved else "")
+            self.refreshers.append(refresh)
             grid.addWidget(QLabel(ZONE_NAMES[zone]), row, 0)
-            col = 1
-            for widget in makeCells(zone):
-                grid.addWidget(widget, row, col)
-                col += 1
-            grid.addWidget(self.reset_button(key, zone), row, col)
-            row += 1
-        grid.setColumnStretch(0, 1)
-        return box, grid, row
-
-    def build_pairs(self, key, title, headers, note):
-        zones = list(FtpColors.DEFAULTS[key])
-        def cells(zone):
-            swatches = [Swatch(f"{ZONE_NAMES[zone]}: {header}", lambda c, z=zone, i=i: self.set_part(key, z, i, c))
-                        for i, header in enumerate(headers)]
-            bar = GradientBar()
-            def refresh():
-                colors = FtpColors.get(key)[zone]
-                for swatch, color in zip(swatches, colors):
-                    swatch.set_color(color)
-                bar.set_colors(colors)
-            self.refreshers.append(refresh)
-            return swatches + [bar]
-        box, _, _ = self.zone_rows(title, note, key, list(headers) + ["Looks like"], zones, cells)
-        return box
-
-    def build_singles(self, key, title, note):
-        def cells(zone):
-            swatch = Swatch(ZONE_NAMES[zone], lambda c, z=zone: FtpColors.set_value(key, c, z))
-            self.refreshers.append(lambda: swatch.set_color(FtpColors.get(key)[zone]))
-            return [swatch]
-        box, _, _ = self.zone_rows(title, note, key, ["Color"], list(FtpColors.DEFAULTS[key]), cells)
-        return box
-
-    def build_blocks(self):
-        def cells(zone):
-            swatches = [Swatch(f"{ZONE_NAMES[zone]}: {header}", lambda c, z=zone, i=i: self.set_part("blocks", z, i, c))
-                        for i, header in enumerate(("start", "end"))]
-            bar = GradientBar()
-            def refresh():
-                colors = FtpColors.get("blocks")[zone]
-                for swatch, color in zip(swatches, colors):
-                    swatch.set_color(color)
-                bar.set_colors(colors)
-            self.refreshers.append(refresh)
-            return swatches + [bar]
-        box, grid, row = self.zone_rows(
-            "Workout blocks", "A power range blends from its low power's start to its high power's end; a "
-            "single power from its start to the single block end below.", "blocks",
-            ["Start", "End", "Range looks like"], list(FtpColors.DEFAULTS["blocks"]), cells)
-        grid.addWidget(QLabel("Single block end"), row, 0)
-        swatch = Swatch("Single block end", lambda c: FtpColors.set_value("blockSingleEnd", c))
-        self.refreshers.append(lambda: swatch.set_color(FtpColors.get("blockSingleEnd")))
+            grid.addWidget(swatch, row, 1)
+            grid.addWidget(bar, row, 2)
+            grid.addWidget(adjusted, row, 3)
+            grid.addWidget(self.reset_button("zones", zone), row, 4)
+        row = len(FtpColors.ZONES) + 1
+        swatch = Swatch(ZONE_NAMES["free"], lambda c: FtpColors.set_value("free", c))
+        bar = GradientBar()
+        def refresh():
+            swatch.set_color(FtpColors.get("free"))
+            bar.set_colors(FtpColors.free_ride_colors())
+        self.refreshers.append(refresh)
+        grid.addWidget(QLabel(ZONE_NAMES["free"]), row, 0)
         grid.addWidget(swatch, row, 1)
-        grid.addWidget(self.reset_button("blockSingleEnd"), row, 4)
+        grid.addWidget(bar, row, 2)
+        grid.addWidget(self.reset_button("free"), row, 4)
+        grid.setColumnStretch(2, 1)
         return box
-
-    def build_graph(self):
-        def cells(zone):
-            swatches = [Swatch(f"{ZONE_NAMES[zone]}: {state}", lambda c, z=zone, i=i: self.set_part("graph", z, i, c))
-                        for i, state in enumerate(FtpColors.GRAPH_STATES)]
-            def refresh():
-                for swatch, color in zip(swatches, FtpColors.get("graph")[zone]):
-                    swatch.set_color(color)
-            self.refreshers.append(refresh)
-            return swatches
-        box, _, _ = self.zone_rows("Workout graph bars", "Shown see-through. Paused is also before the start; "
-                                   "the synopsis graph uses past.", "graph",
-                                   ["Paused", "Upcoming", "Past"], list(FtpColors.DEFAULTS["graph"]), cells)
-        return box
-
-    def set_part(self, key, zone, index, color):
-        colors = FtpColors.get(key)[zone]
-        colors[index] = color
-        FtpColors.set_value(key, colors, zone)
 
 
 ###----------------------------------------------------------------------------------------------
@@ -274,7 +179,11 @@ class GraphMock(QWidget):
         painter.drawRoundedRect(rect, 15, 15)
         labelWidth = 110
         rowHeight = (rect.height() - 20)/len(FtpColors.GRAPH_STATES)
-        barWidth = (rect.width() - labelWidth - 30)/5
+        ranges = ranges_for(DEFAULT_FTP)
+        #four bars a zone, from a quarter of the way through it to its end
+        samples = [(zone, start + (end - start)*k/4) for zone in range(5)
+                   for start, end in [FtpColors.zone_span(zone, ranges)] for k in range(1, 5)]
+        barWidth = (rect.width() - labelWidth - 30)/len(samples)
         painter.setFont(QFont(self.font().family(), 10))
         for row, state in enumerate(FtpColors.GRAPH_STATES):
             top = rect.top() + 10 + row*rowHeight
@@ -282,11 +191,11 @@ class GraphMock(QWidget):
             painter.drawText(QRectF(rect.left() + 12, top, labelWidth, rowHeight), Qt.AlignmentFlag.AlignVCenter,
                              state.title())
             painter.setPen(Qt.PenStyle.NoPen)
-            for zone, brush in enumerate(FtpColors.graph_brushes(state)):
+            for i, (zone, watts) in enumerate(samples):
                 height = (rowHeight - 12)*(0.3 + 0.175*zone)
-                left = rect.left() + labelWidth + 10 + zone*barWidth
-                painter.setBrush(brush)
-                painter.drawRect(QRectF(left, top + rowHeight - 6 - height, barWidth - 4, height))
+                left = rect.left() + labelWidth + 10 + i*barWidth
+                painter.setBrush(FtpColors.graph_color(watts, ranges, state))
+                painter.drawRect(QRectF(left, top + rowHeight - 6 - height, barWidth - 1, height))
 
 
 class FtpMockupWindow(QWidget):
@@ -378,15 +287,18 @@ class FtpMockupWindow(QWidget):
         zone = FtpColors.zone_of(power, ranges)
         self.powerNote.setText(f"{power/ftp*100:.0f}% of FTP, {ZONE_NAMES[zone].split('  ')[0]}")
 
-        #"point at" buttons, one per band color
+        #"point at" buttons, one where each zone ends (at its color)
         while self.stopButtons.count():
             item = self.stopButtons.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        for pct, color in sorted(FtpColors.get("gaugeScale")):
-            watts = round(ftp*pct/100)
-            button = QPushButton(f"{pct}%")
-            button.setToolTip(f"{watts} W: the needle on this band color" + ("" if watts <= 1000 else " (past the dial)"))
+        for zone in range(5):
+            end = FtpColors.zone_span(zone, ranges)[1]
+            watts = round(end) - (1 if zone < 4 else 0)
+            color = FtpColors.palette()[zone][1]
+            button = QPushButton(f"{end/ftp*100:.0f}%")
+            button.setToolTip(f"{watts} W: the needle where {ZONE_NAMES[str(zone)].split('  ')[0]} is its color" +
+                              ("" if watts <= 1000 else " (past the dial)"))
             set_sheet(button, f"QPushButton {{ border:2px solid {color}; border-radius:4px; padding:2px 8px; }}")
             button.setEnabled(watts <= 1000)
             button.clicked.connect(lambda _, w=watts: self.powerSpin.setValue(w))
@@ -395,7 +307,7 @@ class FtpMockupWindow(QWidget):
 
         ##gauge
         widget = self.gauge.ui.widget
-        widget.set_value_colors(FtpColors.gauge_scale_stops(ftp))
+        widget.set_value_colors(FtpColors.zone_stops(ranges))
         widget.setValue(power)
         c0, c1 = FtpColors.gauge_arc(power, ranges)
         widget.arcCenterValue = power

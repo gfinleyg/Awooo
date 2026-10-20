@@ -97,6 +97,23 @@ def test_random_selection():
     assert M.random_selection(["d"], 100, durations, random.Random(1)) == []
 
 
+def test_random_selection_spreads_cadences():
+    #nine songs at 60 RPM and one each at 80, 100 and free ride: every band gets a song before any gets a second
+    songs = [f"slow{i}" for i in range(9)] + ["mid", "fast", "free"]
+    durations = dict.fromkeys(songs, 100)
+    cadences = {**{s: 60 for s in songs[:9]}, "mid": 80, "fast": 100, "free": None}
+    for seed in range(20):
+        picked = M.random_selection(songs, 400, durations, random.Random(seed), cadences)
+        assert len(picked) == 4
+        assert {"mid", "fast", "free"} <= set(picked)
+
+
+def test_song_cadence(songs):
+    paths, analyses = songs
+    assert M.song_cadence(analyses["100"], preferred=100) == pytest.approx(100, abs=2)
+    assert M.song_cadence({"duration": 30.0, "classes": [], "confidences": []}) is None
+
+
 ###Analysis
 @pytest.mark.parametrize("name, bpm", [("100", 100), ("75", 75)])
 def test_tempo_of_a_click_track(songs, name, bpm):

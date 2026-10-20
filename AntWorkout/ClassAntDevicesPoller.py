@@ -558,7 +558,7 @@ class AntDevicesPoller(QObject):
         return points[-1][1]
 
     def getFtpColor(self, power):
-        #the gauge's ring behind the reading (see FtpColors.py), see-through
+        #the gauge's ring behind the reading, the power's zone color (see FtpColors.py), see-through
         #(power zones even in Musical Cadence Mode, where AppState.ftpRanges are cadence zones)
         return "#44" + FtpColors.gauge_ring(power, FtpColors.power_ranges())
 

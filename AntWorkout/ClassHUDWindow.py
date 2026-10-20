@@ -81,10 +81,10 @@ def set_power_rings(gauge):
     """The power gauge's nested circles: each the band's color at the power ridden a moment ago, the
     outermost now through to the innermost POWER_RING_SECONDS ago"""
     widget = gauge.ui.widget
-    stops = FtpColors.gauge_scale_stops(FtpColors.zone_ftp())
+    ranges = FtpColors.power_ranges() #(power zones, in Musical Cadence Mode too)
     count = widget.CENTER_RING_COUNT
     powers = [widget.reading] + [power_ago(POWER_RING_SECONDS*i/(count - 1)) for i in range(1, count)]
-    widget.set_center_rings([FtpColors.stops_color(stops, power) for power in powers])
+    widget.set_center_rings([FtpColors.zone_color(power, ranges) for power in powers])
 
 
 def power_ago(seconds):
@@ -920,7 +920,7 @@ class HUDWindow(QWidget):
                 if index >= 0:
                     level = max(0.0, 1 - (seconds - AppState.musicPulses[index])/BEAT_SECONDS)
         gauge = self.cadenceGaugeDisplay.ui.widget
-        color = FtpColors.stops_color(getattr(self, "cadenceScaleStops", []), self.currentPower)
+        color = FtpColors.zone_color(self.currentPower)
         gauge.set_center_rings((color.darker(130), color), level)
 
     def update_power_rings(self):
@@ -1032,11 +1032,10 @@ class HUDWindow(QWidget):
 
 
     def gaugeChooser(self):
-        #each of the band's colors sits where the needle points at its % of FTP, for any FTP
-        self.wattGaugeDisplay.ui.widget.set_value_colors(FtpColors.gauge_scale_stops(FtpColors.zone_ftp()))
+        #each zone fading in where the needle points at its start, for any FTP
+        self.wattGaugeDisplay.ui.widget.set_value_colors(FtpColors.zone_stops(FtpColors.power_ranges()))
         if self.cadenceMode and hasattr(self, "cadenceGaugeDisplay"): #(Musical Cadence Mode's own band)
-            self.cadenceScaleStops = FtpColors.cadence_scale_stops(AppState.ftpRanges)
-            self.cadenceGaugeDisplay.ui.widget.set_value_colors(self.cadenceScaleStops)
+            self.cadenceGaugeDisplay.ui.widget.set_value_colors(FtpColors.zone_stops(AppState.ftpRanges))
 
     #the target arc's two colors for a power, without the leading pound or alpha blending(transparency)
     def getFtpColor(self, power):
@@ -1058,7 +1057,7 @@ class HUDWindow(QWidget):
             for label in labels:
                 label.setStyleSheet(self.getLabelColor(label.text()))
             for plot in (self.workoutPowerPlot, self.workoutPowerCompletedPlot):
-                plot.update()
+                plot.recolor()
     
     def getLabelColor(self, txt):
         #a label's own sheet beats the HUD's QLabel:disabled rule, so it carries its own: an interval's

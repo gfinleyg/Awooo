@@ -18,7 +18,8 @@ from test_app_flow import app_window, load_workout  # noqa: F401  (the fixture)
 pytestmark = pytest.mark.whole_app
 
 COLORS = {"colors": {"#9fc5d1": "#2a2a3a", "#000000": "#f4f4f8"}}
-GRADIENTS = {"ftpColors": {"blocks": {"1": ["#112233", "#445566"]}}}
+#(zone "1" dark navy: it stands out on the default background, but has to be moved on Night City's dark one)
+GRADIENTS = {"ftpColors": {"zones": {"1": "#112233"}}}
 
 
 @pytest.fixture
@@ -55,6 +56,14 @@ def test_lists_show_the_theme_files(picker):
     gradients = [dialog.lists["ftpColors"].item(i).text() for i in range(dialog.lists["ftpColors"].count())]
     assert colors == ["Base Theme's Colors", "Night City"]
     assert gradients == ["Base Theme's Gradients", "Plasma", "Broken"]
+    #picking dark colors: the gradients' swatches are fitted to them, a gradient moved to stand out marked
+    from ClassThemeSelectWindow import ADJUSTED_MARK
+    pick(dialog, "colors", 1)
+    plasma = dialog.lists["ftpColors"].item(1)
+    assert plasma.text() == "Plasma" + ADJUSTED_MARK and "zone 2 moved" in plasma.toolTip()
+    assert dialog.lists["ftpColors"].item(0).text() == "Base Theme's Gradients"
+    pick(dialog, "colors", 0)
+    assert dialog.lists["ftpColors"].item(1).text() == "Plasma"
     #nothing on top of the theme: the base rows are picked
     assert dialog.lists["colors"].currentRow() == 0 and dialog.lists["ftpColors"].currentRow() == 0
     #fills the screen
@@ -67,10 +76,10 @@ def test_picks_are_tried_on_and_cancel_goes_back(picker):
     pick(dialog, "colors", 1)
     assert AppTheme.THEME.colors["#9fc5d1"] == "#2a2a3a"
     pick(dialog, "ftpColors", 1)
-    assert AppTheme.THEME.ftp["blocks"]["1"] == ["#112233", "#445566"]
+    assert AppTheme.THEME.ftp["zones"]["1"] == "#112233"
     #a file that can't be read is marked, and the look stays as it was
     pick(dialog, "ftpColors", 2)
-    assert AppTheme.THEME.ftp["blocks"]["1"] == ["#112233", "#445566"]
+    assert AppTheme.THEME.ftp["zones"]["1"] == "#112233"
     assert dialog.lists["ftpColors"].item(2).foreground().color() == Qt.GlobalColor.darkRed
     #back to the base theme's colors
     pick(dialog, "colors", 0)

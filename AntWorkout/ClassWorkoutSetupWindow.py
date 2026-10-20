@@ -1170,7 +1170,7 @@ class WorkoutSetupWindow(QWidget):
         #(with no FTP set, the zones are worked out from FtpColors.UNSET_FTP_WATTS)
         AppState.ftpRanges[:] = FtpColors.power_ranges()
 
-        #the graph's bar colors per zone: paused / upcoming / past (see FtpColors.py)
+        #the graph's bar colors: paused / upcoming / past (see FtpColors.py)
         FtpColors.update_graph_brushes()
 
     #function to check for valid wheel circumference
@@ -1503,8 +1503,8 @@ class WorkoutSetupWindow(QWidget):
 
     def apply_cadence_ranges(self):
         """The zone boundaries (AppState.ftpRanges, which color the blocks, graph, gauge arc and band): zone "0" up
-        to FtpColors.CADENCE_SCALE_BOTTOM_RPM plus a step, the rest a step apart, red from
-        FtpColors.CADENCE_SCALE_TOP_RPM (see FtpColors.cadence_ranges)"""
+        to FtpColors.CADENCE_SCALE_BOTTOM_RPM, red from FtpColors.CADENCE_SCALE_TOP_RPM, the rest evenly between
+        (see FtpColors.cadence_ranges)"""
         AppState.ftpRanges[:] = FtpColors.cadence_ranges(FtpColors.CADENCE_SCALE_BOTTOM_RPM)
         FtpColors.update_graph_brushes()
 

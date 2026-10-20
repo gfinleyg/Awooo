@@ -123,7 +123,8 @@ class SolidColoredColumns(GraphicsObject):
         **Arguments:**
         x, y            (numpy arrays) Data to display
         ranges          Y values at which the colors change
-        color           Colors which will fill the rectangles at a given y value
+        colors          Colors which will fill the rectangles at a given y value: one per range (ranges plus
+                        one), or a function (y, ranges) -> QColor for each column (see FtpColors.graph_color)
         =============== =================================================================
 
         If non-keyword arguments are used, they will be interpreted as
@@ -165,7 +166,7 @@ class SolidColoredColumns(GraphicsObject):
             raise Exception("Select at least one QColor value for colors")
         self.opts['colors'] = kargs['colors']
 
-        if len(self.opts['ranges'])+1 != len(self.opts['colors']):
+        if not callable(self.opts['colors']) and len(self.opts['ranges'])+1 != len(self.opts['colors']):
             raise Exception("Ranges count must be one less than colors count--got %s and %s." % (len(self.opts['ranges']), len(self.opts['colors'])))
 
         profiler("data checks")
@@ -203,14 +204,19 @@ class SolidColoredColumns(GraphicsObject):
         x, y = self.getData()
 
         if len(x) < 2:
-            return []
+            return {}
 
-        #one list of rectangles per color range: range 0 is y <= ranges[0], range i is ranges[i-1] < y <= ranges[i],
-        #the last is y > ranges[-1] - which is how many ranges are below y (ranges go up)
-        ranges = self.opts['ranges']
-        rectLists = self._fillRectList = [[] for _ in range(len(ranges) + 1)]
+        #one list of rectangles per color: by range (range 0 is y <= ranges[0], range i is ranges[i-1] < y <= ranges[i],
+        #the last is y > ranges[-1] - which is how many ranges are below y (ranges go up)), or each column's own
+        ranges, colors = self.opts['ranges'], self.opts['colors']
+        rectLists = self._fillRectList = {}
         for xIndex in range(len(x)-1):
-            rectLists[bisect.bisect_left(ranges, y[xIndex])].append(
+            if callable(colors):
+                color = colors(float(y[xIndex]), ranges)
+            else:
+                color = colors[bisect.bisect_left(ranges, y[xIndex])]
+            key = color.rgba() if isinstance(color, QtGui.QColor) else id(color)
+            rectLists.setdefault(key, (color, []))[1].append(
                 QtCore.QRectF(x[xIndex], 0, x[xIndex+1]-x[xIndex], y[xIndex]))
 
         return rectLists
@@ -228,11 +234,15 @@ class SolidColoredColumns(GraphicsObject):
         profiler('generate fill rects')
         #(a list of rectangles draws much faster than the same rectangles as one path, with hundreds of bars)
         p.setPen(QtCore.Qt.PenStyle.NoPen)
-        for i, rects in enumerate(rectLists):
-            if rects:
-                p.setBrush(self.opts['colors'][i])
-                p.drawRects(rects)
+        for color, rects in rectLists.values():
+            p.setBrush(color)
+            p.drawRects(rects)
         profiler('draw fill rects')
+
+    def recolor(self):
+        """Redrawn with the colors as they are now (the colors function's colors changed)"""
+        self._fillRectList = None
+        self.update()
 
     def clear(self):
         self.xData = None  ## raw values

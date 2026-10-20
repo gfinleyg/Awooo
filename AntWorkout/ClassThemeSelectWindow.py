@@ -2,7 +2,7 @@ import os
 import re
 
 from PyQt6.QtCore import QSize, Qt, QTimer
-from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -73,13 +73,48 @@ def swatch(colors):
     return QIcon(pixmap)
 
 
+def gradient_swatch(fitted):
+    """An icon of the zones' fades (FtpColors.palette), each pale to its color"""
+    width, height = (max(1, round(v*AppTheme.ui_scale)) for v in SWATCH_SIZE)
+    pixmap = QPixmap(width, height)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setPen(Qt.PenStyle.NoPen)
+    for i, (pale, color, _) in enumerate(fitted):
+        left, right = round(i*width/len(fitted)), round((i + 1)*width/len(fitted))
+        gradient = QLinearGradient(left, 0, right, 0)
+        gradient.setColorAt(0, QColor(pale))
+        gradient.setColorAt(1, QColor(color))
+        painter.setBrush(gradient)
+        painter.drawRect(left, 0, right - left, height)
+    painter.setPen(QColor("#000000"))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawRect(0, 0, width - 1, height - 1)
+    painter.end()
+    return QIcon(pixmap)
+
+
+#after a gradient's name when its colors were moved to stand out on the theme's background
+ADJUSTED_MARK = "  · adjusted"
+
+
 def part_swatch(part, value):
-    """A colors file's main colors, or a gradients file's power zones (the workout block colors)"""
+    """A colors file's main colors, or a gradients file's zone fades as they look on the current theme"""
     if part == "colors":
         colors = {k.lower(): v for k, v in value.items()}
         return swatch([colors.get(c, c) for c in SWATCH_COLORS])
-    blocks = {**FtpColors.DEFAULTS["blocks"], **value.get("blocks", {})}
-    return swatch([blocks[zone][0] for zone in FtpColors.ZONE_KEYS[:5]])
+    return gradient_swatch(FtpColors.palette(FtpColors.file_palette(value)))
+
+
+def show_adjusted(item, name, tip, value):
+    """A gradients item's name and tip, marked when its colors were moved to stand out on the current theme"""
+    zones = FtpColors.adjusted_zones(FtpColors.file_palette(value))
+    item.setText(name + (ADJUSTED_MARK if zones else ""))
+    if zones:
+        tip += ("\nAdjusted for these colors: " + ("zone " if len(zones) == 1 else "zones ") +
+                ", ".join(str(int(z) + 1) for z in zones) +
+                " moved to stand out on the background")
+    item.setToolTip(tip)
 
 
 def read_part(path, part):
@@ -202,6 +237,8 @@ class ThemeSelectWindow(QDialog):
         base.setData(Qt.ItemDataRole.UserRole, None)
         base.setToolTip(BASE_TIP)
         base.setIcon(part_swatch(part, AppTheme.base_part(part)))
+        if part == "ftpColors":
+            show_adjusted(base, BASE_TEXT[part], BASE_TIP, AppTheme.base_part(part))
         partList.addItem(base)
         folder = AppTheme.PART_DIRS[part]
         paths = [os.path.join(folder, name) for name in sorted(os.listdir(folder), key=str.lower)
@@ -219,12 +256,28 @@ class ThemeSelectWindow(QDialog):
         item.setData(Qt.ItemDataRole.UserRole, path)
         item.setToolTip(path)
         try:
-            item.setIcon(part_swatch(part, read_part(path, part)))
+            value = read_part(path, part)
+            item.setIcon(part_swatch(part, value))
+            if part == "ftpColors":
+                show_adjusted(item, display_name(path), path, value)
         except (OSError, ValueError) as e:
             item.setForeground(Qt.GlobalColor.darkRed)
             item.setToolTip(f"{path}\nCan't be used: {e}")
         self.lists[part].addItem(item)
         return item
+
+    def refresh_gradient_swatches(self):
+        """The gradients' swatches and marks again, for the colors just picked (they're fitted to its background)"""
+        partList = self.lists["ftpColors"]
+        for row in range(partList.count()):
+            item = partList.item(row)
+            path = item.data(Qt.ItemDataRole.UserRole)
+            try:
+                value = read_part(path, "ftpColors") if path else AppTheme.base_part("ftpColors")
+            except (OSError, ValueError):
+                continue
+            item.setIcon(part_swatch("ftpColors", value))
+            show_adjusted(item, display_name(path) if path else BASE_TEXT["ftpColors"], path or BASE_TIP, value)
 
     def item_for(self, part, path):
         partList = self.lists[part]
@@ -279,6 +332,8 @@ class ThemeSelectWindow(QDialog):
                 for p in AppTheme.PARTS:
                     self.fill_list(p)
                 break
+            if part == "colors":
+                self.refresh_gradient_swatches()
         if changed:
             self.redraw_preview()
             self.update_summary()
@@ -309,6 +364,8 @@ class ThemeSelectWindow(QDialog):
                 self.fill_list(part)
         else:
             self.select(kind, path)
+            if kind == "colors":
+                self.refresh_gradient_swatches()
         self.redraw_preview()
         self.update_summary()
 

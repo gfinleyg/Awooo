@@ -227,20 +227,32 @@ def latest_power(times, values, now):
 ###----------------------------------------------------------------------------------------------
 ### The workout's blocks, for the grade lists
 ###----------------------------------------------------------------------------------------------
-def workout_rows(workoutList, grades):
+def workout_rows(workoutList, grades, songs=None):
     """Rows for a grade list, in workout order, from AppState.workoutList and the grades recorded (AppState.blockGrades,
     keyed (block index, sub-block index, rep)); only the blocks (and interval reps) that were ridden. Each row is a dict:
       {"kind": "block", "label", "pct", "grade", "note"}                  a block ("note": "ended early", or "")
       {"kind": "interval", "label": "3x"}                                 an interval's header, then its sub-blocks:
       {"kind": "sub", "label", "pct", "grade", "note": "S · A · B+"}      their average over the reps ridden, and
-                                                                          each rep's grade"""
+                                                                          each rep's grade
+    songs: Musical Cadence Mode's {block index: song title} of each song's first block. Each song ridden gets a row
+    before its blocks, graded by their average (weighted by the time ridden, as the workout's is); its blocks are
+    "indent"ed beneath it:
+      {"kind": "song", "label", "pct", "grade", "note": ""}"""
+    songs = songs or {}
     rows = []
+    songRow = None
     for index, block in enumerate(workoutList):
+        if index in songs:
+            songRow = {"kind": "song", "label": songs[index], "records": [], "note": ""}
+            rows.append(songRow)
+        if songRow is not None:
+            songRow["records"] += [record for key, record in grades.items() if key[0] == index]
         if block[0] in (0, 1, 2):
             record = grades.get((index, 0, 0))
             if record:
                 rows.append({"kind": "block", "label": record["label"], "pct": record["pct"],
-                             "grade": letter(record["pct"]), "note": "ended early" if record.get("endedEarly") else ""})
+                             "grade": letter(record["pct"]), "note": "ended early" if record.get("endedEarly") else "",
+                             "indent": songRow is not None})
         elif block[0] == 3:
             multiplier, subBlocks = block[1], block[2:]
             subRows = []
@@ -258,14 +270,27 @@ def workout_rows(workoutList, grades):
             if subRows:
                 rows.append({"kind": "interval", "label": f"{multiplier}x"})
                 rows += subRows
+    #(a song none of whose blocks were ridden has no row)
+    for row in [row for row in rows if row["kind"] == "song"]:
+        records = row.pop("records")
+        if records:
+            row["pct"] = ridden_average(records)
+            row["grade"] = letter(row["pct"])
+        else:
+            rows.remove(row)
     return rows
+
+
+def ridden_average(records):
+    """Grade records' scores weighted by how long each block was ridden, over the graded ones; None if none"""
+    scored = [g for g in records if g["pct"] is not None and g["ridden"] > 0]
+    total = sum(g["ridden"] for g in scored)
+    if not total:
+        return None
+    return sum(g["pct"]*g["ridden"] for g in scored)/total
 
 
 def workout_average(grades):
     """The workout's grade: block scores weighted by how long each block was ridden, over the graded blocks;
     None if none"""
-    scored = [g for g in grades.values() if g["pct"] is not None and g["ridden"] > 0]
-    total = sum(g["ridden"] for g in scored)
-    if not total:
-        return None
-    return sum(g["pct"]*g["ridden"] for g in scored)/total
+    return ridden_average(grades.values())

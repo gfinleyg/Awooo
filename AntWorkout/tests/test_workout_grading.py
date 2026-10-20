@@ -207,6 +207,30 @@ def test_workout_rows():
     assert rows[3]["pct"] is None and rows[3]["grade"] == "--"
 
 
+def test_workout_rows_songs():
+    """Musical Cadence Mode: a row for each song ridden, graded by its blocks' average, before them"""
+    block = (1, 60, (90,)*21, 0)
+    workout = [block, block, block, block, block]
+    grades = {
+        (0, 0, 0): _record(100, 60, "Seated 90 RPM 1m"),
+        (1, 0, 0): _record(80, 30, "Seated 90 RPM 1m"),
+        (2, 0, 0): _record(None, 60, "Free Ride 1m"),
+        (3, 0, 0): _record(90, 60, "Seated 90 RPM 1m"),
+        #block 4, the last song's, never reached
+    }
+    songs = {0: "Band - First", 2: "Band - Second", 4: "Band - Third"}
+    rows = G.workout_rows(workout, grades, songs)
+    assert [(row["kind"], row.get("indent")) for row in rows] == [
+        ("song", None), ("block", True), ("block", True), ("song", None), ("block", True), ("block", True)]
+    assert rows[0]["label"] == "Band - First"
+    assert rows[0]["pct"] == pytest.approx((100*60 + 80*30)/90) and rows[0]["grade"] == G.letter(rows[0]["pct"])
+    #an ungraded (free ride) block leaves the song's grade to the others
+    assert rows[3]["pct"] == pytest.approx(90)
+    #no songs: no song rows, nothing indented
+    assert [row["kind"] for row in G.workout_rows(workout, grades)] == ["block"]*4
+    assert not any(row["indent"] for row in G.workout_rows(workout, grades))
+
+
 def test_workout_average():
     assert G.workout_average({}) is None
     assert G.workout_average({1: _record(None, 60)}) is None

@@ -50,103 +50,175 @@ def test_zone_of_uses_the_app_ranges():
 
 ###The table and the theme's changes
 def test_get_is_a_copy():
-    blocks = FtpColors.get("blocks")
-    blocks["2"] = ["#000000", "#000000"]
-    assert FtpColors.get("blocks")["2"] == FtpColors.DEFAULTS["blocks"]["2"]
+    zones = FtpColors.get("zones")
+    zones["2"] = "#000000"
+    assert FtpColors.get("zones")["2"] == FtpColors.DEFAULTS["zones"]["2"]
 
 
 def test_set_value_zone_and_back():
-    FtpColors.set_value("blocks", ["#010101", "#020202"], zone="2")
-    assert not FtpColors.is_default("blocks", "2") and FtpColors.is_default("blocks", "3")
-    assert FtpColors.get("blocks")["2"] == ["#010101", "#020202"]
-    assert AppTheme.THEME.ftp == {"blocks": {"2": ["#010101", "#020202"]}}
+    FtpColors.set_value("zones", "#010101", zone="2")
+    assert not FtpColors.is_default("zones", "2") and FtpColors.is_default("zones", "3")
+    assert FtpColors.get("zones")["2"] == "#010101"
+    assert AppTheme.THEME.ftp == {"zones": {"2": "#010101"}}
     #setting the default again, or None, drops the change
-    FtpColors.set_value("blocks", FtpColors.DEFAULTS["blocks"]["2"], zone="2")
-    assert AppTheme.THEME.ftp == {} and FtpColors.is_default("blocks")
+    FtpColors.set_value("zones", FtpColors.DEFAULTS["zones"]["2"], zone="2")
+    assert AppTheme.THEME.ftp == {} and FtpColors.is_default("zones")
 
 
 def test_set_value_whole_entry():
-    FtpColors.set_value("blockSingleEnd", "#123456")
-    assert FtpColors.get("blockSingleEnd") == "#123456" and not FtpColors.is_default("blockSingleEnd")
-    FtpColors.set_value("blockSingleEnd", None)
-    assert FtpColors.get("blockSingleEnd") == FtpColors.DEFAULTS["blockSingleEnd"]
+    FtpColors.set_value("free", "#123456")
+    assert FtpColors.get("free") == "#123456" and not FtpColors.is_default("free")
+    FtpColors.set_value("free", None)
+    assert FtpColors.get("free") == FtpColors.DEFAULTS["free"]
+
+
+def test_older_gradient_entries_are_dropped():
+    AppTheme.THEME.set_part("ftpColors", {"blocks": {"2": ["#010101", "#020202"]}, "zones": {"1": "#123456"}})
+    assert AppTheme.THEME.ftp == {"zones": {"1": "#123456"}}
+    assert FtpColors.file_palette({"zones": {"1": "#123456"}})[1:3] == ["#123456", FtpColors.DEFAULTS["zones"]["2"]]
 
 
 def test_theme_changes_are_picked_up():
     assert FtpColors.gauge_ring(0, [10, 20, 30, 40]) == "d9d9d9"
     #a theme loaded: a new changes dict
-    AppTheme.THEME.ftp = {"gaugeRing": {"free": "#abcdef"}}
+    AppTheme.THEME.ftp = {"free": "#abcdef"}
     assert FtpColors.gauge_ring(0, [10, 20, 30, 40]) == "abcdef"
-    assert FtpColors.gauge_ring(15, [10, 20, 30, 40]) == "38813b"
 
 
+###The zones' fades
+RANGES = [10, 20, 30, 40]
+
+
+@pytest.mark.parametrize("value, zone, through", [(0, 0, 0), (5, 0, .5), (10, 1, 0), (15, 1, .5), (39.9, 3, .99),
+                                                  (40, 4, 0), (55, 4, 1), (100, 4, 1)])
+def test_zone_position(value, zone, through):
+    #(the top zone is brightest half the span of the zones below past where it starts: 40 + 15)
+    assert FtpColors.zone_position(value, RANGES) == (zone, pytest.approx(through, abs=0.01))
+
+
+def test_each_zone_fades_from_pale_to_its_color_and_jumps_at_the_next():
+    fitted = FtpColors.palette()
+    for zone in range(5):
+        pale, color, _ = fitted[zone]
+        start, end = FtpColors.zone_span(zone, RANGES)
+        assert FtpColors.zone_hex(start, RANGES) == pale
+        assert FtpColors.difference(FtpColors.zone_hex(end - 1e-9, RANGES), color) < 0.01
+        #closer to the color the further through the zone
+        steps = [FtpColors.difference(FtpColors.zone_hex(start + (end - start)*k/4, RANGES), color) for k in range(4)]
+        assert steps == sorted(steps, reverse=True)
+        #paler: less colorful
+        assert FtpColors.to_oklch(pale)[1] <= FtpColors.to_oklch(color)[1] + 1e-6
+    #the next zone starts pale, not where the last one ended
+    assert FtpColors.difference(FtpColors.zone_hex(19.99, RANGES), FtpColors.zone_hex(20, RANGES)) > 0.1
+
+
+def test_zone_color_defaults_to_the_app_ranges():
+    AppState.ftpRanges[:] = [100, 200, 300, 400]
+    assert FtpColors.zone_color(250).name() == FtpColors.zone_hex(250, [100, 200, 300, 400])
+
+
+def theme_colors(name):
+    with open(__import__("os").path.join(__import__("conftest").APP_DIR, "themes", "colors", name)) as f:
+        return {k.lower(): v.lower() for k, v in json.load(f)["colors"].items()}
+
+
+def test_colors_stand_out_on_every_shipped_theme():
+    import glob, os
+    themes = glob.glob(os.path.join(__import__("conftest").APP_DIR, "themes", "colors", "*.json"))
+    gradients = glob.glob(os.path.join(__import__("conftest").APP_DIR, "themes", "gradients", "*.json"))
+    assert themes and gradients
+    for theme in themes:
+        colors = theme_colors(os.path.basename(theme))
+        backgrounds = FtpColors.theme_backgrounds(colors)
+        for gradient in gradients:
+            for pale, color, _ in FtpColors.palette(FtpColors.file_palette(AppTheme._read(gradient)["ftpColors"]), colors):
+                assert min(FtpColors.difference(color, bg) for bg in backgrounds) >= FtpColors.COLOR_MIN_DIFFERENCE, \
+                    (theme, gradient, color)
+                assert (pale == color or min(FtpColors.difference(pale, bg) for bg in backgrounds)
+                        >= FtpColors.PALE_MIN_DIFFERENCE), (theme, gradient, pale)
+
+
+def test_zones_fades_dont_repeat_each_other():
+    fitted = FtpColors.palette()
+    def fade(zone):
+        pale, color, _ = fitted[zone]
+        return [FtpColors._blend(pale, color, k/20) for k in range(21) if k/20 >= FtpColors.ZONE_FADE_FROM]
+    for zone in range(5):
+        pale, color, _ = fitted[zone]
+        assert pale != color #(every zone keeps a fade)
+        for other in range(5):
+            if other != zone:
+                assert min(FtpColors.difference(pale, c) for c in fade(other)) >= FtpColors.ZONE_MIN_DIFFERENCE - 0.01, \
+                    (zone, other)
+    #red starts red, not the peach orange has already shown
+    assert FtpColors.to_oklch(fitted[4][0])[1] > 0.1
+
+
+def test_adjusted_for_the_theme():
+    #the orange zone on DSA's red background is moved to stand out; on the default background nothing moves
+    assert "3" in FtpColors.adjusted_zones(themeColors=theme_colors("41-dsa.json"))
+    assert FtpColors.adjusted_zones() == []
+    pale, color, adjusted = FtpColors.palette(themeColors=theme_colors("41-dsa.json"))[3]
+    assert adjusted and color != FtpColors.DEFAULTS["zones"]["3"]
+
+
+def test_zone_stops():
+    stops = FtpColors.zone_stops(RANGES)
+    values = [v for v, _ in stops]
+    assert values == sorted(values) and values[0] == 0 and values[-1] == pytest.approx(55)
+    #a hard edge where each zone starts: the last stop before it the zone's color, the one at it the next's pale end
+    fitted = FtpColors.palette()
+    for zone, limit in enumerate(RANGES):
+        i = next(i for i, v in enumerate(values) if v >= limit)
+        assert stops[i - 1][1].name() == fitted[zone][1] and stops[i][1].name() == fitted[zone + 1][0]
+        assert limit - values[i - 1] < 0.01
+
+
+###What each part draws with
 def test_part_colors():
-    ranges = [10, 20, 30, 40]
-    assert FtpColors.gauge_arc(25, ranges) == ("e0d151", "fdec5a")
+    assert FtpColors.gauge_arc(25, RANGES) == (FtpColors.pale_hex(2)[1:], FtpColors.zone_hex(25, RANGES)[1:])
+    assert FtpColors.gauge_arc(0, RANGES) == ("d9d9d9", "d9d9d9")
+    assert FtpColors.gauge_ring(15, RANGES) == FtpColors.zone_hex(15, RANGES)[1:]
     assert "#38813b" in FtpColors.all_colors()
 
 
 def test_block_colors():
-    ranges = [10, 20, 30, 40]
-    #a single power: its zone's start to blockSingleEnd
-    assert FtpColors.block_colors(25, 0, ranges) == ("#e0d151", FtpColors.DEFAULTS["blockSingleEnd"])
-    #a range: low power's start to high power's end
-    assert FtpColors.block_colors(5, 45, ranges) == ("#d1d1d1", "#f2463a")
-    #0 W shows in the lowest zone
-    assert FtpColors.block_colors(0, 0, ranges)[0] == "#d1d1d1"
-    css = FtpColors.block_css(25, 0, ranges)
-    assert "#e0d151" in css and FtpColors.BLOCK_TEXT in css
+    #a single power: its color to its zone's pale end
+    assert FtpColors.block_colors(25, 0, RANGES) == (FtpColors.zone_hex(25, RANGES), FtpColors.pale_hex(2))
+    #a range: low power's color to high power's
+    assert FtpColors.block_colors(5, 45, RANGES) == (FtpColors.zone_hex(5, RANGES), FtpColors.zone_hex(45, RANGES))
+    css = FtpColors.block_css(25, 0, RANGES)
+    assert FtpColors.zone_hex(25, RANGES) in css and FtpColors.BLOCK_TEXT in css
     assert FtpColors.free_ride_css().count("#") == 3
 
 
-def test_block_colors_in_musical_cadence_mode_follow_the_band():
+def test_block_colors_in_musical_cadence_mode():
     AppState.workoutMode = AppState.cadenceMode = True
-    AppState.ftpRanges[:] = FtpColors.cadence_ranges(70)
-    stops = FtpColors.cadence_scale_stops(AppState.ftpRanges)
-    start, end = FtpColors.block_colors(90, 100)
-    assert start == FtpColors.stops_color(stops, 90).name() and end == FtpColors.stops_color(stops, 100).name()
+    AppState.ftpRanges[:] = FtpColors.cadence_ranges(FtpColors.CADENCE_SCALE_BOTTOM_RPM)
+    #69 RPM is over 60: green (zone "1"), as the graph and gauges show it
+    assert FtpColors.zone_of(69) == "1"
+    assert FtpColors.block_colors(69)[0] == FtpColors.zone_hex(69, AppState.ftpRanges)
 
 
-def test_graph_brushes():
-    brushes = FtpColors.graph_brushes("past")
-    assert len(brushes) == 5 and brushes[0].alpha() == 0x88
-    assert brushes[1].name() == "#42a045"
-    AppState.graphWorkoutBrushDark = []
+def test_graph_colors():
+    past = FtpColors.graph_color(25, RANGES, "past")
+    assert past.alpha() == FtpColors.GRAPH_ALPHA and past.name() == FtpColors.zone_hex(25, RANGES)
+    #not ridden yet: greyer, more so paused
+    chroma = [FtpColors.to_oklch(FtpColors.graph_color(25, RANGES, state).name())[1]
+              for state in ("past", "upcoming", "paused")]
+    assert chroma == sorted(chroma, reverse=True)
     FtpColors.update_graph_brushes()
-    assert len(AppState.graphWorkoutBrushDark) == 5
-
-
-def test_gauge_scale_stops():
-    stops = FtpColors.gauge_scale_stops(200)
-    assert [watts for watts, _ in stops] == [70, 90, 184, 526]
-    assert stops[1][1].name() == "#00ff00"
+    assert AppState.graphWorkoutBrushDark(25, RANGES) == past
+    assert AppState.graphWorkoutBrushLight(25, RANGES) == FtpColors.graph_color(25, RANGES, "paused")
 
 
 def test_cadence_ranges():
     ranges = FtpColors.cadence_ranges(60)
-    assert len(ranges) == 4 and ranges == sorted(ranges)
-    assert ranges[-1] == FtpColors.CADENCE_SCALE_TOP_RPM
-    assert ranges[0] == pytest.approx(60 + (115 - 60)/4)
+    assert ranges == pytest.approx([60, 60 + 55/3, 60 + 110/3, 115])
+    assert FtpColors.zone_of(61, ranges) == "1" and FtpColors.zone_of(59, ranges) == "0"
     #a very high low end still leaves room for the zones
     high = FtpColors.cadence_ranges(200)
     assert high == sorted(high) and high[-1] == 115 and len(set(high)) == 4
-
-
-def test_cadence_scale_stops():
-    assert FtpColors.cadence_scale_stops([60]) == []
-    stops = FtpColors.cadence_scale_stops([70, 80, 90, 100])
-    assert [rpm for rpm, _ in stops] == [60, 70, 80, 90, 100]
-
-
-def test_stops_color():
-    stops = [(0, QColor("#000000")), (100, QColor("#ffffff"))]
-    assert FtpColors.stops_color(stops, -5).name() == "#000000"
-    assert FtpColors.stops_color(stops, 150).name() == "#ffffff"
-    assert FtpColors.stops_color(stops, 50).name() in ("#7f7f7f", "#808080")
-    assert FtpColors.stops_color([], 50).name() == "#ffffff"
-    #two stops at the same value
-    same = [(10, QColor("#000000")), (10, QColor("#ff0000"))]
-    assert FtpColors.stops_color(same, 10).name() == "#000000"
 
 
 def test_notify_watchers():
@@ -156,13 +228,17 @@ def test_notify_watchers():
             self.calls += 1
     watcher = Watcher()
     FtpColors.watch(watcher, "changed")
-    FtpColors.set_value("blockSingleEnd", "#111111")
+    FtpColors.set_value("free", "#111111")
     assert watcher.calls == 1
     FtpColors.notify_if_changed()
     assert watcher.calls == 1
     AppTheme.THEME.ftp = {}
     FtpColors.notify_if_changed()
     assert watcher.calls == 2
+    #a new background: the colors are fitted to it again
+    AppTheme.THEME.colors = theme_colors("41-dsa.json")
+    FtpColors.notify_if_changed()
+    assert watcher.calls == 3
 
 
 ###Theme
@@ -209,14 +285,14 @@ def test_map_font():
 def test_theme_json_round_trip():
     theme = AppTheme.Theme()
     theme.from_json({"fonts": {"main": {"family": "Inter"}, "bogus": {"family": "x"}},
-                     "colors": {"#AABBCC": "#DDEEFF"}, "ftpColors": {"blockSingleEnd": "#000000"},
+                     "colors": {"#AABBCC": "#DDEEFF"}, "ftpColors": {"free": "#000000"},
                      "layouts": {"old": 1}})
     assert theme.fonts["main"]["family"] == "Inter" and "bogus" not in theme.fonts
     assert theme.colors == {"#aabbcc": "#ddeeff"}
     data = theme.to_json()
     assert set(data) == {"fonts", "colors", "ftpColors"}
     assert theme.to_json("colors") == {"colors": {"#aabbcc": "#ddeeff"}}
-    assert theme.to_json("ftpColors") == {"ftpColors": {"blockSingleEnd": "#000000"}}
+    assert theme.to_json("ftpColors") == {"ftpColors": {"free": "#000000"}}
 
 
 def test_colors_in_css_and_value():
@@ -273,11 +349,11 @@ def test_default_theme_and_clear(monkeypatch):
         json.dump({"fonts": {"main": {"family": "Inter"}}, "colors": {"#333333": "#444444"}}, f)
     #part files stay on top when asked
     with open("grad.json", "w") as f:
-        json.dump({"ftpColors": {"blockSingleEnd": "#555555"}}, f)
+        json.dump({"ftpColors": {"free": "#555555"}}, f)
     AppTheme.load_file("grad.json")
     AppTheme.clear(keepParts=True)
     assert AppTheme.THEME.colors == {"#333333": "#444444"}
-    assert AppTheme.THEME.ftp == {"blockSingleEnd": "#555555"}
+    assert AppTheme.THEME.ftp == {"free": "#555555"}
     #a broken default theme falls back to the built in one, and says so
     with open(AppTheme.DEFAULT_THEME_FILE, "w") as f:
         f.write("{broken")

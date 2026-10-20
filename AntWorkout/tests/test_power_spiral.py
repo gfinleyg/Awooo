@@ -160,7 +160,7 @@ def test_ring_is_colored_by_power_and_as_thick_as_the_cadence(qapp):
     spiral.add_sample(330, 0, 250, 20)   #then coasting: no line
     spiral.set_progress(360, 600, 0, 60)
     image = drawn(spiral)
-    expected = FtpColors.stops_color(FtpColors.gauge_scale_stops(FtpColors.zone_ftp()), 250)
+    expected = FtpColors.zone_color(250, FtpColors.power_ranges())
     assert close(on_ring(spiral, image, 0.25), expected)
     assert on_ring(spiral, image, 0.25).alpha() == 255
     #nothing but the faint track where the rider coasted, and past where the workout's got to
@@ -200,9 +200,9 @@ def test_spiral_is_colored_by_the_power_ridden_and_runs_through_its_turns(qapp):
     ride(spiral, 90, 300, 100, start=45.1)
     spiral.set_progress(90, 600, 90, 90)
     image = drawn(spiral)
-    stops = FtpColors.gauge_scale_stops(FtpColors.zone_ftp())
-    assert close(on_spiral(spiral, image, 0.2), FtpColors.stops_color(stops, 120))
-    assert close(on_spiral(spiral, image, 0.8), FtpColors.stops_color(stops, 300))
+    ranges = FtpColors.power_ranges()
+    assert close(on_spiral(spiral, image, 0.2), FtpColors.zone_color(120, ranges))
+    assert close(on_spiral(spiral, image, 0.8), FtpColors.zone_color(300, ranges))
     #every turn drawn, up to and across where they meet at North
     for fraction in [k/BLOCK_TURNS + d for k in range(1, BLOCK_TURNS) for d in (-0.003, 0.003)] + [0.999]:
         assert on_spiral(spiral, image, fraction).alpha() == 255, fraction

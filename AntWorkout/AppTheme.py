@@ -9,7 +9,7 @@ Font and color overrides for the whole app, made in LayoutViewer.py and saved as
       ...
     },
     "colors": {"#9fc5d1": "#ffcc66", ...},       - original color -> replacement
-    "ftpColors": {"blocks": {"2": [...]}, ...}   - power zone colors, see FtpColors.py
+    "ftpColors": {"zones": {"2": "#e0c200"}, ...} - power zone colors, see FtpColors.py
   }
 
 The colors and the power/cadence zone gradients can also be saved and loaded on their own (see PARTS): a
@@ -106,7 +106,9 @@ class Theme:
         if part == "colors":
             self.colors = {k.lower(): v.lower() for k, v in value.items()}
         else:
-            self.ftp = copy.deepcopy(value)
+            #(older files' entries, from before each zone had one color, are dropped: the defaults stand in)
+            import FtpColors
+            self.ftp = {key: copy.deepcopy(v) for key, v in value.items() if key in FtpColors.DEFAULTS}
 
     def from_json(self, data):
         self.reset()

@@ -296,11 +296,13 @@ class MusicSelectWindow(QDialog):
         return songs
 
     def pick_random(self):
-        """Checks a random set of the analyzed songs adding up to about the minutes asked for, and moves them to
-        the top of the list in the order they'll play"""
+        """Checks a random set of the analyzed songs adding up to about the minutes asked for (spread over as many
+        cadences as it can), and moves them to the top of the list in the order they'll play"""
         durations = {p: a["duration"] for p, a in self.analyses.items() if "error" not in a}
-        picked = MusicCadence.random_selection([p for p in self.paths() if p in durations],
-                                               self.randomMinutes.value()*60, durations)
+        songs = [p for p in self.paths() if p in durations]
+        cadences = {p: MusicCadence.song_cadence(self.analyses[p], self.preferredRpm.value(), self.minSegment.value())
+                    for p in songs}
+        picked = MusicCadence.random_selection(songs, self.randomMinutes.value()*60, durations, cadences=cadences)
         if not picked:
             return
         order = {path: i for i, path in enumerate(picked)}

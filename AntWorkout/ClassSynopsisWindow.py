@@ -1166,8 +1166,8 @@ class SynopsisWindow(QWidget):
 
     #get data from the workout as it was processed
     def refresh_ftp_colors(self):
-        #the bars use AppState.graphWorkoutBrushDark, which FtpColors changes in place
-        self.workoutPowerPlot.update()
+        #the bars' colors (AppState.graphWorkoutBrushDark) are worked out again
+        self.workoutPowerPlot.recolor()
 
     def process_synopsis_data(self):
         #initialize the time data to get the required single digit offset

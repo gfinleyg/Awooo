@@ -147,18 +147,43 @@ def song_title(path):
     return os.path.splitext(os.path.basename(path))[0]
 
 
-def random_selection(songs, targetSeconds, durations, rng=None):
+#a random pick spreads its songs over cadence bands this wide (RPM)
+CADENCE_BAND_RPM = 10
+
+
+def random_selection(songs, targetSeconds, durations, rng=None, cadences=None):
     """Songs picked at random (each at most once) to come as close to targetSeconds as they can: songs are
-    added while they fit, then the leftover time is filled with whichever unused song comes closest"""
+    added while they fit, then the leftover time is filled with whichever unused song comes closest.
+    cadences ({song: rpm or None}, see song_cadence) spreads the pick over cadences: the songs are grouped into
+    CADENCE_BAND_RPM wide bands (no clear beat is a band of its own), and each song comes from whichever band
+    that still has one that fits has been picked from least (ties at random)"""
     rng = rng or random.Random()
-    pool = [s for s in songs if durations.get(s)]
-    rng.shuffle(pool)
+    cadences = cadences or {}
+    def band(song):
+        rpm = cadences.get(song)
+        return None if rpm is None else int(rpm//CADENCE_BAND_RPM)
+    bands = {}
+    for song in songs:
+        if durations.get(song):
+            bands.setdefault(band(song), []).append(song)
+    for members in bands.values():
+        rng.shuffle(members)
+    used = dict.fromkeys(bands, 0)
     picked, total = [], 0.0
-    for song in list(pool):
-        if total + durations[song] <= targetSeconds:
-            picked.append(song)
-            pool.remove(song)
-            total += durations[song]
+    while True:
+        fitting = {b: next((s for s in members if total + durations[s] <= targetSeconds), None)
+                   for b, members in bands.items()}
+        fitting = {b: s for b, s in fitting.items() if s is not None}
+        if not fitting:
+            break
+        fewest = min(used[b] for b in fitting)
+        chosen = rng.choice([b for b in fitting if used[b] == fewest])
+        song = fitting[chosen]
+        bands[chosen].remove(song)
+        used[chosen] += 1
+        picked.append(song)
+        total += durations[song]
+    pool = [s for members in bands.values() for s in members]
     #one more song if it lands closer to the target than stopping short does
     if pool and total < targetSeconds:
         best = min(pool, key=lambda s: abs(total + durations[s] - targetSeconds))
@@ -667,7 +692,20 @@ def _pulses(beats, start, end, rpm):
     return pulses
 
 
-def build_workout(songs, analyses, preferred=DEFAULT_PREFERRED_RPM, minSegmentSeconds=DEFAULT_MIN_SEGMENT_SECONDS):
+def song_cadence(analysis, preferred=DEFAULT_PREFERRED_RPM, minSegmentSeconds=DEFAULT_MIN_SEGMENT_SECONDS):
+    """A song's typical cadence: its beat segments' rpm (folded as build_workout does) averaged over their time, or
+    None if it has no clear beat"""
+    previous = None
+    weighted = seconds = 0.0
+    for start, end, bpm in song_segments(analysis, minSegmentSeconds):
+        if bpm is not None:
+            previous = fold_rpm(bpm, previous, preferred)
+            weighted += previous*(end - start)
+            seconds += end - start
+    return weighted/seconds if seconds else None
+
+
+def build_workout(songs,analyses, preferred=DEFAULT_PREFERRED_RPM, minSegmentSeconds=DEFAULT_MIN_SEGMENT_SECONDS):
     """The playlist's ride: (blocks, tracks, songStarts, pulses)
       blocks:     [(duration seconds (int), rpm or 0 for free ride)], neighbors in the same song with the same rpm
                   joined; block edges are at whole seconds of playlist time, so durations add up to the rounded
