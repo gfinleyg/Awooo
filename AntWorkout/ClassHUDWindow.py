@@ -50,9 +50,13 @@ from ClassGradeWidgets import GradeList, GradeOverlay
 #beat (AppState.musicPulses) and fade back over this long
 BEAT_SECONDS = 0.2
 
-#the nested circles in the power gauge's middle show the power over this many seconds: the outermost the
-#power now, the innermost the power this long ago (see set_power_rings)
-POWER_RING_SECONDS = 4
+#the nested circles in the power gauge's middle show the power over the last while: the outermost the power now,
+#each one in from it the power this many seconds before the one outside it (see set_power_rings)
+POWER_RING_SECONDS = 3
+#as many rings as fit in the gauge's middle at its size on screen (the screen's resolution and where the gauge sits
+#on it) with each at least this wide, so a bigger gauge shows further back; never fewer than POWER_RING_MIN
+POWER_RING_MIN_PX = 6
+POWER_RING_MIN = 3
 
 #Space starts a workout and then pauses it: it doesn't pause for this long after the start
 SPACE_PAUSE_GUARD_SECONDS = 0.5
@@ -74,16 +78,17 @@ def new_power_gauge():
     widget.fit_value_in_center = True #(fitted, the reading is smaller than the default size: the units keep theirs)
     #paler than the cadence gauge's only enough for the reading over them: the innermost shows the power back then
     widget.center_rings_pale = (0.1, 0.4)
+    widget.center_ring_count = POWER_RING_MIN
+    widget.center_ring_min_px = POWER_RING_MIN_PX
     return gauge
 
 
 def set_power_rings(gauge):
     """The power gauge's nested circles: each the band's color at the power ridden a moment ago, the
-    outermost now through to the innermost POWER_RING_SECONDS ago"""
+    outermost now, each one in POWER_RING_SECONDS further back"""
     widget = gauge.ui.widget
     ranges = FtpColors.power_ranges() #(power zones, in Musical Cadence Mode too)
-    count = widget.CENTER_RING_COUNT
-    powers = [widget.reading] + [power_ago(POWER_RING_SECONDS*i/(count - 1)) for i in range(1, count)]
+    powers = [widget.reading] + [power_ago(POWER_RING_SECONDS*i) for i in range(1, widget.ring_count())]
     widget.set_center_rings([FtpColors.zone_color(power, ranges) for power in powers])
 
 
@@ -350,8 +355,9 @@ class HUDWindow(QWidget):
             self.hudLayout.addWidget(self.currentBlockLayoutWidget,0,6,4,16, Qt.AlignmentFlag.AlignTop)
         
         self.wattGaugeDisplay = new_power_gauge()
+        #(colored for as many rings as fit wherever it ends up, see update_power_rings)
+        self.wattGaugeDisplay.ui.widget.ringCountChanged.connect(self.update_power_rings)
         self.gaugeChooser() #the colored band, its colors at set % of FTP
-        self.update_power_rings()
         if self.cadenceMode:
             #in the cadence gauge's usual corner; the cadence gauge is the big one in the middle
             self.wattGaugeDisplay.setMaximumSize(220, 165)
@@ -363,6 +369,7 @@ class HUDWindow(QWidget):
             self.hudLayout.addWidget(self.wattGaugeDisplay,4,7,16,15)
         else:
             self.hudLayout.addWidget(self.wattGaugeDisplay,0,4,20,24)
+        self.update_power_rings()
         if AppState.shows_cadence():
             #chainring spins at the current cadence
             self.cadenceGaugeDisplay = Gauge(self, 'Chainring.svg', spin=True)

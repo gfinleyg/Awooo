@@ -40,6 +40,8 @@ class AnalogGaugeWidget(QWidget):
     
     """
     valueChanged = pyqtSignal(int)
+    #a resize changed how many center rings fit (center_ring_min_px): whatever colors them sets them again for it
+    ringCountChanged = pyqtSignal(int)
 
     def __init__(self):
         super(AnalogGaugeWidget, self).__init__()
@@ -1442,7 +1444,12 @@ class AnalogGaugeWidget(QWidget):
     ################################################################################################
     # CENTER POINTER
     ################################################################################################
-    CENTER_RING_COUNT = 4
+    #how many nested circles (set_center_rings): this many, or with center_ring_min_px set as many as fit in the
+    #gauge's center at its size on screen with each ring at least that wide (and never fewer than this many)
+    center_ring_count = 4
+    center_ring_min_px = None
+    #the rings fill the center from its edge in to this much of its radius (the innermost a disc that size)
+    CENTER_RING_SPREAD = 0.6
 
     #how much the rings are blended toward white, outermost and innermost (the reading is drawn over the middle)
     center_rings_pale = (0.15, 0.7)
@@ -1459,6 +1466,12 @@ class AnalogGaugeWidget(QWidget):
             self.center_rings = rings
             self.update_frame()
 
+    def ring_count(self):
+        if not self.center_ring_min_px:
+            return self.center_ring_count
+        radius = self.widget_diameter/self.big_needle_center_size
+        return max(self.center_ring_count, 1 + int(radius*self.CENTER_RING_SPREAD/self.center_ring_min_px))
+
     def draw_center_rings(self, painter, radius):
         colors, level = self.center_rings
         white = QColor("#ffffff")
@@ -1470,17 +1483,19 @@ class AnalogGaugeWidget(QWidget):
             i = min(int(at), len(colors) - 2)
             return mix(colors[i], colors[i + 1], at - i)
         paleOuter, paleInner = self.center_rings_pale
-        count = self.CENTER_RING_COUNT
+        count = self.ring_count()
+        band = radius*self.CENTER_RING_SPREAD/(count - 1) #(each ring's width)
         for i in range(count):
             t = i/(count - 1) #outermost 0 to innermost 1
-            r = radius*(1 - 0.6*t)*(1 + 0.04*level)
+            r = radius*(1 - self.CENTER_RING_SPREAD*t)*(1 + 0.04*level)
             #paler toward the middle (the reading is drawn over it), less pale on the beat
             color = mix(shade(t), white, (paleOuter + (paleInner - paleOuter)*t)*(1 - 0.6*level))
             grad = QRadialGradient(QPointF(0, 0), r)
             grad.setColorAt(0, color.lighter(112))
             grad.setColorAt(1, color.darker(118))
             painter.setBrush(grad)
-            painter.setPen(QPen(color.darker(140), max(1.0, radius*0.02)))
+            #(outlines thin enough to leave narrow rings their color)
+            painter.setPen(QPen(color.darker(140), max(1.0, min(radius*0.02, band*0.15))))
             painter.drawEllipse(QPointF(0, 0), r, r)
 
     def draw_big_needle_center_point(self, diameter=30):
@@ -1611,8 +1626,11 @@ class AnalogGaugeWidget(QWidget):
     # ON WINDOW RESIZE
     ################################################################################################
     def resizeEvent(self, event):
+        count = self.ring_count()
         self.rescale_method()
         self.paintCacheDirty = True
+        if self.ring_count() != count:
+            self.ringCountChanged.emit(self.ring_count())
 
     #any change that calls update() redraws the whole gauge, its cached face included
     #(args ignored: Qt's own calls pass some)
