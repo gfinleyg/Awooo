@@ -51,7 +51,8 @@ from ClassGradeWidgets import GradeList, GradeOverlay
 BEAT_SECONDS = 0.2
 
 #the nested circles in the power gauge's middle show the power over the last while: the outermost the power now,
-#each one in from it the power this many seconds before the one outside it (see set_power_rings)
+#each one in from it the average power over this many seconds, just before the time the one outside it covers
+#(see set_power_rings)
 POWER_RING_SECONDS = 3
 #as many rings as fit in the gauge's middle at its size on screen (the screen's resolution and where the gauge sits
 #on it) with each at least this wide, so a bigger gauge shows further back; never fewer than POWER_RING_MIN
@@ -84,12 +85,24 @@ def new_power_gauge():
 
 
 def set_power_rings(gauge):
-    """The power gauge's nested circles: each the band's color at the power ridden a moment ago, the
-    outermost now, each one in POWER_RING_SECONDS further back"""
+    """The power gauge's nested circles, each the band's color at a power: the outermost the power now, then
+    the average over the last POWER_RING_SECONDS, then over the POWER_RING_SECONDS before that, and so on in"""
     widget = gauge.ui.widget
     ranges = FtpColors.power_ranges() #(power zones, in Musical Cadence Mode too)
-    powers = [widget.reading] + [power_ago(POWER_RING_SECONDS*i) for i in range(1, widget.ring_count())]
+    powers = [widget.reading] + [power_average(POWER_RING_SECONDS*(i - 1), POWER_RING_SECONDS*i)
+                                 for i in range(1, widget.ring_count())]
     widget.set_center_rings([FtpColors.zone_color(power, ranges) for power in powers])
+
+
+def power_average(newest, oldest):
+    """The average power read from oldest to newest seconds ago (AppState.savedPowerVals, as the gauge showed it);
+    with no reading in that time, the power then (see power_ago)"""
+    times, watts = AppState.savedPowerVals
+    first = bisect.bisect_right(times, AppState.secondsPassed - oldest)
+    last = bisect.bisect_right(times, AppState.secondsPassed - newest)
+    if last == first:
+        return power_ago((newest + oldest)/2)
+    return sum(watts[first:last])/(last - first)
 
 
 def power_ago(seconds):
