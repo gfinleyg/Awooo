@@ -132,6 +132,7 @@ class MusicSelectWindow(QDialog):
         buttons = QHBoxLayout()
         self.okButton = QPushButton("Ride These Songs")
         self.okButton.clicked.connect(self.accept)
+        self.okButton.setDefault(True) #(Enter while it's disabled does nothing, rather than press another button)
         cancelButton = QPushButton("Cancel")
         cancelButton.clicked.connect(self.reject)
         buttons.addWidget(self.okButton)
@@ -139,16 +140,30 @@ class MusicSelectWindow(QDialog):
         layout.addLayout(buttons)
 
         #keys (Ctrl shows them; Esc is the X and Cancel; Space checks the current song with the list focused).
-        #Enter in the minutes box picks random songs
+        #Enter rides wherever the focus is, a settings box included
+        boxes = (self.randomMinutes, self.preferredRpm, self.minSegment)
         for text, key, label in (("Add Folder", Qt.Key.Key_D, "D"), ("Add Songs", Qt.Key.Key_A, "A"),
                                  ("Add Playlist (.m3u)", Qt.Key.Key_P, "P"), ("Remove", Qt.Key.Key_Delete, "Del"),
                                  ("Clear", Qt.Key.Key_C, "C")):
             KeyShortcuts.add(addButtons[text], key, label=label)
         KeyShortcuts.add(self.randomButton, Qt.Key.Key_R, label="R")
-        KeyShortcuts.add(self.randomButton, KeyShortcuts.ENTER, field=self.randomMinutes)
         KeyShortcuts.add(allButton, Qt.Key.Key_K, label="K")
         KeyShortcuts.add(noneButton, Qt.Key.Key_U, label="U")
         KeyShortcuts.add(self.okButton, KeyShortcuts.ENTER, label="Enter")
+        for box in boxes:
+            KeyShortcuts.add(self.okButton, KeyShortcuts.ENTER, field=box)
+        #the settings: +/- the minutes (5 at a time), ,/. the preferred cadence, [/] the shortest block (none of these
+        #keys are kept by the list or the boxes, so they work whatever's focused; ↑/↓ stay with the list)
+        for box, step, upKeys, downKeys, label in (
+                (self.randomMinutes, 5, (Qt.Key.Key_Plus, Qt.Key.Key_Equal), (Qt.Key.Key_Minus, Qt.Key.Key_Underscore),
+                 "+ −"),
+                (self.preferredRpm, 1, (Qt.Key.Key_Period, Qt.Key.Key_Greater), (Qt.Key.Key_Comma, Qt.Key.Key_Less),
+                 ", ."),
+                (self.minSegment, 1, (Qt.Key.Key_BracketRight, Qt.Key.Key_BraceRight),
+                 (Qt.Key.Key_BracketLeft, Qt.Key.Key_BraceLeft), "[ ]")):
+            for keys, sign in ((upKeys, 1), (downKeys, -1)):
+                KeyShortcuts.add(box, keys, label=label if sign > 0 else None, repeat=True,
+                                 action=lambda b=box, s=step*sign: b.stepBy(s))
         KeyShortcuts.add(self.songList, Qt.Key.Key_Up, label="↑ ↓", place="inside", repeat=True,
                          action=lambda: KeyShortcuts.step_list(self.songList, -1))
         KeyShortcuts.add(self.songList, Qt.Key.Key_Down, repeat=True,
