@@ -195,9 +195,9 @@ def test_block_colors():
 def test_block_colors_in_musical_cadence_mode():
     AppState.workoutMode = AppState.cadenceMode = True
     AppState.ftpRanges[:] = FtpColors.cadence_ranges(FtpColors.CADENCE_SCALE_BOTTOM_RPM)
-    #69 RPM is over 60: green (zone "1"), as the graph and gauges show it
-    assert FtpColors.zone_of(69) == "1"
-    assert FtpColors.block_colors(69)[0] == FtpColors.zone_hex(69, AppState.ftpRanges)
+    #50 RPM is over 40: green (zone "1"), as the graph and gauges show it
+    assert FtpColors.zone_of(50) == "1"
+    assert FtpColors.block_colors(50)[0] == FtpColors.zone_hex(50, AppState.ftpRanges)
 
 
 def test_graph_colors():

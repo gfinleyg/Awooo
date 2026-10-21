@@ -168,7 +168,7 @@ def zone_span(zone, ranges):
 
 #Musical Cadence Mode's zones: zone "0" (grey) is under CADENCE_SCALE_BOTTOM_RPM, the top zone (red) from
 #CADENCE_SCALE_TOP_RPM, the zones between them evenly spread
-CADENCE_SCALE_BOTTOM_RPM = 60
+CADENCE_SCALE_BOTTOM_RPM = 40
 CADENCE_SCALE_TOP_RPM = 115
 
 
