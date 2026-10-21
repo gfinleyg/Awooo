@@ -8,9 +8,10 @@ the middle for the grade (ClassGradeWidgets.GradeOverlay asks inner_circle() whe
   the spiral    inside it, BLOCK_TURNS turns winding in clockwise from North: the block being ridden, the same length
                 whatever the block (an interval's every rep of every sub-block along it, one after the other)
 
-Both are drawn with what was ridden along them: as thick as the cadence (nothing at CADENCE_MIN_RPM or under, the whole
-lane from CADENCE_MAX_RPM; the whole lane where there was no cadence to show), and colored by the power, its power zone's color
-(FtpColors.zone_color, power zones in Musical Cadence Mode too).
+Both are drawn with what was ridden along them, a bar every 2 degrees (one a bin) with GAP_DEGREES between bars: each
+as wide as the cadence (nothing at CADENCE_MIN_RPM or under, the whole lane from CADENCE_MAX_RPM; the whole lane where
+there was no cadence to show), in the color of the power's zone (FtpColors.zone_color, power zones in Musical Cadence
+Mode too).
 
 The HUD sets how far along the workout and the block are (set_progress) and adds the power and cadence ridden as it
 goes (add_sample); each keeps them in bins, BINS a turn.
@@ -39,8 +40,8 @@ TRACK_OPACITY = 0.09
 BLINK_OPACITY = {"default": (1.0, 1.0), "block": (1.0, 0.13), "workout": (0.13, 0.53)}
 #an end has to move this far (px) before it's drawn again
 REDRAW_PX = 0.5
-#a finished spiral turn runs this far on under the next one, so no seam shows where they meet
-OVERLAP = math.radians(0.5)
+#between one bar and the next
+GAP_DEGREES = 0.6
 
 
 def cadence_share(rpm):
@@ -116,9 +117,11 @@ class PowerSpiral(QWidget):
         self._themeColors = (TRACK_COLOR,) #(LayoutViewer lists it with the colors a theme can change)
         self.blink = "default"
         self.drawnEnds = None #the ends (px along) when last drawn, see set_progress
-        #what's been worked out, until it changes: {name: (key, value)}; and all but the spiral's moving turn, drawn
+        #what's been worked out, until it changes: {name: (key, value)}; all but the spiral's moving turn, drawn; and
+        #that turn's finished bars, drawn
         self.cache = {}
         self.still = (None, None)
+        self.movingDone = (None, None)
         self.clear()
 
     ###what's shown
@@ -233,32 +236,49 @@ class PowerSpiral(QWidget):
             path.closeSubpath()
         return path
 
-    def width_along(self, g, timeline):
-        """widthAt(angle) along timeline, a turn of its bins each time round the circle"""
+    def bar_widths(self, g, timeline):
+        """widthOf(bin): how wide timeline's bin's bar is (0: nothing ridden there yet)"""
         values, lane, last = timeline.values(), g["lane"], timeline.bins - 1
-        def widthAt(theta):
-            #between the middles of the bins either side
-            x = min(float(last), max(0.0, theta/(2*math.pi)*BINS - 0.5))
-            j = min(last - 1, int(x))
-            a, b = values[j], values[j + 1]
-            if a[0] is None: #nothing ridden here yet
-                return 0.0
-            if b[0] is None:
-                return lane*cadence_share(a[1])
-            return lane*(cadence_share(a[1])*(1 - (x - j)) + cadence_share(b[1])*(x - j))
-        return widthAt
+        def widthOf(j):
+            power, cadence = values[min(j, last)]
+            return 0.0 if power is None else lane*cadence_share(cadence)
+        return widthOf
+
+    def bars(self, g, radiusAt, start, end, widthOf):
+        """The bars from angle start to end (radians clockwise from North, 2 pi a turn), a bin's every 2 degrees: each
+        a line across the lane, its middle radiusAt(angle) from the center, widthOf(bin) px wide, square; the last one
+        cut off where end is"""
+        center = g["center"]
+        def at(theta, offset):
+            r = radiusAt(theta) + offset
+            return QPointF(center.x() + r*math.sin(theta), center.y() - r*math.cos(theta))
+        step, gap = 2*math.pi/BINS, math.radians(GAP_DEGREES)/2
+        path = QPainterPath()
+        j = int(start/step + 1e-9)
+        while j*step < end - 1e-9:
+            a, b = max(start, j*step + gap), min(end, (j + 1)*step - gap)
+            width = widthOf(j)
+            if width > 0.3 and b > a:
+                angles = (a, (a + b)/2, b)
+                path.addPolygon(QPolygonF([at(t, width/2) for t in angles] + [at(t, -width/2) for t in angles[::-1]]))
+                path.closeSubpath()
+            j += 1
+        return path
 
     def power_brush(self, g, timeline, firstBin, fraction, ranges):
-        """A turn's colors round the circle, from timeline's bins from firstBin on, fraction of the way round (Qt's
-        conical gradient runs anticlockwise from North, so a point a fraction f of the way round clockwise is at
-        1 - f)"""
+        """A turn's colors round the circle, each bar its bin's power's zone color, from timeline's bins from firstBin on,
+        fraction of the way round (Qt's conical gradient runs anticlockwise from North, so a point a fraction f of the way
+        round clockwise is at 1 - f; the colors change in the gaps between bars)"""
         values = timeline.values()
         gradient = QConicalGradient(g["center"], 90)
         lastPower = next((p for p, _ in values if p is not None), 0)
-        for j in range(max(1, min(BINS, math.ceil(fraction*BINS))) + 1):
+        gap = GAP_DEGREES/2/360
+        for j in range(max(1, min(BINS, math.ceil(fraction*BINS)))):
             power = values[min(firstBin + j, timeline.bins - 1)][0]
             lastPower = lastPower if power is None else power
-            gradient.setColorAt(min(1.0, max(0.0, 1 - min(fraction, j/BINS))), FtpColors.zone_color(lastPower, ranges))
+            color = FtpColors.zone_color(lastPower, ranges)
+            for f in (j/BINS + gap, (j + 1)/BINS - gap):
+                gradient.setColorAt(min(1.0, max(0.0, 1 - f)), color)
         return QBrush(gradient)
 
     def ring_key(self, g, ends):
@@ -273,39 +293,47 @@ class PowerSpiral(QWidget):
         fraction = self.turn_fraction(k)
         return (g["key"], self.block.serial, self.block.duration, k, ends[1] if 0 < fraction < 1 else fraction)
 
-    def paint_ring(self, painter, g, ends, colorsKey, ranges):
-        fraction = self.workout.fraction()
+    def paint_ridden(self, painter, name, g, timeline, radiusAt, turn, fraction, colorsKey, ranges, parts=("done", "tip")):
+        """timeline's bars on its turn (the ring's one, or one of the spiral's), fraction of the way round it: the
+        finished bars ("done", only worked out again once there's another) and the one the end's in ("tip")"""
         if fraction <= 0:
             return
-        key = self.ring_key(g, ends)
-        def make():
-            widthAt = self.width_along(g, self.workout)
-            if fraction >= 1:
-                return self.full_ring(g, widthAt)
-            #(no round start: the end meets it)
-            return self.ribbon(g, lambda theta: g["ringR"], 0, 2*math.pi*fraction, widthAt, False, True)
-        painter.setOpacity(BLINK_OPACITY.get(self.blink, BLINK_OPACITY["default"])[0])
-        painter.setBrush(self.cached("ringBrush", key + (colorsKey,),
-                                     lambda: self.power_brush(g, self.workout, 0, fraction, ranges)))
-        painter.drawPath(self.cached("ring", key, make))
+        step = 2*math.pi/BINS
+        start, end = 2*math.pi*turn, 2*math.pi*(turn + fraction)
+        done = int(fraction*BINS + 1e-9) #(bars finished on this turn)
+        base = (g["key"], timeline.serial, timeline.duration, turn, done)
+        widths = self.bar_widths(g, timeline)
+        tipPower = timeline.values()[turn*BINS + min(done, BINS - 1)][0]
+        tipColor = None if tipPower is None else FtpColors.zone_color(tipPower, ranges).rgba()
+        painter.setBrush(self.cached((name, "brush"), base + (tipColor, colorsKey),
+                                     lambda: self.power_brush(g, timeline, turn*BINS, fraction, ranges)))
+        if "done" in parts:
+            painter.drawPath(self.cached((name, "done"), base,
+                                         lambda: self.bars(g, radiusAt, start, start + done*step, widths)))
+        if "tip" in parts and done < BINS:
+            painter.drawPath(self.bars(g, radiusAt, start + done*step, end, widths))
 
-    def paint_turn(self, painter, g, k, ends, colorsKey, ranges):
+    def paint_ring(self, painter, g, colorsKey, ranges):
+        #(all the way round at the end: the last bar meets the first)
+        painter.setOpacity(BLINK_OPACITY.get(self.blink, BLINK_OPACITY["default"])[0])
+        self.paint_ridden(painter, "ring", g, self.workout, lambda theta: g["ringR"], 0, self.workout.fraction(),
+                          colorsKey, ranges)
+
+    def paint_turn(self, painter, g, k, colorsKey, ranges, parts=("done", "tip")):
         """The spiral's turn k, as far as the block's got along it"""
-        fraction = self.turn_fraction(k)
-        if fraction <= 0:
-            return
-        key = self.turn_key(g, k, ends)
-        last = k == BLOCK_TURNS - 1
-        def make():
-            start, end = 2*math.pi*k, 2*math.pi*(k + fraction)
-            if fraction >= 1 and not last:
-                end += OVERLAP
-            return self.ribbon(g, self.spiral_radius(g), start, end, self.width_along(g, self.block), k == 0,
-                               fraction < 1 or last)
         painter.setOpacity(BLINK_OPACITY.get(self.blink, BLINK_OPACITY["default"])[1])
-        painter.setBrush(self.cached(("turnBrush", k), key + (colorsKey,),
-                                     lambda: self.power_brush(g, self.block, k*BINS, fraction, ranges)))
-        painter.drawPath(self.cached(("turn", k), key, make))
+        self.paint_ridden(painter, ("turn", k), g, self.block, self.spiral_radius(g), k, self.turn_fraction(k),
+                          colorsKey, ranges, parts)
+
+    def layer(self, ratio):
+        """A see-through picture the widget's size to draw into, and its painter"""
+        picture = QPixmap(round(self.width()*ratio), round(self.height()*ratio))
+        picture.setDevicePixelRatio(ratio)
+        picture.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(picture)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        return picture, painter
 
     def paintEvent(self, event):
         g = self.geometry_now()
@@ -322,27 +350,30 @@ class PowerSpiral(QWidget):
         stillKey = (g["key"], ratio, self.blink, active, colorsKey, trackColor.rgba(), self.ring_key(g, ends),
                     tuple(self.turn_key(g, k, ends) for k in range(BLOCK_TURNS) if k != active))
         if self.still[0] != stillKey:
-            still = QPixmap(round(self.width()*ratio), round(self.height()*ratio))
-            still.setDevicePixelRatio(ratio)
-            still.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(still)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.setPen(Qt.PenStyle.NoPen)
+            still, painter = self.layer(ratio)
             painter.setBrush(trackColor)
             lane = g["lane"]
             painter.drawPath(self.cached("track", g["key"], lambda: self.full_ring(g, lambda t: lane).united(
                 self.ribbon(g, self.spiral_radius(g), 0, 2*math.pi*BLOCK_TURNS, lambda t: lane, True, True))))
-            self.paint_ring(painter, g, ends, colorsKey, ranges)
-            #(each turn under the one after it: a finished turn runs on under the next)
+            self.paint_ring(painter, g, colorsKey, ranges)
             for k in range(BLOCK_TURNS):
                 if k != active:
-                    self.paint_turn(painter, g, k, ends, colorsKey, ranges)
+                    self.paint_turn(painter, g, k, colorsKey, ranges)
             painter.end()
             self.still = (stillKey, still)
+        #and the turn being ridden's finished bars, until another's finished: only the bar the end's in drawn every time
+        doneKey = (g["key"], ratio, self.blink, colorsKey, self.block.serial, self.block.duration, active,
+                   int(self.turn_fraction(active)*BINS + 1e-9))
+        if self.movingDone[0] != doneKey:
+            movingDone, painter = self.layer(ratio)
+            self.paint_turn(painter, g, active, colorsKey, ranges, ("done",))
+            painter.end()
+            self.movingDone = (doneKey, movingDone)
         painter = QPainter(self)
         painter.drawPixmap(0, 0, self.still[1])
+        painter.drawPixmap(0, 0, self.movingDone[1])
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
-        self.paint_turn(painter, g, active, ends, colorsKey, ranges)
+        self.paint_turn(painter, g, active, colorsKey, ranges, ("tip",))
         painter.end()
         self.drawnEnds = ends

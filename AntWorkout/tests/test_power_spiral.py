@@ -120,17 +120,29 @@ def at(image, g, theta, r):
     return image.pixelColor(round(g["center"].x() + r*math.sin(theta)), round(g["center"].y() - r*math.cos(theta)))
 
 
+def bar_middle(theta):
+    """The middle of the bar at angle theta (not the gap beside it)"""
+    step = 2*math.pi/BINS
+    return (math.floor(theta/step) + 0.5)*step
+
+
 def on_ring(spiral, image, fraction, offset=0.0):
-    """The image's color on the ring's middle (or offset from it), fraction of the way round"""
+    """The image's color on the ring's middle (or offset from it), on the bar fraction of the way round"""
     g = spiral.geometry_now()
-    return at(image, g, 2*math.pi*fraction, g["ringR"] + offset)
+    return at(image, g, bar_middle(2*math.pi*fraction), g["ringR"] + offset)
 
 
 def on_spiral(spiral, image, fraction):
-    """The image's color on the spiral's middle, fraction of the way along it"""
+    """The image's color on the spiral's middle, on the bar fraction of the way along it"""
     g = spiral.geometry_now()
-    theta = 2*math.pi*BLOCK_TURNS*fraction
+    theta = bar_middle(2*math.pi*BLOCK_TURNS*fraction)
     return at(image, g, theta, spiral.spiral_radius(g)(theta))
+
+
+def in_gap(spiral, image, fraction):
+    """The image's color between the ring's bars, fraction of the way round"""
+    g = spiral.geometry_now()
+    return at(image, g, round(2*math.pi*fraction/(2*math.pi/BINS))*2*math.pi/BINS, g["ringR"])
 
 
 def drawn(spiral):
@@ -168,6 +180,16 @@ def test_ring_is_colored_by_power_and_as_thick_as_the_cadence(qapp):
     assert on_ring(spiral, image, 0.8).alpha() < 60
 
 
+def test_bars_have_gaps_between_them(qapp):
+    """Each 2 degrees its own bar, square, with a gap before the next (the faint track shows through it)"""
+    spiral = spiral_of((600, 600))
+    ride(spiral, 300, 150, 110, block=False)
+    spiral.set_progress(300, 600, 0, 60)
+    image = drawn(spiral)
+    assert on_ring(spiral, image, 0.2).alpha() == 255
+    assert in_gap(spiral, image, 0.2).alpha() < 120
+
+
 def test_finished_ring_meets_itself(qapp):
     spiral = spiral_of((300, 300))
     ride(spiral, 600, 150, 110, block=False)
@@ -195,7 +217,7 @@ def test_spiral_is_the_same_length_whatever_the_block(qapp):
 
 def test_spiral_is_colored_by_the_power_ridden_and_runs_through_its_turns(qapp):
     AppState.ftp = "200"
-    spiral = spiral_of((300, 300), block=90)
+    spiral = spiral_of((600, 600), block=90) #(big enough that a bar on the inner turns is a few pixels across)
     ride(spiral, 45, 120, 100)
     ride(spiral, 90, 300, 100, start=45.1)
     spiral.set_progress(90, 600, 90, 90)
