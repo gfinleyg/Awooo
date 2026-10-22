@@ -2162,7 +2162,12 @@ class HUDWindow(QWidget):
                 self.workoutPowerPlot.setData(x=self.timeGraphList,y=self.powerGraphList,ranges=AppState.ftpRanges,colors=AppState.graphWorkoutBrushLight)
             else:
                 self.workoutPowerPlot.setData(x=self.timeGraphList,y=self.powerGraphList,ranges=AppState.ftpRanges,colors=AppState.graphWorkoutBrushMid)
-            self.workoutPowerCompletedPlot.setData(x=AppState.workoutPowerRequestsSeconds[self.pastPowerIndex:],
+            #the oldest completed block starts no earlier than the sensor curves' cutoff (see ClassAntDevicesPoller),
+            #so no bars show left of where the curves end
+            completedSeconds = AppState.workoutPowerRequestsSeconds[self.pastPowerIndex:]
+            if completedSeconds:
+                completedSeconds[0] = max(completedSeconds[0], diff)
+            self.workoutPowerCompletedPlot.setData(x=completedSeconds,
                                                     y=AppState.workoutPowerRequestsWatts[self.pastPowerIndex:],
                                                     ranges=AppState.ftpRanges,colors=AppState.graphWorkoutBrushDark)
         #update produced values (power (blue), hr (red), cadence (yellow)) plots based on MainWindow lists;
