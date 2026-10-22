@@ -1,5 +1,5 @@
 """The HUD's spiral (ClassPowerSpiral.py): the workout's ring and the block's spiral, what was ridden along them, where
-everything is drawn, the line's thickness from the cadence and its color from the power"""
+everything is drawn, the cadence plotted across the lane and filled under in the power's color"""
 
 import math
 
@@ -24,7 +24,7 @@ def fresh_theme():
     FtpColors._values.clear()
 
 
-###Cadence to thickness
+###Cadence to height
 def test_cadence_share():
     assert cadence_share(0) == 0
     assert cadence_share(39) == 0
@@ -32,13 +32,13 @@ def test_cadence_share():
     assert cadence_share((ClassPowerSpiral.CADENCE_MIN_RPM + ClassPowerSpiral.CADENCE_MAX_RPM)/2) == pytest.approx(0.5)
     assert cadence_share(ClassPowerSpiral.CADENCE_MAX_RPM) == 1
     assert cadence_share(140) == 1
-    #no cadence to show: the whole lane
+    #no cadence to show: the lane's outer edge
     assert cadence_share(None) == 1
 
 
 ###A timeline's bins
 def test_timeline_bins_average_and_carry_on():
-    timeline = Timeline(180) #a second a bin
+    timeline = Timeline(BINS) #a second a bin
     timeline.add(0.2, 100, 80)
     timeline.add(0.7, 200, 90)
     timeline.add(5.5, 300, None)
@@ -121,28 +121,22 @@ def at(image, g, theta, r):
 
 
 def bar_middle(theta):
-    """The middle of the bar at angle theta (not the gap beside it)"""
+    """The middle of the bin at angle theta"""
     step = 2*math.pi/BINS
     return (math.floor(theta/step) + 0.5)*step
 
 
 def on_ring(spiral, image, fraction, offset=0.0):
-    """The image's color on the ring's middle (or offset from it), on the bar fraction of the way round"""
+    """The image's color on the ring's middle (or offset from it), on the bin fraction of the way round"""
     g = spiral.geometry_now()
     return at(image, g, bar_middle(2*math.pi*fraction), g["ringR"] + offset)
 
 
 def on_spiral(spiral, image, fraction):
-    """The image's color on the spiral's middle, on the bar fraction of the way along it"""
+    """The image's color on the spiral's middle, on the bin fraction of the way along it"""
     g = spiral.geometry_now()
     theta = bar_middle(2*math.pi*BLOCK_TURNS*fraction)
     return at(image, g, theta, spiral.spiral_radius(g)(theta))
-
-
-def in_gap(spiral, image, fraction):
-    """The image's color between the ring's bars, fraction of the way round"""
-    g = spiral.geometry_now()
-    return at(image, g, round(2*math.pi*fraction/(2*math.pi/BINS))*2*math.pi/BINS, g["ringR"])
 
 
 def drawn(spiral):
@@ -169,7 +163,7 @@ def test_ring_is_colored_by_power_and_as_thick_as_the_cadence(qapp):
     AppState.ftp = "200"
     spiral = spiral_of((300, 300))
     ride(spiral, 300, 250, 110)   #the first half spun at full width
-    spiral.add_sample(330, 0, 250, 20)   #then coasting: no line
+    spiral.add_sample(330, 0, 250, 20)   #then coasting: only the line, on the lane's inner edge
     spiral.set_progress(360, 600, 0, 60)
     image = drawn(spiral)
     expected = FtpColors.zone_color(250, FtpColors.power_ranges())
@@ -180,14 +174,22 @@ def test_ring_is_colored_by_power_and_as_thick_as_the_cadence(qapp):
     assert on_ring(spiral, image, 0.8).alpha() < 60
 
 
-def test_bars_have_gaps_between_them(qapp):
-    """Each 2 degrees its own bar, square, with a gap before the next (the faint track shows through it)"""
+def test_filled_under_the_cadence_line_see_through_above(qapp):
+    """Halfway between CADENCE_MIN_RPM and CADENCE_MAX_RPM: the line across the lane's middle, the power's color
+    under it, nothing but the faint track over it, and no gaps along it"""
+    AppState.ftp = "200"
     spiral = spiral_of((600, 600))
-    ride(spiral, 300, 150, 110, block=False)
+    ride(spiral, 300, 150, (ClassPowerSpiral.CADENCE_MIN_RPM + ClassPowerSpiral.CADENCE_MAX_RPM)/2, block=False)
     spiral.set_progress(300, 600, 0, 60)
     image = drawn(spiral)
-    assert on_ring(spiral, image, 0.2).alpha() == 255
-    assert in_gap(spiral, image, 0.2).alpha() < 120
+    lane = spiral.geometry_now()["lane"]
+    fill = FtpColors.zone_color(150, FtpColors.power_ranges())
+    for fraction in (0.1, 0.2, 0.2 + 0.5/BINS, 0.3):
+        under = on_ring(spiral, image, fraction, -lane/4)
+        assert under.alpha() == 255 and close(under, fill), fraction
+        assert on_ring(spiral, image, fraction, lane/4).alpha() < 60, fraction
+    #the line darker than what's under it
+    assert on_ring(spiral, image, 0.2).lightness() < fill.lightness() - 40
 
 
 def test_finished_ring_meets_itself(qapp):
@@ -262,7 +264,7 @@ def test_a_new_block_is_drawn_as_its_own(qapp):
     spiral.set_progress(0, 600, 50, 100)
     assert on_spiral(spiral, drawn(spiral), 0.25).alpha() == 255
     spiral.set_block(100)
-    ride(spiral, 50, 200, 20)   #(coasting: no line)
+    ride(spiral, 50, 200, 20)   #(coasting: only the line, on the lane's inner edge)
     spiral.set_progress(0, 600, 50, 100)
     assert on_spiral(spiral, drawn(spiral), 0.25).alpha() < 60
 
@@ -282,9 +284,9 @@ def test_redrawn_only_when_an_end_moves_enough_to_see(qapp, monkeypatch):
 
 ###What the HUD gives it
 @pytest.mark.parametrize("cadenceSensor, powerAt, cadenceAt, expected", [
-    (False, 9.5, None, None),   #no cadence sensor: the whole lane
+    (False, 9.5, None, None),   #no cadence sensor: the lane's outer edge
     (True, 9.5, 9.5, 90),       #both coming in: the cadence
-    (True, 9.5, 2.0, None),     #the cadence sensor's gone quiet, the power hasn't: the whole lane
+    (True, 9.5, 2.0, None),     #the cadence sensor's gone quiet, the power hasn't: the lane's outer edge
     (True, 2.0, 2.0, 0),        #both quiet: not pedaling, no line
 ])
 def test_hud_sample_cadence(cadenceSensor, powerAt, cadenceAt, expected):
@@ -296,9 +298,9 @@ def test_hud_sample_cadence(cadenceSensor, powerAt, cadenceAt, expected):
     AppState.savedPowerVals = ([powerAt], [200])
     AppState.savedCadenceVals = ([cadenceAt], [90]) if cadenceAt is not None else ([], [])
     got = []
-    hud = SimpleNamespace(workoutSecondsPassed=5.0,
+    hud = SimpleNamespace(workoutSecondsPassed=5.0, SPIRAL_CADENCE_AVERAGE_SECONDS=1.0,
                           spiralWorkoutProgress=SimpleNamespace(add_sample=lambda *sample: got.append(sample)))
-    hud.recent_average = lambda saved: HUDWindow.recent_average(hud, saved)
+    hud.recent_average = lambda saved, *seconds: HUDWindow.recent_average(hud, saved, *seconds)
     hud.spiral_block_time = lambda: (3.0, 60)
     HUDWindow.record_spiral_sample(hud)
     power = 200 if powerAt > 5 else 0

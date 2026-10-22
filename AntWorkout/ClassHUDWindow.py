@@ -144,6 +144,7 @@ class HUDWindow(QWidget):
     BLINK_MIN_DURATION_SECONDS = 2
     #the spiral's power and cadence: each the average over the last this many seconds (see record_spiral_sample)
     SPIRAL_AVERAGE_SECONDS = 3.0
+    SPIRAL_CADENCE_AVERAGE_SECONDS = 1.0
     
     def __init__(self, parent):
         super(HUDWindow, self).__init__()
@@ -1137,10 +1138,10 @@ class HUDWindow(QWidget):
     def record_spiral_sample(self):
         """The power and cadence being ridden (each a short average) into the spiral's ring and spiral"""
         power = self.recent_average(AppState.savedPowerVals)
-        cadence = None #(no cadence to show: the spiral's lines are drawn full width)
+        cadence = None #(no cadence to show: the spiral's lines are drawn at the lanes' outer edges)
         if AppState.shows_cadence():
-            cadence = self.recent_average(AppState.savedCadenceVals)
-            #the cadence sensor gone quiet: full width while the power's still coming in, else not pedaling
+            cadence = self.recent_average(AppState.savedCadenceVals, self.SPIRAL_CADENCE_AVERAGE_SECONDS)
+            #the cadence sensor gone quiet: the outer edge while the power's still coming in, else not pedaling
             if cadence is None and power is None:
                 cadence = 0
         power = 0 if power is None else power
