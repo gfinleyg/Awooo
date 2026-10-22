@@ -31,7 +31,8 @@ import functools
 import math
 import weakref
 
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor, QPen
 
 from AppState import AppState
 import FtpTest
@@ -489,6 +490,47 @@ def update_graph_brushes():
     for name, state in (("graphWorkoutBrushLight", "paused"), ("graphWorkoutBrushMid", "upcoming"),
                         ("graphWorkoutBrushDark", "past")):
         setattr(AppState, name, functools.partial(graph_color, state=state))
+
+
+###----------------------------------------------------------------------------------------------
+### The graphs' sensor lines
+###----------------------------------------------------------------------------------------------
+#the sensor lines' colors (the HUD and synopsis graphs)
+SENSOR_COLORS = {"power": "#0000ff", "hr": "#ff0000", "cadence": "#ffff00", "speed": "#ffffff"}
+#each line this wide over a halo this wide, so it shows over any bar's or background's color: the halo light under a
+#dark line (OKLCH lightness below HALO_LIGHT_BELOW, like the blue), dark under a light one
+SENSOR_LINE_PX = 2
+SENSOR_HALO_PX = 3.5
+HALO_DARK = "#101018"
+HALO_LIGHT = "#f2f2f6"
+HALO_ALPHA = 0x80
+HALO_LIGHT_BELOW = 0.55
+
+
+def halo_color(color, alpha=HALO_ALPHA):
+    """The halo (QColor) that sets color ("#rrggbb") apart from whatever is under it"""
+    halo = QColor(HALO_LIGHT if to_oklch(color)[0] < HALO_LIGHT_BELOW else HALO_DARK)
+    halo.setAlpha(alpha)
+    return halo
+
+
+def _cosmetic_pen(color, width):
+    #(cosmetic: as wide on screen whatever the graph's scale, like pyqtgraph's own mkPen)
+    pen = QPen(QColor(color), width)
+    pen.setCosmetic(True)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    return pen
+
+
+def sensor_pens(color, width=SENSOR_LINE_PX, haloWidth=SENSOR_HALO_PX):
+    """(pen, halo pen) for a graph's sensor line in color ("#rrggbb"): the halo goes to the curve as its shadowPen"""
+    return _cosmetic_pen(color, width), _cosmetic_pen(halo_color(color), haloWidth)
+
+
+def marker_outline(color, width=1):
+    """The pen outlining a sensor's current reading marker in color ("#rrggbb"), its line's halo color"""
+    return _cosmetic_pen(halo_color(color, 0xff), width)
 
 
 ###----------------------------------------------------------------------------------------------

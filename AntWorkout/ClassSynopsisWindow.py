@@ -168,6 +168,12 @@ class SongStrip(QGraphicsObject):
                 self.onClick(index)
 
 
+def sensor_pens(sensor):
+    """A sensor curve's pen and halo (shadowPen) keyword arguments, see FtpColors.sensor_pens"""
+    pen, halo = FtpColors.sensor_pens(FtpColors.SENSOR_COLORS[sensor])
+    return {"pen": pen, "shadowPen": halo}
+
+
 def grade_badge_css(grade, points):
     return (f"background-color:{WorkoutGrading.grade_color(grade)}; border: 2px solid #808080; border-radius: 12px;"
             f" font: 900 {points}pt 'Orbitron'; color: black; qproperty-alignment: AlignCenter;")
@@ -320,7 +326,7 @@ class SynopsisWindow(QWidget):
         self.curvePens = {}
         self.selectedCurve = None
         for curve in self.sensorCurves:
-            self.curvePens[curve] = pg.mkPen(curve.opts['pen'])
+            self.curvePens[curve] = (pg.mkPen(curve.opts['pen']), curve.opts['shadowPen'])
             curve.setClickable(True, width=10)
             curve.sigClicked.connect(self.select_curve)
         self.synopsisGraphLabel.scene().sigMouseClicked.connect(self.plot_clicked)
@@ -1056,15 +1062,15 @@ class SynopsisWindow(QWidget):
         #toggle: clicking the highlighted line again clears the highlight
         previous = self.selectedCurve
         if previous is not None:
-            previous.setPen(self.curvePens[previous])
-            previous.setShadowPen(None)
+            previous.setPen(self.curvePens[previous][0])
+            previous.setShadowPen(self.curvePens[previous][1])
             previous.setZValue(0)
             self.selectedCurve = None
         if curve is not None and curve is not previous:
-            pen = pg.mkPen(self.curvePens[curve])
+            pen = pg.mkPen(self.curvePens[curve][0])
             pen.setWidthF(4)
             curve.setPen(pen)
-            curve.setShadowPen(pg.mkPen('k', width=8))
+            curve.setShadowPen(pg.mkPen(FtpColors.halo_color(pen.color().name(), 0xff), width=8))
             curve.setZValue(10)
             self.selectedCurve = curve
 
@@ -1205,7 +1211,8 @@ class SynopsisWindow(QWidget):
                     self.processedHRVals[1].append(val)
         #plots get long dropouts as zero (see WithDropoutsAsZero); the processed lists stay real readings
         #only, for the best power and max value stats
-        self.hrPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedHRVals, endTime=AppState.secondsPassed),pen='r')
+        self.hrPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedHRVals, endTime=AppState.secondsPassed),
+                                            **sensor_pens("hr"))
 
         lastNonZeroVal = 0
         lastNonZeroValIndex = 0
@@ -1225,7 +1232,8 @@ class SynopsisWindow(QWidget):
             if deltaSeconds > 0:
                 self.processedPowerVals[0].append(deltaSeconds)
                 self.processedPowerVals[1].append(val)
-        self.powerProducedPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedPowerVals, endTime=AppState.secondsPassed),pen='b')
+        self.powerProducedPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedPowerVals, endTime=AppState.secondsPassed),
+                                            **sensor_pens("power"))
 
         self.lastNonZeroSpeed = 0
         self.lastNonZeroSpeedIndex = 0
@@ -1259,8 +1267,10 @@ class SynopsisWindow(QWidget):
         if self.processedCadenceVals[0]:
             times, values = zip(*sorted(zip(*self.processedCadenceVals)))
             self.processedCadenceVals = (list(times), list(values))
-        self.cadencePlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedCadenceVals, endTime=AppState.secondsPassed),pen='y')
-        self.speedPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedSpeedVals, endTime=AppState.secondsPassed),pen='w')
+        self.cadencePlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedCadenceVals, endTime=AppState.secondsPassed),
+                                            **sensor_pens("cadence"))
+        self.speedPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedSpeedVals, endTime=AppState.secondsPassed),
+                                            **sensor_pens("speed"))
 
         #Get averages. Durations are increasing, so stop at the first one the
         #recorded power doesn't span - the stats text pairs bestPowerRange with

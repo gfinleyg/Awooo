@@ -551,13 +551,15 @@ class HUDWindow(QWidget):
         self.currentMarkers = [] #(scatter item, AppState saved values attribute name)
         #what each sensor curve was last drawn from, by AppState saved values attribute name (see plot_saved_vals)
         self.plottedKeys = {}
-        markerSources = [(self.progressGraph.powerVBox, "savedPowerVals", 'b')]
+        markerSources = [(self.progressGraph.powerVBox, "savedPowerVals", FtpColors.SENSOR_COLORS["power"])]
         if AppState.antHRM:
-            markerSources.append((self.progressGraph.hrCadenceVBox, "savedHRVals", 'r'))
+            markerSources.append((self.progressGraph.hrCadenceVBox, "savedHRVals", FtpColors.SENSOR_COLORS["hr"]))
         if AppState.shows_cadence():
-            markerSources.append((self.progressGraph.hrCadenceVBox, "savedCadenceVals", 'y'))
+            markerSources.append((self.progressGraph.hrCadenceVBox, "savedCadenceVals",
+                                  FtpColors.SENSOR_COLORS["cadence"]))
         for vbox, savedName, color in markerSources:
-            marker = pg.ScatterPlotItem(symbol='d', size=11, brush=pg.mkBrush(color), pen=pg.mkPen(None))
+            #(outlined in its line's halo color, to show over the bars like the line does)
+            marker = pg.ScatterPlotItem(symbol='d', size=11, brush=pg.mkBrush(color), pen=FtpColors.marker_outline(color))
             marker.setZValue(20)
             vbox.addItem(marker, ignoreBounds=True)
             self.currentMarkers.append((marker, savedName))
@@ -2165,17 +2167,17 @@ class HUDWindow(QWidget):
                                                     ranges=AppState.ftpRanges,colors=AppState.graphWorkoutBrushDark)
         #update produced values (power (blue), hr (red), cadence (yellow)) plots based on MainWindow lists;
         #brief sensor dropouts draw straight across, long ones (still ongoing included) show as zero
-        series = [("savedPowerVals", self.powerProducedPlot, 'b')]
+        series = [("savedPowerVals", self.powerProducedPlot, "power")]
         if AppState.antHRM:
-            series.append(("savedHRVals", self.hrPlot, 'r'))
+            series.append(("savedHRVals", self.hrPlot, "hr"))
         if AppState.shows_cadence():
-            series.append(("savedCadenceVals", self.cadencePlot, 'y'))
-        for savedName, plot, pen in series:
-            self.plot_saved_vals(savedName, plot, pen)
+            series.append(("savedCadenceVals", self.cadencePlot, "cadence"))
+        for savedName, plot, sensor in series:
+            self.plot_saved_vals(savedName, plot, FtpColors.SENSOR_COLORS[sensor])
         self.zero_gauges_on_dropout()
         #(the graph's extra views follow its size through sigResized, see __init__)
 
-    def plot_saved_vals(self, savedName, plot, pen):
+    def plot_saved_vals(self, savedName, plot, color):
         """One sensor's curve, and its current reading diamond at the newest point. Only redone when there's
         something new to draw: a reading (about 4 a second) or, through a dropout, the zero line growing"""
         times, values = getattr(AppState, savedName)
@@ -2186,7 +2188,8 @@ class HUDWindow(QWidget):
             return
         self.plottedKeys[savedName] = key
         xs, ys = WithDropoutsAsZero(times, values, endTime=AppState.secondsPassed)
-        plot.setData(xs, ys, pen=pen)
+        pen, halo = FtpColors.sensor_pens(color) #(a halo under the line: it shows over any bar or background)
+        plot.setData(xs, ys, pen=pen, shadowPen=halo)
         for marker, markerName in self.currentMarkers:
             if markerName == savedName:
                 if len(xs):
