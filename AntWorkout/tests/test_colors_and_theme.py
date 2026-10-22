@@ -198,6 +198,13 @@ def test_block_colors_in_musical_cadence_mode():
     #50 RPM is over 40: green (zone "1"), as the graph and gauges show it
     assert FtpColors.zone_of(50) == "1"
     assert FtpColors.block_colors(50)[0] == FtpColors.zone_hex(50, AppState.ftpRanges)
+    #the cadence zones start part way along their fade: 40 RPM is already clearly green, not washed out
+    pale, green, _ = FtpColors.palette()[1]
+    assert FtpColors.zone_hex(40) == FtpColors._blend(pale, green, FtpColors.CADENCE_FADE_FROM)
+    assert FtpColors.pale_hex(1) == FtpColors.zone_hex(40)
+    #(the power zones, shown beside them, still start at their pale end)
+    power = FtpColors.power_ranges()
+    assert FtpColors.zone_hex(power[0], power) == FtpColors.palette()[1][0]
 
 
 def test_graph_colors():

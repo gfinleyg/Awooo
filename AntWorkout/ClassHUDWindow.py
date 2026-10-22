@@ -974,7 +974,7 @@ class HUDWindow(QWidget):
 
     def update_center_rings(self, level=None):
         """The cadence gauge's nested circles: the band's color at the target cadence (so they match the band's tip
-        when riding on target), brightened on the music's beat (or at level, given)"""
+        when riding on target; free ride's color with no target), brightened on the music's beat (or at level, given)"""
         if level is None:
             level = 0.0
             seconds = self.music_seconds() if self.startedBool and self.workoutUnpausedBool else None
@@ -983,7 +983,7 @@ class HUDWindow(QWidget):
                 if index >= 0:
                     level = max(0.0, 1 - (seconds - AppState.musicPulses[index])/BEAT_SECONDS)
         gauge = self.cadenceGaugeDisplay.ui.widget
-        color = FtpColors.zone_color(self.currentPower)
+        color = QColor("#" + FtpColors.gauge_ring(self.currentPower))
         gauge.set_center_rings((color.darker(130), color), level)
 
     def update_power_rings(self):

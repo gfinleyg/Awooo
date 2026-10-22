@@ -173,6 +173,18 @@ CADENCE_SCALE_BOTTOM_RPM = 40
 CADENCE_SCALE_TOP_RPM = 115
 
 
+#Musical Cadence Mode's zones start this far along their fade (0: the pale end, 1: the color), so a cadence just
+#into a zone already shows its color (40 RPM reads as green, not grey); the power zones start at their pale end
+CADENCE_FADE_FROM = 0.5
+
+
+def fade_from(ranges=None):
+    """How far along its fade each zone starts for these ranges: CADENCE_FADE_FROM for Musical Cadence Mode's
+    zones (AppState.ftpRanges while it's selected), else 0"""
+    ranges = AppState.ftpRanges if ranges is None else ranges
+    return CADENCE_FADE_FROM if AppState.cadenceMode and list(ranges) == list(AppState.ftpRanges) else 0.0
+
+
 def cadence_ranges(low):
     """Musical Cadence Mode's zone limits: zone "0" up to low, the top zone from CADENCE_SCALE_TOP_RPM, the ones
     between a step apart"""
@@ -374,14 +386,15 @@ def zone_hex(value, ranges=None, fitted=None):
     starts, its zone's color where it ends"""
     ranges = (AppState.ftpRanges if ranges is None else ranges) or power_ranges()
     fitted = fitted or palette()
-    key = (value, tuple(ranges), fitted)
+    start = fade_from(ranges)
+    key = (value, tuple(ranges), fitted, start)
     color = _colorCache.get(key)
     if color is None:
         if len(_colorCache) > 4000:
             _colorCache.clear()
         zone, t = zone_position(value, ranges)
         pale, bright, _ = fitted[zone]
-        color = _colorCache[key] = _blend(pale, bright, t)
+        color = _colorCache[key] = _blend(pale, bright, start + (1 - start)*t)
     return color
 
 
@@ -390,15 +403,18 @@ def zone_color(value, ranges=None):
     return QColor(zone_hex(value, ranges))
 
 
-def pale_hex(zone):
-    """A zone's (0 - 4) pale end"""
-    return palette()[zone][0]
+def pale_hex(zone, ranges=None):
+    """A zone's (0 - 4) pale end (where its fade starts, see fade_from)"""
+    pale, bright, _ = palette()[zone]
+    start = fade_from(ranges)
+    return _blend(pale, bright, start) if start else pale
 
 
 def zone_stops(ranges, steps=6):
     """A gauge band's (value, QColor) stops: each zone fading from its pale end to its color, a hard edge where
     the next zone starts"""
     fitted = palette()
+    fadeStart = fade_from(ranges)
     stops = []
     for zone in range(len(ZONES)):
         start, end = zone_span(zone, ranges)
@@ -406,14 +422,14 @@ def zone_stops(ranges, steps=6):
         edge = (end - start)*1e-4 if zone < len(ZONES) - 1 else 0
         for i in range(steps + 1):
             stops.append((start + (end - start)*i/steps - (edge if i == steps else 0),
-                          QColor(_blend(pale, bright, i/steps))))
+                          QColor(_blend(pale, bright, fadeStart + (1 - fadeStart)*i/steps))))
     return stops
 
 
 def colors_key(ranges=None):
     """Changes whenever the colors zone_color gives for these ranges would (for drawings kept until then)"""
     ranges = (AppState.ftpRanges if ranges is None else ranges) or power_ranges()
-    return tuple(ranges), palette()
+    return tuple(ranges), palette(), fade_from(ranges)
 
 
 ###----------------------------------------------------------------------------------------------
@@ -426,7 +442,7 @@ def gauge_arc(power, ranges=None):
         free = _current("free")[1:]
         return free, free
     zone, _ = zone_position(power, ranges)
-    return pale_hex(zone)[1:], zone_hex(power, ranges)[1:]
+    return pale_hex(zone, ranges)[1:], zone_hex(power, ranges)[1:]
 
 
 def gauge_ring(power, ranges=None):
@@ -450,7 +466,7 @@ def block_colors(power0, power1=0, ranges=None):
     """A block label's background colors (start, end) as "#rrggbb": a range from its low power's color to its high
     power's, a single power from its color to its zone's pale end"""
     start = zone_hex(power0, ranges)
-    end = zone_hex(power1, ranges) if power1 else pale_hex(zone_position(power0, ranges)[0])
+    end = zone_hex(power1, ranges) if power1 else pale_hex(zone_position(power0, ranges)[0], ranges)
     return start, end
 
 
