@@ -52,7 +52,7 @@ BEAT_SECONDS = 0.2
 
 #the nested circles in the power gauge's middle show the power over the last while: the outermost the power now,
 #each one in from it the average power over this many seconds, just before the time the one outside it covers
-#(see set_power_rings)
+#(see PowerRings)
 POWER_RING_SECONDS = 3
 #as many rings as fit in the gauge's middle at its size on screen (the screen's resolution and where the gauge sits
 #on it) with each at least this wide, so a bigger gauge shows further back; never fewer than POWER_RING_MIN
@@ -65,7 +65,7 @@ SPACE_PAUSE_GUARD_SECONDS = 0.5
 
 def new_power_gauge():
     """The power gauge as the HUD shows it, the reading in the middle as big as fits in the nested circles
-    there (gaugeChooser colors its band, set_power_rings its circles)"""
+    there (gaugeChooser colors its band, PowerRings its circles)"""
     gauge = Gauge()
     widget = gauge.ui.widget
     widget.setNeedleColor(*QColor(AppState.gaugeRed).getRgb())
@@ -84,32 +84,71 @@ def new_power_gauge():
     return gauge
 
 
-def set_power_rings(gauge):
-    """The power gauge's nested circles, each the band's color at a power: the outermost the power now, then
-    the average over the last POWER_RING_SECONDS, then over the POWER_RING_SECONDS before that, and so on in"""
-    widget = gauge.ui.widget
-    ranges = FtpColors.power_ranges() #(power zones, in Musical Cadence Mode too)
-    powers = [widget.reading] + [power_average(POWER_RING_SECONDS*(i - 1), POWER_RING_SECONDS*i)
-                                 for i in range(1, widget.ring_count())]
-    widget.set_center_rings([FtpColors.zone_color(power, ranges) for power in powers])
+class PowerRings:
+    """The power gauge's nested circles, each the band's color at a power: the outermost the power now, then the
+    average over each POWER_RING_SECONDS block of the ride, newest to oldest. A block's average is worked out once,
+    when it ends, and kept: each ring holds its color until the next block ends and moves it in one"""
+
+    def __init__(self):
+        self.blocks = [] #(average power, its color), newest first
+        self.blockEnd = None #the newest block's end (AppState.secondsPassed)
+        self.ranges = None #the power zones the colors are for
+
+    def update(self, gauge):
+        """Called every tick: finishes any blocks that have ended since the last, then sets the gauge's rings"""
+        now = AppState.secondsPassed
+        ranges = FtpColors.power_ranges() #(power zones, in Musical Cadence Mode too)
+        if ranges != self.ranges:
+            self.recolor()
+        if self.blockEnd is None or now < self.blockEnd or now - self.blockEnd > self.most_seconds():
+            #the first tick, a new ride's clock or a long stall: every block again from the readings, the newest
+            #ending now
+            self.blockEnd = now
+            self.blocks = [self.block(now - POWER_RING_SECONDS*(i + 1), now - POWER_RING_SECONDS*i)
+                           for i in range(self.most_blocks())]
+        #(a block ends once the clock is past it: readings stamped right at its end are in it)
+        while now > self.blockEnd + POWER_RING_SECONDS:
+            self.blockEnd += POWER_RING_SECONDS
+            self.blocks.insert(0, self.block(self.blockEnd - POWER_RING_SECONDS, self.blockEnd))
+        del self.blocks[self.most_blocks():]
+        widget = gauge.ui.widget
+        widget.set_center_rings([FtpColors.zone_color(widget.reading, ranges)] +
+                                [color for _, color in self.blocks[:widget.ring_count() - 1]])
+
+    def block(self, start, end):
+        power = block_average(start, end)
+        return power, FtpColors.zone_color(power, self.ranges)
+
+    def recolor(self):
+        """The power zone colors changed (see FtpColors.py): the kept blocks in the new ones"""
+        self.ranges = FtpColors.power_ranges()
+        self.blocks = [(power, FtpColors.zone_color(power, self.ranges)) for power, _ in self.blocks]
+
+    @staticmethod
+    def most_blocks():
+        """Blocks kept: as many as the readings kept go back (AntDevicesPoller), so a bigger gauge (resized, or
+        on another screen) shows its rings' colors right away"""
+        return int((AppState.graphSecondsShown - AppState.graphBreakpoint)//POWER_RING_SECONDS)
+
+    def most_seconds(self):
+        return self.most_blocks()*POWER_RING_SECONDS
 
 
-def power_average(newest, oldest):
-    """The average power read from oldest to newest seconds ago (AppState.savedPowerVals, as the gauge showed it);
-    with no reading in that time, the power then (see power_ago)"""
+def block_average(start, end):
+    """The average power read after start up to end (AppState.secondsPassed times; AppState.savedPowerVals, as the
+    gauge showed it); with no reading in that time, the power then (see power_at)"""
     times, watts = AppState.savedPowerVals
-    first = bisect.bisect_right(times, AppState.secondsPassed - oldest)
-    last = bisect.bisect_right(times, AppState.secondsPassed - newest)
+    first = bisect.bisect_right(times, start)
+    last = bisect.bisect_right(times, end)
     if last == first:
-        return power_ago((newest + oldest)/2)
+        return power_at((start + end)/2)
     return sum(watts[first:last])/(last - first)
 
 
-def power_ago(seconds):
-    """The power read this many seconds ago (AppState.savedPowerVals, as the gauge showed it: blended
-    between readings, 0 before the first and once the power meter had been silent DROPOUT_ZERO_SECONDS)"""
+def power_at(when):
+    """The power read at this time (AppState.secondsPassed; AppState.savedPowerVals, as the gauge showed it:
+    blended between readings, 0 before the first and once the power meter had been silent DROPOUT_ZERO_SECONDS)"""
     times, watts = AppState.savedPowerVals
-    when = AppState.secondsPassed - seconds
     index = bisect.bisect_right(times, when)
     if index == 0:
         return 0
@@ -369,6 +408,7 @@ class HUDWindow(QWidget):
             self.hudLayout.addWidget(self.currentBlockLayoutWidget,0,6,4,16, Qt.AlignmentFlag.AlignTop)
         
         self.wattGaugeDisplay = new_power_gauge()
+        self.powerRings = PowerRings()
         #(colored for as many rings as fit wherever it ends up, see update_power_rings)
         self.wattGaugeDisplay.ui.widget.ringCountChanged.connect(self.update_power_rings)
         self.gaugeChooser() #the colored band, its colors at set % of FTP
@@ -947,7 +987,7 @@ class HUDWindow(QWidget):
         gauge.set_center_rings((color.darker(130), color), level)
 
     def update_power_rings(self):
-        set_power_rings(self.wattGaugeDisplay)
+        self.powerRings.update(self.wattGaugeDisplay)
 
     def workout_time_delta(self):
         """How far the workout moves on this tick: the music's progress in Musical Cadence Mode, else the time
@@ -1067,6 +1107,8 @@ class HUDWindow(QWidget):
     def refresh_ftp_colors(self):
         """Redraws everything colored by power zone (the colors changed, see FtpColors.py)"""
         self.gaugeChooser()
+        self.powerRings.recolor()
+        self.update_power_rings()
         if self.targetGauge.ui.widget.arcCenterValue:
             c0, c1 = self.getFtpColor(self.currentPower)
             self.targetGauge.ui.widget.newArcColors = [[0, QColor("#88"+c0)],[.5, QColor("#88"+c1)]]
