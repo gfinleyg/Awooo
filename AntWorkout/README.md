@@ -13,6 +13,9 @@ stick, and shows a live HUD with power, cadence, speed and heart rate while you 
   analyzed and turned into target cadences (RPM), so you pedal to the beat. Analysis results are cached, so each song
   is only analyzed once.
 - **Synopsis**: a post-ride summary with graphs and grading.
+- **Sessions**: every ride since the app opened is kept (in memory only) and shown together on the synopsis, one
+  after the other with a heading and divider for each, and the workout spiral's outer ring carries on from them. Each
+  ride keeps the FTP zones it was ridden at. **Clear Session** on the setup screen starts a new session.
 - **Themes**: the settings menu's Pick Theme opens a full screen picker: a theme's colors (`themes/colors`) and
   power/cadence gradients (`themes/gradients`), each tried on as it's picked, beside a preview of the workout screen
   in that look. Theme files (fonts too) can be made with `LayoutViewer.py`.

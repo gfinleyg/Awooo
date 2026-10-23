@@ -40,6 +40,7 @@ from WorkoutHelpers import (MinimizedDuration, ProcessWorkoutLine, ProcessNonInt
 import WorkoutGrading
 import KeyShortcuts
 import FtpTest
+import Session
 import ClassAntLogger
 import MusicCadence
 import SavedSettings
@@ -623,7 +624,7 @@ class HUDWindow(QWidget):
             #the workout and the block being ridden, drawn with the power and cadence ridden (see ClassPowerSpiral.py);
             #centered over the timer boxes below it, whatever shape its space is
             self.spiralWorkoutProgress = PowerSpiral()
-            self.spiralWorkoutProgress.clear(AppState.workoutDurationSeconds)
+            self.spiralWorkoutProgress.clear(AppState.workoutDurationSeconds, Session.ring_history())
             #take all spare room between the block info and the FTP slider
             self.spiralWorkoutProgress.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             #each block's grade shows in the middle of the spiral as it ends
@@ -1078,7 +1079,7 @@ class HUDWindow(QWidget):
             #reset graph index
             self.pastPowerIndex = 0
             #reset spiral progress
-            self.spiralWorkoutProgress.clear(AppState.workoutDurationSeconds)
+            self.spiralWorkoutProgress.clear(AppState.workoutDurationSeconds, Session.ring_history())
             #clear the grades, the left column goes back to Up Next
             self.grader = None
             self.gradeKey = None

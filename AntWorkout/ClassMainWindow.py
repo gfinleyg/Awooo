@@ -139,6 +139,7 @@ class MainWindow(QMainWindow):
         SoundEffects.play("window")
         self.setupWidget.show()
         self.setupWidget.check_enable_start_button()
+        self.setupWidget.update_clear_session_button()
         self.setupWidget.restartScanButton.setEnabled(False)
         self.setupWidget.connectButton.setEnabled(False)
         self.setupWidget.resume()
@@ -188,12 +189,12 @@ class MainWindow(QMainWindow):
         ## Drop the connecting/ready state to ready the user for hardware/setup changes
         self.startExe.clear_connection_flags()
 
-        #Keep showing the workout filename on the synopsis screen
-        self._apply_app_title(show_workout_filename=True)
-
         self._discard_widget("synopsisWidget")
 
+        #(the ride joins the session's here, see Session.py)
         self.synopsisWidget = SynopsisWindow(self)
+        #Keep showing the workout filename on the synopsis screen, while it's the session's only ride
+        self._apply_app_title(show_workout_filename=len(AppState.sessionRides) == 1)
         self.mainLayout.addWidget(self.synopsisWidget)
         AppLayout.layout_window(self)
         self.workoutHudWidget.hide()

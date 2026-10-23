@@ -4,7 +4,9 @@ ClassPowerSpiral.py
 The HUD's spiral, round and centered in the widget, every lane the same width with SPACE_PX between them, and a hole in
 the middle for the grade (ClassGradeWidgets.GradeOverlay asks inner_circle() where it is):
 
-  the ring      the outer lane, a circle: the workout, filled clockwise from North until it meets itself at the end
+  the ring      the outer lane, a circle: the workout, filled clockwise from North until it meets itself at the end;
+                the session's rides before it first (see Session.py), each drawn with its own power zones and a tick
+                where it ends
   the spiral    inside it, BLOCK_TURNS turns winding in clockwise from North: the block being ridden, the same length
                 whatever the block (an interval's every rep of every sub-block along it, one after the other)
 
@@ -18,6 +20,7 @@ goes (add_sample); each keeps them in bins, BINS a turn.
 Finished stretches are drawn once, CHUNK_BINS at a time; only the stretch the end's in is drawn every frame.
 """
 
+import bisect
 import itertools
 import math
 
@@ -27,6 +30,7 @@ from PyQt6.QtWidgets import QWidget
 
 import AppTheme
 import FtpColors
+import Session
 
 BINS = 1440 #a turn's, one every quarter degree
 CHUNK_BINS = 8 #the finished bins drawn again (and kept) this many at a time
@@ -44,6 +48,8 @@ BLINK_OPACITY = {"default": (1.0, 1.0), "block": (1.0, 0.13), "workout": (0.13, 
 LINE_COLOR = "#1E2230"
 LINE_OPACITY = 0.9
 LINE_PX = 1.5
+#the ticks across the ring where the session's earlier rides end, in the cadence line's color
+TICK_PX = 2.5
 #an end has to move this far (px) before it's drawn again
 REDRAW_PX = 0.5
 
@@ -130,12 +136,32 @@ class PowerSpiral(QWidget):
         self.clear()
 
     ###what's shown
-    def clear(self, workoutDuration=1.0):
-        """Nothing ridden: the ring and the spiral empty"""
-        self.workout = Timeline(workoutDuration)
+    def clear(self, workoutDuration=1.0, history=()):
+        """Nothing ridden: the ring and the spiral empty. history: the session's rides before this workout, each
+        (seconds long, [(seconds, power, cadence)], power ranges), along the ring one after the other before it"""
+        self.historySeconds = 0.0
+        self.historyRanges = [] #(start, end, power ranges) of each ride in history, in the ring's seconds
+        samples = []
+        for seconds, rideSamples, ranges in history:
+            start = self.historySeconds
+            samples += [(start + min(max(at, 0.0), seconds), power, cadence) for at, power, cadence in rideSamples]
+            self.historyRanges.append((start, start + seconds, ranges))
+            self.historySeconds += seconds
+        self.workout = Timeline(self.historySeconds + workoutDuration)
+        for sample in samples:
+            self.workout.add(*sample)
+        self.historyCount = len(samples)
+        self.workout.seconds = self.historySeconds
         self.block = Timeline(1.0, BINS*BLOCK_TURNS)
         self.blink = "default"
         self.update()
+
+    def ridden(self):
+        """(seconds, [(seconds, power, cadence)] one a second) of this workout's part of the ring, for the session's
+        next rides (see Session.py)"""
+        samples = [(at - self.historySeconds, power, cadence)
+                   for at, power, cadence in self.workout.samples[self.historyCount:]]
+        return (max(0.0, self.workout.seconds - self.historySeconds), Session.per_second(samples))
 
     def set_block(self, duration):
         """A new block, duration seconds long: the spiral empty"""
@@ -144,7 +170,8 @@ class PowerSpiral(QWidget):
 
     def set_progress(self, workoutSeconds, workoutDuration, blockSeconds, blockDuration):
         """How far along the workout and the block are (seconds), and how long they are"""
-        for timeline, seconds, duration in ((self.workout, workoutSeconds, workoutDuration),
+        for timeline, seconds, duration in ((self.workout, self.historySeconds + workoutSeconds,
+                                             self.historySeconds + workoutDuration),
                                             (self.block, blockSeconds, blockDuration)):
             timeline.set_duration(duration)
             timeline.seconds = seconds
@@ -155,7 +182,7 @@ class PowerSpiral(QWidget):
     def add_sample(self, workoutSeconds, blockSeconds, power, cadence):
         """The power (watts) and cadence (rpm, None: no cadence to show) ridden, workoutSeconds into the workout and
         blockSeconds into the block"""
-        self.workout.add(workoutSeconds, power, cadence)
+        self.workout.add(self.historySeconds + workoutSeconds, power, cadence)
         self.block.add(blockSeconds, power, cadence)
 
     def set_blink(self, state):
@@ -271,27 +298,43 @@ class PowerSpiral(QWidget):
         line.addPolygon(QPolygonF(top))
         return area, line
 
+    def bin_ranges(self, timeline, ranges):
+        """rangesOf(bin): the power ranges a bin's colored by, the ride's it's in (the session's earlier rides keep
+        the FTP they were ridden at), else ranges"""
+        if timeline is not self.workout or not self.historyRanges:
+            return lambda j: ranges
+        step = timeline.duration/timeline.bins
+        ends = [end for _, end, _ in self.historyRanges]
+        def rangesOf(j):
+            k = bisect.bisect_right(ends, (j + 0.5)*step)
+            return self.historyRanges[k][2] if k < len(ends) else ranges
+        return rangesOf
+
     def bin_colors(self, timeline, ranges, colorsKey):
         """Each of timeline's bins' power's zone color, worked out again only for the bins whose power changed (a new
         sample changes a few; there are BINS a turn)"""
-        key = (timeline.serial, colorsKey)
+        #(a new length moves the bins along the session's rides, each with its own ranges)
+        key = (timeline.serial, colorsKey, timeline.duration)
         version, powers, colors = self.binColors.get(key, (None, [], []))
         if version == timeline.version:
             return colors
         fitted = None
+        rangesOf = self.bin_ranges(timeline, ranges)
         for j, (power, _) in enumerate(timeline.values()):
             power = 0 if power is None else power
             if j < len(powers) and powers[j] == power:
                 continue
             fitted = fitted or FtpColors.palette()
-            color = QColor(FtpColors.zone_hex(power, ranges, fitted))
+            color = QColor(FtpColors.zone_hex(power, rangesOf(j), fitted))
             if j < len(powers):
                 powers[j], colors[j] = power, color
             else:
                 powers.append(power)
                 colors.append(color)
         #(only the ring's and the spiral's kept)
-        self.binColors = {k: v for k, v in self.binColors.items() if k[0] in (self.workout.serial, self.block.serial)}
+        self.binColors = {k: v for k, v in self.binColors.items()
+                          if (k[0], k[2]) in ((self.workout.serial, self.workout.duration),
+                                              (self.block.serial, self.block.duration))}
         self.binColors[key] = (timeline.version, powers, colors)
         return colors
 
@@ -364,6 +407,21 @@ class PowerSpiral(QWidget):
         self.paint_ridden(painter, "ring", g, self.workout, lambda theta: g["ringR"], 0, self.workout.fraction(),
                           colorsKey, ranges, linePen, parts)
 
+    def paint_ride_ticks(self, painter, g, lineColor):
+        """A tick across the ring where each of the session's earlier rides ends"""
+        if not self.historyRanges:
+            return
+        painter.setOpacity(BLINK_OPACITY.get(self.blink, BLINK_OPACITY["default"])[0])
+        pen = QPen(lineColor, TICK_PX)
+        pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+        painter.setPen(pen)
+        center, inner, outer = g["center"], g["ringR"] - g["lane"]/2, g["ringR"] + g["lane"]/2
+        for _, end, _ in self.historyRanges:
+            theta = 2*math.pi*end/self.workout.duration
+            out = QPointF(math.sin(theta), -math.cos(theta))
+            painter.drawLine(center + out*inner, center + out*outer)
+        painter.setPen(Qt.PenStyle.NoPen)
+
     def paint_turn(self, painter, g, k, colorsKey, ranges, linePen, parts=("done", "tip")):
         """The spiral's turn k, as far as the block's got along it"""
         painter.setOpacity(BLINK_OPACITY.get(self.blink, BLINK_OPACITY["default"])[1])
@@ -428,6 +486,7 @@ class PowerSpiral(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         self.paint_ring(painter, g, colorsKey, ranges, linePen, ("tip",))
+        self.paint_ride_ticks(painter, g, lineColor)
         self.paint_turn(painter, g, active, colorsKey, ranges, linePen, ("tip",))
         painter.end()
         self.drawnEnds = ends

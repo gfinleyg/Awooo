@@ -60,6 +60,14 @@ class AppState:
     #ridden), "start"/"end" (AppState.secondsPassed) and "top" (its highest target power)
     blockGrades = {}
 
+    #The session's rides (see Session.py): each ride as it was, from when the app opened or Clear Session was
+    #pressed, for the synopsis and the HUD's spiral ring
+    sessionRides = []
+    #what the ride being ridden keeps from when START was pressed (Session.begin_ride), None before any
+    rideStart = None
+    #the ride being ridden has joined the session (its synopsis opened)
+    rideRecorded = False
+
     #Dark red used by the power/hr/cadence gauge needles and the power gauge's top zone;
     #also used for low battery warnings and the active FTP slider handle
     gaugeRed = "#8B0000"

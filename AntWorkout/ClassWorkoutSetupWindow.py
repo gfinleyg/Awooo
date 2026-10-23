@@ -26,6 +26,7 @@ from ClassCustomTitleBar import *
 from AppState import AppState
 import FtpColors
 from ClassCalibratePowerWindow import CalibratePowerWindow
+from ClassConfirmClearSessionWindow import ConfirmClearSessionWindow
 from ClassConnectDevicesWindow import ConnectDevicesWindow
 from ClassSelectDevicesWindow import SelectDevicesWindow
 from ClassMusicSelectWindow import MusicSelectWindow
@@ -39,6 +40,7 @@ import FtpTest
 import KeyShortcuts
 import MusicCadence
 import SavedSettings
+import Session
 import Units
 import ZwoConvert
 
@@ -284,7 +286,14 @@ class WorkoutSetupWindow(QWidget):
         self.calibratePowerButton.setStyleSheet(self.btnBlinkOff)
         self.calibratePowerButton.setEnabled(False)
         self.initializationLayout.addWidget(self.calibratePowerButton, 12,1,1,1)
-        #push the Connect/Rescan/Calibrate buttons to the bottom of this column; the column's
+        #the session's rides (see Session.py) forgotten, after a Yes; greyed out with none
+        self.clearSessionButton = QPushButton("Clear Session")
+        self.clearSessionButton.clicked.connect(self.confirm_clear_session)
+        self.clearSessionButton.setMaximumWidth(866)
+        self.clearSessionButton.setStyleSheet(self.btnBlinkOff)
+        self.initializationLayout.addWidget(self.clearSessionButton, 13,0,1,2)
+        self.update_clear_session_button()
+        #push the Connect/Rescan/Calibrate/Clear Session buttons to the bottom of this column; the column's
         #height is pinned to the center column's (see eventFilter) so their bottoms line up
         self.initializationLayout.addItem(QSpacerItem(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding), 9,0,2,2)
         self.initializationWidget.setLayout(self.initializationLayout)
@@ -470,6 +479,7 @@ class WorkoutSetupWindow(QWidget):
         for button, key in ((self.powerButton, Qt.Key.Key_P), (self.hrmButton, Qt.Key.Key_H),
                             (self.speedCadenceButton, Qt.Key.Key_C), (self.connectButton, Qt.Key.Key_N),
                             (self.restartScanButton, Qt.Key.Key_R), (self.calibratePowerButton, Qt.Key.Key_L),
+                            (self.clearSessionButton, Qt.Key.Key_X),
                             (self.setWheelC, Qt.Key.Key_W), (self.setFtp, Qt.Key.Key_F),
                             (self.setMaxHr, Qt.Key.Key_M), (self.setWeight, Qt.Key.Key_G),
                             (self.workoutFileButton, Qt.Key.Key_O), (self.introStartButton, Qt.Key.Key_S)):
@@ -1092,6 +1102,19 @@ class WorkoutSetupWindow(QWidget):
     def calibrate_power(self):
         self.w = CalibratePowerWindow(bridge=self.parent.startExe)
         self.w.show()
+
+    ###The session's rides (see Session.py)
+    def update_clear_session_button(self):
+        self.clearSessionButton.setEnabled(bool(Session.rides()))
+
+    def confirm_clear_session(self):
+        self.w = ConfirmClearSessionWindow(self)
+        self.w.show()
+
+    def clear_session(self):
+        ClassAntLogger.log_event("SETUP", f"User cleared the session ({len(Session.rides())} rides)")
+        Session.clear()
+        self.update_clear_session_button()
 
     def select_power_device(self):
         deviceDetectedList = []
@@ -2101,4 +2124,6 @@ class WorkoutSetupWindow(QWidget):
         self.hide()
         self.stop()
         AppState.startTimestamp = datetime.datetime.now()
+        #a new ride: the FTP and zones it's drawn with in the session from here (see Session.py)
+        Session.begin_ride()
         self.parent.generate_hud()

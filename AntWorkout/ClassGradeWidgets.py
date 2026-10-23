@@ -7,7 +7,8 @@ What shows the block grades (see WorkoutGrading.py):
                 FTP test's effort, its average power (show_value)
   GradeList     each ridden block's grade beside its usual colored block label (Musical Cadence Mode: each song's,
                 its blocks beneath it), with the workout's average grade pinned at the bottom: the HUD's left
-                column once the workout is complete, and the synopsis's Block Grades view
+                column once the workout is complete, and the synopsis's Block Grades view (there, every ride of the
+                session under its own heading, see Session.py)
 
 Both draw themselves at the layout scale (AppTheme.ui_scale), in the theme's fonts and colors.
 """
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import QWidget
 import AppTheme
 import FtpColors
 from AppState import AppState
+import Session
 import WorkoutGrading
 from WorkoutHelpers import TargetsFromText, IsSongHeader
 
@@ -58,14 +60,15 @@ def fitted_font(font, text, width, height):
     return QFont(fitted)
 
 
-def label_gradient_colors(text):
+def label_gradient_colors(text, ranges=None):
     """A block label's background colors (start, end), the same as its label everywhere else (see
-    FtpColors.block_css): by the watts (or RPM) in its text, or the free ride colors"""
+    FtpColors.block_css): by the watts (or RPM) in its text in these zones (AppState.ftpRanges by default), or the
+    free ride colors"""
     targets = TargetsFromText(text)
     if targets is None:
         start, end = FtpColors.free_ride_colors()
     else:
-        start, end = FtpColors.block_colors(*targets)
+        start, end = FtpColors.block_colors(*targets, ranges=ranges)
     return theme_color(start), theme_color(end)
 
 
@@ -250,11 +253,14 @@ class GradeList(QWidget):
     AVERAGE_PANEL_COLOR = "#bdd6de"
     #a song's label: the song header's colors in the workout lists (WorkoutHelpers.SONG_HEADER_CSS)
     SONG_COLORS = ("#28275e", "#9fc5d1")
+    #a ride's heading (the synopsis's session): darker, the same way round
+    RIDE_COLORS = ("#121230", "#4f7fa0")
 
     def __init__(self):
         super().__init__()
         self.rows = []
         self.average = None
+        self.averageText = "Workout Average"
         self.scrollOffset = 0
         self.wheelRemainder = 0
         self.dragStartY = None
@@ -262,15 +268,36 @@ class GradeList(QWidget):
         self.setMinimumHeight(200)
         FtpColors.watch(self, "update")
 
-    def refresh(self, grades=None):
-        """Shows these grades (AppState.blockGrades by default)"""
+    def refresh(self, grades=None, rides=None):
+        """Shows these grades (AppState.blockGrades by default), or the session's rides' (see Session.py): each
+        under a heading with its own average, the graded ones' blocks with the zones it was ridden in, and the
+        average of all of them at the bottom"""
+        self.scrollOffset = 0
+        if rides is not None:
+            self.rows, records = [], []
+            for ride in rides:
+                average = Session.average(ride)
+                self.rows.append({"kind": "ride", "label": Session.heading(ride), "pct": average,
+                                  "grade": WorkoutGrading.letter(average), "note": Session.note(ride),
+                                  "graded": ride["graded"]})
+                if ride["graded"]:
+                    rows = WorkoutGrading.workout_rows(ride["workoutList"], ride["blockGrades"], ride["songHeaders"])
+                    for row in rows:
+                        row["ranges"] = ride["targetRanges"]
+                    self.rows += rows
+                    records += ride["blockGrades"].values()
+            self.average = WorkoutGrading.ridden_average(records)
+            graded = sum(ride["graded"] for ride in rides)
+            self.averageText = "Session Average" if graded > 1 else "Workout Average"
+            self.update()
+            return
         grades = AppState.blockGrades if grades is None else grades
         #(Musical Cadence Mode's song headers are "<length> : <Artist> - <Title>")
         songs = {index: header.split(" : ", 1)[1] for index, header in AppState.musicSongStarts.items()
                  if IsSongHeader(header)}
         self.rows = WorkoutGrading.workout_rows(AppState.workoutList, grades, songs)
         self.average = WorkoutGrading.workout_average(grades)
-        self.scrollOffset = 0
+        self.averageText = "Workout Average"
         self.update()
 
     def scaled(self, value):
@@ -319,13 +346,22 @@ class GradeList(QWidget):
                 painter.setFont(theme_font("Orbitron", 20))
                 painter.drawText(labelRect.adjusted(self.scaled(8), 0, 0, 0),
                                  Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, row["label"])
+            elif row["kind"] == "ride":
+                #(one not graded has no badge: its heading takes the badge's room too)
+                if row["graded"]:
+                    draw_badge(painter, QRectF(0, y, badgeWidth, rowHeight), row["grade"], 17)
+                rect = QRectF(badgeWidth + gap if row["graded"] else 0, y, 0, rowHeight)
+                rect.setRight(width)
+                start, end = (theme_color(color) for color in self.RIDE_COLORS)
+                self.draw_label(painter, rect, row["label"], labelFont, start, end, row["note"],
+                                textColor=QColor("white"))
             elif row["kind"] == "song":
                 draw_badge(painter, QRectF(0, y, badgeWidth, rowHeight), row["grade"], 17)
                 start, end = (theme_color(color) for color in self.SONG_COLORS)
                 self.draw_label(painter, labelRect, "♪ " + row["label"], labelFont, start, end, textColor=QColor("white"))
             else:
                 draw_badge(painter, QRectF(0, y, badgeWidth, rowHeight), row["grade"], 17)
-                start, end = label_gradient_colors(row["label"])
+                start, end = label_gradient_colors(row["label"], row.get("ranges"))
                 self.draw_label(painter, labelRect, row["label"], labelFont, start, end, row["note"])
             y += self.row_step()
         self.draw_average(painter)
@@ -375,7 +411,7 @@ class GradeList(QWidget):
         painter.drawText(inner, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, pctText)
         inner.setRight(inner.right() - QFontMetricsF(font).horizontalAdvance(pctText) - self.scaled(10))
         painter.drawText(inner, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                         QFontMetricsF(font).elidedText("Workout Average", Qt.TextElideMode.ElideRight, inner.width()))
+                         QFontMetricsF(font).elidedText(self.averageText, Qt.TextElideMode.ElideRight, inner.width()))
 
     #scrolling, the same as the HUD's block lists
     def scroll_to(self, offset):

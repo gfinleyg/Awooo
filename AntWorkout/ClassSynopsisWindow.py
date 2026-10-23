@@ -18,7 +18,6 @@ from ClassWorkoutGraph import *
 from ClassCustomTitleBar import *
 
 from AppState import AppState
-import WorkoutData
 from ClassConfirmExitWindow import ConfirmExitWindow
 from WorkoutHelpers import (MinimizedDuration, GetMaxOrZero, GetMaxOrZeroAndIndex, WithDropoutsAsZero,
                             DROPOUT_ZERO_SECONDS, HOLD_POWER_READINGS, HOLD_HR_READINGS, HOLD_CADENCE_READINGS,
@@ -28,6 +27,7 @@ import WorkoutGrading
 import FtpTest
 import Units
 import KeyShortcuts
+import Session
 from ClassGradeWidgets import GradeList
 
 
@@ -71,11 +71,12 @@ class PlotLabel(QGraphicsSimpleTextItem):
 
 
 class GradeRegion(QGraphicsRectItem):
-    """A graded block's span on the graph (in the power view's coordinates); clicking it opens its grade.
-    Drawn as nothing, under the curves so they still take their own clicks"""
-    def __init__(self, rect, key, onClick):
+    """A graded block's span on the graph (in vbox's coordinates, its ride's target axis); clicking it opens its
+    grade. Drawn as nothing, under the curves so they still take their own clicks"""
+    def __init__(self, rect, key, vbox, onClick):
         super().__init__(rect)
         self.key = key
+        self.vbox = vbox
         self.onClick = onClick
         self.setPen(QPen(Qt.PenStyle.NoPen))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -86,53 +87,61 @@ class GradeRegion(QGraphicsRectItem):
             self.onClick(self)
 
 
-class SongStrip(QGraphicsObject):
-    """Musical Cadence Mode's songs along the top of the graph, as they were heard: a band for each in alternating
-    shades of the song headers' colors, its "Artist - Title" inside (cut short, or left out, where it doesn't fit).
-    Hovering one shows its whole title and when it played; clicking one zooms the graph to it"""
+class BandStrip(QGraphicsObject):
+    """Bands along the top of the graph, each over its stretch of time in alternating shades, its title inside (cut
+    short, or left out, where it doesn't fit). Hovering one shows its whole title and when it was; clicking one zooms
+    the graph to it"""
     COLORS = (QColor(40, 39, 94, 215), QColor(72, 98, 140, 215))
-    FONT_POINTS = 9
     PADX = 6
 
-    def __init__(self, songs, vbox, onClick):
+    def __init__(self, bands, vbox, onClick, top=0.0):
         super().__init__()
-        self.songs = songs #[(start, end, title)] in the graph's seconds
+        self.bands = bands #[(start, end, title)] in the graph's seconds
         self.vbox = vbox
         self.onClick = onClick
-        self.font = QFont("Segoe UI", self.FONT_POINTS)
-        self.font.setBold(True)
-        self.height = round(QFontMetricsF(self.font).height() + 8)
+        self.top = top #how far down from the top of the plot area (px): under the strips above it
+        self.set_font()
         self.width = 0.0
         self.setAcceptHoverEvents(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         #over the curves, under the max labels and their leader lines
         self.setZValue(998)
 
+    def set_font(self):
+        """Bold Segoe UI at the max labels' size: PlotLabel.FONT_POINTS through the theme's Text font size and the
+        layout scale, as theirs is (see AppTheme.install), the strip as tall as it needs"""
+        points = AppTheme.THEME.map_font(QFont("Orbitron", PlotLabel.FONT_POINTS), AppTheme.ui_scale).pointSizeF()
+        self.font = QFont("Segoe UI")
+        self.font.setPointSizeF(points)
+        self.font.setBold(True)
+        self.height = round(QFontMetricsF(self.font).height() + 8)
+
     def layout(self, *_):
-        """Across the top of the plot area (as it's moved, resized or zoomed)"""
+        """Across the top of the plot area (as it's moved, resized or zoomed), at the max labels' size as it is now"""
         area = self.vbox.sceneBoundingRect()
         self.prepareGeometryChange()
+        self.set_font()
         self.width = area.width()
-        self.setPos(area.topLeft())
+        self.setPos(area.left(), area.top() + self.top)
         self.update()
 
     def boundingRect(self):
         return QRectF(0, 0, self.width, self.height)
 
     def spans(self):
-        """(index, left, right) in the strip's own pixels of each song in view, cut to the strip's ends"""
+        """(index, left, right) in the strip's own pixels of each band in view, cut to the strip's ends"""
         start, end = self.vbox.viewRange()[0]
         if end <= start or self.width <= 0:
             return []
         scale = self.width/(end - start)
         spans = []
-        for index, (songStart, songEnd, _) in enumerate(self.songs):
-            left, right = max((songStart - start)*scale, 0.0), min((songEnd - start)*scale, self.width)
+        for index, (bandStart, bandEnd, _) in enumerate(self.bands):
+            left, right = max((bandStart - start)*scale, 0.0), min((bandEnd - start)*scale, self.width)
             if right > left:
                 spans.append((index, left, right))
         return spans
 
-    def song_at(self, x):
+    def band_at(self, x):
         return next((index for index, left, right in self.spans() if left <= x < right), None)
 
     def paint(self, painter, option, widget=None):
@@ -146,26 +155,41 @@ class SongStrip(QGraphicsObject):
             textWidth = rect.width() - 2*self.PADX
             if textWidth < minText:
                 continue
-            text = metrics.elidedText(self.songs[index][2], Qt.TextElideMode.ElideRight, textWidth)
+            text = metrics.elidedText(self.bands[index][2], Qt.TextElideMode.ElideRight, textWidth)
             painter.setPen(QColor("white"))
             painter.drawText(rect.adjusted(self.PADX, 0, -self.PADX, 0),
                              Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
 
     def hoverMoveEvent(self, ev):
-        index = self.song_at(ev.pos().x())
+        index = self.band_at(ev.pos().x())
         if index is None:
             self.setToolTip("")
             return
-        start, end, title = self.songs[index]
+        start, end, title = self.bands[index]
         self.setToolTip(f"{title}\n{hourMinuteSecondFromSecond(start)} to {hourMinuteSecondFromSecond(end)}"
                         f"  ({MinimizedDuration(round(end - start))})")
 
     def mouseClickEvent(self, ev):
         if ev.button() == Qt.MouseButton.LeftButton:
-            index = self.song_at(ev.pos().x())
+            index = self.band_at(ev.pos().x())
             if index is not None:
                 ev.accept()
                 self.onClick(index)
+
+
+class RideStrip(BandStrip):
+    """The session's rides (see Session.py), with more than one: each's heading over its stretch, along the top"""
+    COLORS = (QColor(18, 18, 48, 225), QColor(52, 70, 110, 225))
+
+
+class SongStrip(BandStrip):
+    """Musical Cadence Mode's songs as they were heard, each's "Artist - Title" in alternating shades of the song
+    headers' colors (under the rides' strip)"""
+    COLORS = (QColor(40, 39, 94, 215), QColor(72, 98, 140, 215))
+
+    @property
+    def songs(self):
+        return self.bands
 
 
 def sensor_pens(sensor):
@@ -186,18 +210,31 @@ class SynopsisWindow(QWidget):
     MIN_ZOOM_SECONDS = 30
     #marker and label border for a max that's only the max of the zoomed-in selection
     SELECTION_COLOR = "#e65100"
+    #the dashed line where each of the session's rides after the first starts (RGBA)
+    DIVIDER_COLOR = (30, 30, 60, 210)
 
     def __init__(self, parent):
         super(SynopsisWindow, self).__init__()
 
+        #the session's rides (see Session.py), this one joining them: the graph shows them one after the other, each
+        #ride's readings from its own start in the session, a divider where each after the first starts
+        Session.add_current_ride(getattr(parent, "workoutHudWidget", None))
+        self.rides = list(Session.rides())
+        self.lastRide = self.rides[-1]
+        self.rideStarts = [ride["start"] for ride in self.rides[1:]]
+        #a curve for each sensor any of the rides had
+        self.showHR = any(ride["hrm"] for ride in self.rides)
+        self.showSpeed = any(ride["speed"] for ride in self.rides)
+
         #speed and cadence helpers; last (revolutions, event time) seen per counter, None until the first reading
+        #(of each ride)
         self.speedLast = None
         #cadence comes from a dedicated sensor, or from the power meter's own cadence while there wasn't one
-        self.showCadence = AppState.has_cadence_sensor() or len(WorkoutData.fallbackCadence) > 0
+        self.showCadence = any(ride["cadenceSensor"] or len(ride["data"]["fallbackCadence"]) > 0 for ride in self.rides)
         self.cadenceLast = None
-        self.totalRevolutions = 0
-        #(times, revolutions) of each accepted speed reading, for the distance of a zoomed-in selection
-        self.speedRevolutions = ([],[])
+        self.totalMeters = 0.0
+        #(times, meters) of each accepted speed reading, for the distance of a zoomed-in selection
+        self.speedDistance = ([],[])
 
         #Best 10s,30s,1m,2m,5m,10m,20m,30m,1h Power (same order as BEST_POWER_SECONDS)
         self.bestPowerRange = []
@@ -212,12 +249,15 @@ class SynopsisWindow(QWidget):
                     " Watts over 1h!"]
 
         #best power is over unbroken readings (see findBestPowerRange), but a 20m or 1h FTP test's effort keeps its
-        #average through a sensor dropout, the same as the test's own average (FtpTest.EffortAverage)
-        self.dropoutsKeepAverage = AppState.workoutMode and \
-            FtpTest.TESTS.get(AppState.ftpTestMode, {}).get("kind") == "effort"
+        #average through a sensor dropout, the same as the test's own average (FtpTest.EffortAverage): those rides'
+        #(start, end)
+        self.keepAverageSpans = [(ride["start"], ride["start"] + ride["seconds"]) for ride in self.rides
+                                 if FtpTest.TESTS.get(ride["ftpTestMode"], {}).get("kind") == "effort"]
+        self.dropoutsKeepAverage = bool(self.keepAverageSpans)
 
-        #recalculate all of this info based on the raw data files
-        self.processedWorkoutPowerVals = ([],[])
+        #recalculate all of this info based on the raw data files; each ride's target bars are its own
+        #({"ride", "plot", "vbox", "xs", "ys"}, see process_ride)
+        self.targetBars = []
         self.processedPowerVals = ([],[])
         self.processedHRVals = ([],[])
         self.processedCadenceVals = ([],[])
@@ -252,28 +292,27 @@ class SynopsisWindow(QWidget):
         self.synopsisGraphFrameLayout.setContentsMargins(6,6,6,6)
         self.synopsisGraphFrameLayout.addWidget(self.synopsisGraphLabel)
 
-        self.workoutPowerPlot = SolidColoredColumns(x=[0],y=[],ranges=[],colors=[0])
         FtpColors.watch(self, "refresh_ftp_colors")
         #speed is kept in the distance unit it was shown in (converted if that changes, see units_changed); power to
         #weight follows the weight set on the setup screen
         self.speedUnit = Units.current.distance
         Units.watch(self, "units_changed")
         self.powerProducedPlot = pg.PlotCurveItem([0,0])
-        if AppState.antHRM:
+        if self.showHR:
             self.hrPlot = pg.PlotCurveItem([0,0])
         if self.showCadence:
             self.cadencePlot = pg.PlotCurveItem([0,0])
-        if AppState.has_speed_sensor():
+        if self.showSpeed:
             self.speedPlot = pg.PlotCurveItem([0,0])
 
+        #where the session ends: the last ride's end (a sensor silent that long before it shows zero)
+        self.endTime = self.lastRide["start"] + self.lastRide["secondsPassed"]
         #get contents of workout files
         self.process_synopsis_data()
 
-        #the whole ride fills the graph, and is as far out as it can zoom; zooming and panning only move
+        #the whole session fills the graph, and is as far out as it can zoom; zooming and panning only move
         #time, the y scales stay fixed
-        lastReading = max((vals[0][-1] for vals in (self.processedPowerVals, self.processedHRVals,
-                           self.processedCadenceVals, self.processedSpeedVals) if vals[0]), default=0)
-        self.totalSeconds = max(AppState.secondsPassed, lastReading, self.MIN_ZOOM_SECONDS)
+        self.totalSeconds = max(sum(ride["seconds"] for ride in self.rides), self.MIN_ZOOM_SECONDS)
         graph = self.synopsisGraphLabel
         for vbox in (graph.plotScreen.vb, graph.powerVBox, graph.hrCadenceVBox):
             vbox.setMouseEnabled(x=True, y=False)
@@ -283,19 +322,19 @@ class SynopsisWindow(QWidget):
         graph.plotScreen.vb.setXRange(0, self.totalSeconds, padding=0)
         self.set_tick_spacing(self.totalSeconds)
 
-        #set graph y ranges
-        maxWorkoutPower = GetMaxOrZero(self.processedWorkoutPowerVals[1])
+        #set graph y ranges (a Musical Cadence Mode ride's targets are cadences, on the cadence axis)
+        maxWorkoutPower = GetMaxOrZero([y for bar in self.targetBars if bar["vbox"] is graph.powerVBox for y in bar["ys"]])
+        maxTargetCadence = GetMaxOrZero([y for bar in self.targetBars if bar["vbox"] is graph.hrCadenceVBox
+                                         for y in bar["ys"]])
         maxProducedPower, maxProducedPowerIndex = GetMaxOrZeroAndIndex(self.processedPowerVals[1])
-        #(a Musical Cadence Mode ride's targets are cadences, on the cadence axis)
-        cadenceRide = self.cadence_ride()
-        powerMax = GetMaxOrZero([maxProducedPower] if cadenceRide else [maxWorkoutPower,maxProducedPower])
+        powerMax = GetMaxOrZero([maxWorkoutPower,maxProducedPower])
         if powerMax == 0:
             powerMax = 400
         self.synopsisGraphLabel.powerVBox.setYRange(0,powerMax+100,padding=0)
         maxSavedHr, maxSavedHrIndex = GetMaxOrZeroAndIndex(self.processedHRVals[1])
         maxCadence, maxCadenceIndex = GetMaxOrZeroAndIndex(self.processedCadenceVals[1])
         maxSpeed, maxSpeedIndex = GetMaxOrZeroAndIndex(self.processedSpeedVals[1])
-        hrCadenceSpeedMax = GetMaxOrZero([maxSavedHr, maxCadence, maxSpeed] + ([maxWorkoutPower] if cadenceRide else []))
+        hrCadenceSpeedMax = GetMaxOrZero([maxSavedHr, maxCadence, maxSpeed, maxTargetCadence])
         if hrCadenceSpeedMax == 0:
             hrCadenceSpeedMax = 190
         self.synopsisGraphLabel.hrCadenceVBox.setYRange(0,hrCadenceSpeedMax+20,padding=0)
@@ -306,22 +345,29 @@ class SynopsisWindow(QWidget):
         #stats keep the previous Segoe UI Black font rather than Orbitron
         statsFontSize = "14pt"
         self.datapointsTextbox.setStyleSheet("background-color:#bdd6de; padding:8px; font: " + statsFontSize + " 'Segoe UI Black';")
-        self.target_vbox().addItem(self.workoutPowerPlot)
+        for bar in self.targetBars:
+            bar["vbox"].addItem(bar["plot"])
         self.synopsisGraphLabel.powerVBox.addItem(self.powerProducedPlot)
-        if AppState.antHRM:
+        if self.showHR:
             self.synopsisGraphLabel.hrCadenceVBox.addItem(self.hrPlot)
         if self.showCadence:
             self.synopsisGraphLabel.hrCadenceVBox.addItem(self.cadencePlot)
-        if AppState.has_speed_sensor():
+        if self.showSpeed:
             self.synopsisGraphLabel.hrCadenceVBox.addItem(self.speedPlot)
+        #a divider where each ride after the first starts, over the power bars (under a highlighted curve)
+        for start in self.rideStarts:
+            divider = pg.InfiniteLine(pos=start, angle=90, movable=False,
+                                      pen=pg.mkPen(QColor(*self.DIVIDER_COLOR), width=2, style=Qt.PenStyle.DashLine))
+            divider.setZValue(5)
+            graph.powerVBox.addItem(divider, ignoreBounds=True)
 
         #sensor curves can be clicked to highlight the whole line; clicking it again or empty plot space clears it
         self.sensorCurves = [self.powerProducedPlot]
-        if AppState.antHRM:
+        if self.showHR:
             self.sensorCurves.append(self.hrPlot)
         if self.showCadence:
             self.sensorCurves.append(self.cadencePlot)
-        if AppState.has_speed_sensor():
+        if self.showSpeed:
             self.sensorCurves.append(self.speedPlot)
         self.curvePens = {}
         self.selectedCurve = None
@@ -336,20 +382,23 @@ class SynopsisWindow(QWidget):
         def drawn(curve):
             xs, ys = curve.getData()
             return ([], []) if xs is None else (list(xs), list(ys))
-        self.plotSeries = [("columns", self.target_vbox(), *self.processedWorkoutPowerVals),
-                           ("curve", self.synopsisGraphLabel.powerVBox, *drawn(self.powerProducedPlot))]
-        if AppState.antHRM:
+        self.plotSeries = [("columns", bar["vbox"], bar["xs"], bar["ys"]) for bar in self.targetBars]
+        self.plotSeries.append(("curve", self.synopsisGraphLabel.powerVBox, *drawn(self.powerProducedPlot)))
+        if self.showHR:
             self.plotSeries.append(("curve", self.synopsisGraphLabel.hrCadenceVBox, *drawn(self.hrPlot)))
         if self.showCadence:
             self.plotSeries.append(("curve", self.synopsisGraphLabel.hrCadenceVBox, *drawn(self.cadencePlot)))
-        if AppState.has_speed_sensor():
+        if self.showSpeed:
             self.speedSeriesIndex = len(self.plotSeries) #(redrawn in another unit, see units_changed)
             self.plotSeries.append(("curve", self.synopsisGraphLabel.hrCadenceVBox, *drawn(self.speedPlot)))
 
-        #Musical Cadence Mode: the songs heard, along the top (before the max labels, which keep clear of it)
-        self.songStrip = None
-        if AppState.cadenceMode:
-            self.setup_song_strip()
+        #along the top (before the max labels, which keep clear of them): the rides' headings with more than one,
+        #and under them Musical Cadence Mode's songs heard
+        self.strips = []
+        self.rideStrip = self.songStrip = None
+        if len(self.rides) > 1:
+            self.setup_ride_strip()
+        self.setup_song_strip()
 
         #add max value markers; their labels are placed by layout_max_labels() so they never overlap or leave the plot
         #label texts are formats for the max value, so a zoomed-in selection can show its own max
@@ -357,7 +406,7 @@ class SynopsisWindow(QWidget):
         self.add_max_marker(self.synopsisGraphLabel.powerVBox, self.processedPowerVals, maxProducedPowerIndex, maxProducedPower,
                             lambda watts: f"Max Power: {watts:.0f} W" + Units.power_to_weight_text(watts),
                             self.powerProducedPlot)
-        if AppState.antHRM:
+        if self.showHR:
             self.add_max_marker(self.synopsisGraphLabel.hrCadenceVBox, self.processedHRVals, maxSavedHrIndex, maxSavedHr,
                                 "Max Heart Rate: {:.0f} bpm", self.hrPlot)
         if self.showCadence:
@@ -365,7 +414,7 @@ class SynopsisWindow(QWidget):
             cadenceDecimals = 0 if all(float(c).is_integer() for c in self.processedCadenceVals[1]) else 1
             self.add_max_marker(self.synopsisGraphLabel.hrCadenceVBox, self.processedCadenceVals, maxCadenceIndex, maxCadence,
                                 "Max Cadence: {:.%df} RPM" % cadenceDecimals, self.cadencePlot)
-        if AppState.has_speed_sensor():
+        if self.showSpeed:
             self.add_max_marker(self.synopsisGraphLabel.hrCadenceVBox, self.processedSpeedVals, maxSpeedIndex, maxSpeed,
                                 lambda speed: f"Max Speed: {speed:.2f} {Units.speed_unit()}", self.speedPlot)
         #re-place labels whenever the plot area moves, resizes or rescales (connected after updateViews above)
@@ -381,12 +430,14 @@ class SynopsisWindow(QWidget):
         self.statsLayout = QVBoxLayout()
         self.statsLayout.setContentsMargins(0,0,0,0)
         self.statsLayout.setSpacing(0)
-        #a workout's grade (see WorkoutGrading.py) heads the stats column; an FTP test isn't graded, its new FTP
-        #goes there instead (see FtpTest.py)
-        self.ftpTestMode = AppState.ftpTestMode if AppState.workoutMode else None
-        self.grading = AppState.workoutMode and not self.ftpTestMode
-        #this workout's grades, kept here: the next workout's HUD starts AppState.blockGrades over
-        self.blockGrades = dict(AppState.blockGrades)
+        #the graded rides' grade (see WorkoutGrading.py) heads the stats column; an FTP test isn't graded, its new FTP
+        #goes there too when it's the last ride (see FtpTest.py)
+        self.ftpTestMode = self.lastRide["ftpTestMode"]
+        self.gradedRides = [ride for ride in self.rides if ride["graded"]]
+        self.grading = bool(self.gradedRides)
+        #every graded ride's grades, keyed (ride index, the ride's AppState.blockGrades key)
+        self.blockGrades = {(index, key): record for index, ride in enumerate(self.rides) if ride["graded"]
+                            for key, record in ride["blockGrades"].items()}
         if self.grading:
             average = WorkoutGrading.workout_average(self.blockGrades)
             grade = WorkoutGrading.letter(average)
@@ -400,7 +451,8 @@ class SynopsisWindow(QWidget):
             self.workoutGradeBadge.setFixedSize(96, 76)
             self.workoutGradeBadge.setStyleSheet(grade_badge_css(grade, 26))
             gradeBoxLayout.addWidget(self.workoutGradeBadge)
-            self.workoutGradeText = QLabel("Workout Grade\n" + ("No blocks graded" if average is None else f"{average:.1f}%"))
+            title = "Session Grade" if len(self.gradedRides) > 1 else "Workout Grade"
+            self.workoutGradeText = QLabel(title + "\n" + ("No blocks graded" if average is None else f"{average:.1f}%"))
             self.workoutGradeText.setStyleSheet("font: 16pt 'Segoe UI Black';")
             gradeBoxLayout.addWidget(self.workoutGradeText, 1)
             self.statsLayout.addWidget(self.workoutGradeBox)
@@ -546,8 +598,8 @@ class SynopsisWindow(QWidget):
     def setup_ftp_test_result(self):
         """Previous FTP, the new one the test works out to, and the difference, heading the stats column. No new FTP
         if the effort had no power readings or wasn't ridden to the end (ended early), or the ramp was under 60s"""
-        self.previousFtp = int(AppState.ftp)
-        result = AppState.ftpTestResult or {}
+        self.previousFtp = self.lastRide["ftp"]
+        result = self.lastRide["ftpTestResult"] or {}
         average = result.get("average")
         self.newFtp = None
         reason = "No power recorded"
@@ -586,11 +638,11 @@ class SynopsisWindow(QWidget):
 
     #the ⚙ menu's Measurements (or the weight) changed: speed converted to the new unit, the stats and labels again
     def units_changed(self):
-        if AppState.has_speed_sensor() and Units.current.distance != self.speedUnit:
+        if self.showSpeed and Units.current.distance != self.speedUnit:
             factor = Units.KM_PER_MILE if Units.current.distance == "km" else 1/Units.KM_PER_MILE
             self.speedUnit = Units.current.distance
             self.processedSpeedVals[1][:] = [speed*factor for speed in self.processedSpeedVals[1]]
-            self.speedPlot.setData(*WithDropoutsAsZero(*self.processedSpeedVals, endTime=AppState.secondsPassed))
+            self.speedPlot.setData(*WithDropoutsAsZero(*self.processedSpeedVals, endTime=self.endTime))
             xs, ys = self.speedPlot.getData()
             if xs is not None:
                 self.plotSeries[self.speedSeriesIndex] = ("curve", self.synopsisGraphLabel.hrCadenceVBox, list(xs), list(ys))
@@ -614,42 +666,69 @@ class SynopsisWindow(QWidget):
         self.parent.setupWidget.apply_max_hr(self.workoutMaxHr)
         self.setMaxHrButton.setEnabled(False)
 
-    def cadence_ride(self):
-        #a Musical Cadence Mode ride: its targets (and grades) are cadences
-        return AppState.workoutMode and AppState.cadenceMode
+    def cadence_ride(self, ride=None):
+        #a Musical Cadence Mode ride (the last one by default): its targets (and grades) are cadences
+        return (ride or self.lastRide)["kind"] == "cadence"
 
-    def target_vbox(self):
-        """Where the workout's target bars and the block grades go: the power axis, or the cadence axis for a
-        Musical Cadence Mode ride"""
+    def target_vbox(self, ride=None):
+        """Where a ride's (the last one's by default) target bars and block grades go: the power axis, or the
+        cadence axis for a Musical Cadence Mode ride"""
         graph = self.synopsisGraphLabel
-        return graph.hrCadenceVBox if self.cadence_ride() else graph.powerVBox
+        return graph.hrCadenceVBox if self.cadence_ride(ride) else graph.powerVBox
 
-    def ride_offset(self):
-        """What to add to an AppState.secondsPassed time for the graph's (seconds since AppState.startTimestamp);
-        the workout's power requests have both"""
-        if AppState.workoutPowerRequestsSeconds and AppState.workoutPowerRequestsSysTime:
-            return ((AppState.workoutPowerRequestsSysTime[0] - AppState.startTimestamp).total_seconds()
-                    - AppState.workoutPowerRequestsSeconds[0])
-        return 0.0
+    @staticmethod
+    def graph_offset(ride):
+        """What to add to one of a ride's AppState.secondsPassed times for the graph's (the session's seconds)"""
+        return ride["start"] + ride["rideOffset"]
+
+    def ride_of(self, record):
+        """The ride a block grade record is from"""
+        return next((ride for ride in self.rides if any(r is record for r in ride["blockGrades"].values())),
+                    self.lastRide)
+
+    ###The strips along the top: the rides' headings, the songs heard
+    def add_strip(self, strip):
+        self.strips.append(strip)
+        self.synopsisGraphLabel.scene().addItem(strip)
+        if len(self.strips) == 1:
+            vb = self.synopsisGraphLabel.plotScreen.vb
+            vb.sigResized.connect(self.layout_strips)
+            vb.sigXRangeChanged.connect(self.layout_strips)
+        self.layout_strips()
+
+    def layout_strips(self, *_):
+        """Each strip under the ones above it (their heights follow the max labels' size, see BandStrip.set_font)"""
+        top = 0
+        for strip in self.strips:
+            strip.top = top
+            strip.layout()
+            top += strip.height
+
+    def setup_ride_strip(self):
+        rides = [(ride["start"], ride["start"] + ride["seconds"], Session.heading(ride)) for ride in self.rides]
+        self.rideStrip = RideStrip(rides, self.synopsisGraphLabel.plotScreen.vb, self.ride_clicked)
+        self.add_strip(self.rideStrip)
+
+    def ride_clicked(self, index):
+        start, end, _ = self.rideStrip.bands[index]
+        self.zoom_to(start, end)
 
     ###Musical Cadence Mode's songs (AppState.musicPlayed, see HUDWindow.record_song)
     def setup_song_strip(self):
-        offset = self.ride_offset()
-        songs = [(start + offset, end + offset, AppState.musicTracks[index][1])
-                 for index, start, end in AppState.musicPlayed if end > start and index < len(AppState.musicTracks)]
+        songs = [(start + self.graph_offset(ride), end + self.graph_offset(ride), title)
+                 for ride in self.rides for title, start, end in ride["songs"] if end > start]
         if not songs:
             return
-        vb = self.synopsisGraphLabel.plotScreen.vb
-        self.songStrip = SongStrip(songs, vb, self.song_clicked)
-        self.synopsisGraphLabel.scene().addItem(self.songStrip)
-        self.songStrip.layout()
-        vb.sigResized.connect(self.songStrip.layout)
-        vb.sigXRangeChanged.connect(self.songStrip.layout)
+        self.songStrip = SongStrip(songs, self.synopsisGraphLabel.plotScreen.vb, self.song_clicked)
+        self.add_strip(self.songStrip)
 
     def song_clicked(self, index):
-        """Zooms the graph to the song (no closer than the narrowest zoom), or back out to the whole ride if it's
-        already showing just that"""
         start, end, _ = self.songStrip.songs[index]
+        self.zoom_to(start, end)
+
+    def zoom_to(self, start, end):
+        """Zooms the graph to start - end (a ride or a song; no closer than the narrowest zoom), or back out to the
+        whole session if it's already showing just that"""
         start, end = max(start, 0.0), min(end, self.totalSeconds)
         span = max(end - start, self.MIN_ZOOM_SECONDS)
         newStart = max(0.0, min(start - (span - (end - start))/2, self.totalSeconds - span))
@@ -659,38 +738,41 @@ class SynopsisWindow(QWidget):
         self.synopsisGraphLabel.plotScreen.vb.setXRange(newStart, newStart + span, padding=0)
 
     @staticmethod
-    def song_during(start, end):
-        """The title of the song heard longest from start to end (AppState.secondsPassed), or None"""
-        overlaps = [(min(end, songEnd) - max(start, songStart), index)
-                    for index, songStart, songEnd in AppState.musicPlayed if index < len(AppState.musicTracks)]
-        overlap, index = max(overlaps, default=(0, None))
-        return AppState.musicTracks[index][1] if overlap > 0 else None
+    def song_during(ride, start, end):
+        """The title of the ride's song heard longest from start to end (its AppState.secondsPassed), or None"""
+        overlaps = [(min(end, songEnd) - max(start, songStart), title) for title, songStart, songEnd in ride["songs"]]
+        overlap, title = max(overlaps, default=(0, None))
+        return title if overlap > 0 else None
 
     ###Block grades (see WorkoutGrading.py)
     def setup_grade_regions(self):
-        """A clickable region over each graded block's span on the graph, as tall as its highest target power
-        (free ride and low power blocks get a minimum height so they can still be clicked)"""
-        powerVBox = self.target_vbox()
-        minHeight = 0.12*powerVBox.viewRange()[1][1]
-        #(grades are timed in AppState.secondsPassed)
-        offset = self.ride_offset()
+        """A clickable region over each graded block's span on the graph, on its ride's target axis, as tall as its
+        highest target (free ride and low power blocks get a minimum height so they can still be clicked)"""
+        #the open block's outline, in the selection color: one on each axis with blocks, by id(axis)
+        self.gradeHighlights = {}
         for key, record in self.blockGrades.items():
             if record["end"] <= record["start"]:
                 continue
-            rect = QRectF(record["start"] + offset, 0, record["end"] - record["start"], max(record.get("top", 0), minHeight))
-            region = GradeRegion(rect, key, self.grade_region_clicked)
-            powerVBox.addItem(region, ignoreBounds=True)
+            ride = self.rides[key[0]]
+            vbox = self.target_vbox(ride)
+            minHeight = 0.12*vbox.viewRange()[1][1]
+            #(grades are timed in the ride's AppState.secondsPassed)
+            rect = QRectF(record["start"] + self.graph_offset(ride), 0, record["end"] - record["start"],
+                          max(record.get("top", 0), minHeight))
+            region = GradeRegion(rect, key, vbox, self.grade_region_clicked)
+            vbox.addItem(region, ignoreBounds=True)
             #clicks go to the highest item first: below everything, so the curves and max labels keep theirs
             region.setZValue(-1000)
             self.gradeRegions.append(region)
-        #the open block's outline, in the selection color
-        self.gradeHighlight = QGraphicsRectItem()
-        pen = QPen(QColor(self.SELECTION_COLOR), 3)
-        pen.setCosmetic(True)
-        self.gradeHighlight.setPen(pen)
-        self.gradeHighlight.hide()
-        powerVBox.addItem(self.gradeHighlight, ignoreBounds=True)
-        powerVBox.sigRangeChanged.connect(self.place_grade_popup)
+            if id(vbox) not in self.gradeHighlights:
+                highlight = QGraphicsRectItem()
+                pen = QPen(QColor(self.SELECTION_COLOR), 3)
+                pen.setCosmetic(True)
+                highlight.setPen(pen)
+                highlight.hide()
+                vbox.addItem(highlight, ignoreBounds=True)
+                vbox.sigRangeChanged.connect(self.place_grade_popup)
+                self.gradeHighlights[id(vbox)] = highlight
         self.synopsisGraphFrame.installEventFilter(self)
 
     def grade_region_clicked(self, region):
@@ -703,14 +785,17 @@ class SynopsisWindow(QWidget):
     def open_grade_popup(self, region):
         self.close_grade_popup()
         self.gradePopupRegion = region
-        self.gradeHighlight.setRect(region.rect())
-        self.gradeHighlight.show()
+        highlight = self.gradeHighlights[id(region.vbox)]
+        highlight.setRect(region.rect())
+        highlight.show()
         record = self.blockGrades[region.key]
         grade = WorkoutGrading.letter(record["pct"])
         name = record["label"]
-        block = AppState.workoutList[region.key[0]]
+        rideIndex, key = region.key
+        ride = self.rides[rideIndex]
+        block = ride["workoutList"][key[0]]
         if block[0] == 3:
-            name += f"  ·  rep {region.key[2] + 1} of {block[1]}"
+            name += f"  ·  rep {key[2] + 1} of {block[1]}"
 
         popup = QFrame(self.synopsisGraphFrame)
         popup.setObjectName("gradePopup")
@@ -739,7 +824,7 @@ class SynopsisWindow(QWidget):
         KeyShortcuts.add(closeButton, label="Esc")
         header.addWidget(closeButton, 0, Qt.AlignmentFlag.AlignTop)
         layout.addLayout(header)
-        details = QLabel(self.grade_details_html(record))
+        details = QLabel(self.grade_details_html(record, ride))
         details.setTextFormat(Qt.TextFormat.RichText)
         details.setWordWrap(True)
         layout.addWidget(details)
@@ -747,7 +832,8 @@ class SynopsisWindow(QWidget):
         popup.adjustSize()
         self.place_grade_popup()
 
-    def grade_details_html(self, record):
+    def grade_details_html(self, record, ride=None):
+        ride = ride or self.ride_of(record)
         def pct(value):
             return f"{value:.1f}%"
         def points(value, sign):
@@ -774,7 +860,7 @@ class SynopsisWindow(QWidget):
         rows.append(("Graded time", f"{MinimizedDuration(round(record['graded']))} of {MinimizedDuration(round(record['ridden']))}"))
         html = ""
         #Musical Cadence Mode: the block's song
-        song = self.song_during(record["start"], record["end"]) if AppState.cadenceMode else None
+        song = self.song_during(ride, record["start"], record["end"]) if self.cadence_ride(ride) else None
         if song:
             html += f"<div>♪ {escape(song)}</div>"
         html += "<table width='100%' cellspacing='0' cellpadding='1'>"
@@ -784,7 +870,7 @@ class SynopsisWindow(QWidget):
         if record["grace"] >= 0.5:
             notes.append(f"{round(record['grace'])}s grace (block start/end, after a pause)")
         if record["dropped"] >= 0.5:
-            notes.append(f"{round(record['dropped'])}s {'cadence' if self.cadence_ride() else 'power'} dropout left out")
+            notes.append(f"{round(record['dropped'])}s {'cadence' if self.cadence_ride(ride) else 'power'} dropout left out")
         if notes:
             html += f"<div style='font-size:{max(1, round(10*AppTheme.ui_scale))}pt'>" + "  ·  ".join(notes) + "</div>"
         return html
@@ -801,7 +887,7 @@ class SynopsisWindow(QWidget):
             popup.hide()
             return
         middle = (max(rect.left(), start) + min(rect.right(), end))/2
-        scenePoint = self.target_vbox().mapViewToScene(QPointF(middle, rect.bottom()))
+        scenePoint = region.vbox.mapViewToScene(QPointF(middle, rect.bottom()))
         point = self.synopsisGraphLabel.mapTo(self.synopsisGraphFrame,
                                               self.synopsisGraphLabel.mapFromScene(scenePoint))
         frame = self.synopsisGraphFrame.rect()
@@ -821,8 +907,8 @@ class SynopsisWindow(QWidget):
             self.gradePopup.deleteLater()
         self.gradePopup = None
         self.gradePopupRegion = None
-        if hasattr(self, "gradeHighlight"):
-            self.gradeHighlight.hide()
+        for highlight in getattr(self, "gradeHighlights", {}).values():
+            highlight.hide()
 
     def step_grade(self, step):
         """Left/Right: the next/previous graded block's grade opens (the first or last with none open), the graph
@@ -891,7 +977,7 @@ class SynopsisWindow(QWidget):
             KeyShortcuts.add(closeButton, Qt.Key.Key_B, label="B")
             layout.addWidget(closeButton)
             self.blockGradesOverlay, self.blockGradesSheet = overlay, sheet
-        self.blockGradeList.refresh(self.blockGrades)
+        self.blockGradeList.refresh(rides=self.rides)
         self.layout_block_grades()
         self.blockGradesOverlay.show()
         self.blockGradesOverlay.raise_()
@@ -1022,21 +1108,21 @@ class SynopsisWindow(QWidget):
             return vals[0][i0:i1], vals[1][i0:i1]
 
         text = "(Selection)\n" if zoomed else ""
-        if AppState.has_speed_sensor():
-            revolutions = sum(inView(self.speedRevolutions)[1]) if zoomed else self.totalRevolutions
-            #distance is stored as number of revolutions, multiply by wheel circumference and miles/meter to get Mi distance
-            distance = float(AppState.wheelCircumference) * revolutions * 0.000621371 #0.000621371 miles per meter
+        if self.showSpeed:
+            meters = sum(inView(self.speedDistance)[1]) if zoomed else self.totalMeters
+            distance = meters * 0.000621371 #0.000621371 miles per meter
             text += f"Distance: {round(Units.distance(distance), 2)} {Units.distance_unit(long=False)}\n"
-        text += "Total Time: " + MinimizedDuration(round(end - start) if zoomed else AppState.secondsPassed) + "\n"
+        rideSeconds = sum(ride["secondsPassed"] for ride in self.rides)
+        text += "Total Time: " + MinimizedDuration(round(end - start) if zoomed else rideSeconds) + "\n"
         #averages over the recorded readings, only for sensors that recorded any
         def average(vals):
             values = inView(vals)[1]
             return sum(values) / len(values) if values else None
         averages = [("Average Power: {:.0f} W", average(self.processedPowerVals))]
         averagePower = averages[0][1]
-        if AppState.antHRM:
+        if self.showHR:
             averages.append(("Average HR: {:.0f} bpm", average(self.processedHRVals)))
-        if AppState.has_speed_sensor():
+        if self.showSpeed:
             averages.append(("Average Speed: {:.2f} " + Units.speed_unit(), average(self.processedSpeedVals)))
         if self.showCadence:
             averages.append(("Average Cadence: {:.0f} RPM", average(self.processedCadenceVals)))
@@ -1119,9 +1205,10 @@ class SynopsisWindow(QWidget):
     def layout_max_labels(self, *_):
         #place each max label in the free spot nearest its marker: inside the plot area, not overlapping
         #another label, and not covering any plot line or workout power column
+        #(the strips along the top first: a new theme can change their size with the labels', see AppTheme.apply)
+        self.layout_strips()
         area = self.synopsisGraphLabel.plotScreen.vb.sceneBoundingRect()
-        if self.songStrip is not None:
-            area.setTop(area.top() + self.songStrip.height)
+        area.setTop(area.top() + sum(strip.height for strip in self.strips))
         if area.width() < 20 or area.height() < 20:
             return
         gap = 12
@@ -1172,28 +1259,65 @@ class SynopsisWindow(QWidget):
 
     #get data from the workout as it was processed
     def refresh_ftp_colors(self):
-        #the bars' colors (AppState.graphWorkoutBrushDark) are worked out again
-        self.workoutPowerPlot.recolor()
+        #the bars' colors (AppState.graphWorkoutBrushDark) are worked out again, each ride's in its own zones
+        for bar in self.targetBars:
+            bar["plot"].recolor()
 
     def process_synopsis_data(self):
-        #initialize the time data to get the required single digit offset
-        self.processedWorkoutPowerVals[0].append((AppState.workoutPowerRequestsSysTime[0] - AppState.startTimestamp).total_seconds())
-        #get enumeration from watts since it's index length shorter than time index lengths
-        for index in range(len(AppState.workoutPowerRequestsWatts)): 
-            deltaSeconds = (AppState.workoutPowerRequestsSysTime[index+1] - AppState.startTimestamp).total_seconds()
-            if deltaSeconds > 0:
-                self.processedWorkoutPowerVals[0].append(deltaSeconds)
-                self.processedWorkoutPowerVals[1].append(int(AppState.workoutPowerRequestsWatts[index]))
-        self.workoutPowerPlot = SolidColoredColumns(x=self.processedWorkoutPowerVals[0],
-                                                 y=self.processedWorkoutPowerVals[1],
-                                                 ranges=AppState.ftpRanges,colors=AppState.graphWorkoutBrushDark)
-        
-        #replay the sensor history recorded during the workout (see WorkoutData.py)
-        startSeconds = AppState.startTimestamp.timestamp()
-        if AppState.antHRM:
+        #each ride's, from where it starts in the session
+        for ride in self.rides:
+            self.process_ride(ride)
+        #a sensor dropout mid-ride interleaves the two cadence sources, so put them back in time order
+        if self.processedCadenceVals[0]:
+            times, values = zip(*sorted(zip(*self.processedCadenceVals)))
+            self.processedCadenceVals = (list(times), list(values))
+        #plots get long dropouts as zero (see WithDropoutsAsZero); the processed lists stay real readings
+        #only, for the best power and max value stats
+        self.hrPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedHRVals, endTime=self.endTime),
+                                            **sensor_pens("hr"))
+        self.powerProducedPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedPowerVals, endTime=self.endTime),
+                                            **sensor_pens("power"))
+        self.cadencePlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedCadenceVals, endTime=self.endTime),
+                                            **sensor_pens("cadence"))
+        self.speedPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedSpeedVals, endTime=self.endTime),
+                                            **sensor_pens("speed"))
+
+        #Get averages. Durations are increasing, so stop at the first one the
+        #recorded power doesn't span - the stats text pairs bestPowerRange with
+        #its labels by position, so only trailing entries may be left out
+        for targetTime in self.BEST_POWER_SECONDS:
+            bestAvePower = self.findBestPowerRange(targetTime)
+            if bestAvePower is None:
+                break
+            self.bestPowerRange.append(round(bestAvePower,2))
+
+    def process_ride(self, ride):
+        """A ride's target bars and readings (see Session.py), its seconds from its start in the session"""
+        offset = ride["start"]
+        startTimestamp = ride["startTimestamp"]
+        startSeconds = startTimestamp.timestamp()
+        data = ride["data"]
+        powerFrom, cadenceFrom = len(self.processedPowerVals[0]), len(self.processedCadenceVals[0])
+
+        #the target bars, each target from when it was asked for (the times have one more: the first's start)
+        _, targets, targetTimes = ride["powerRequests"]
+        if targets and targetTimes:
+            xs = [offset + (targetTimes[0] - startTimestamp).total_seconds()]
+            ys = []
+            for index in range(len(targets)):
+                deltaSeconds = (targetTimes[index+1] - startTimestamp).total_seconds()
+                if deltaSeconds > 0:
+                    xs.append(offset + deltaSeconds)
+                    ys.append(int(targets[index]))
+            if ys:
+                plot = SolidColoredColumns(x=xs, y=ys, ranges=ride["targetRanges"], colors=AppState.graphWorkoutBrushDark)
+                self.targetBars.append({"ride": ride, "plot": plot, "vbox": self.target_vbox(ride), "xs": xs, "ys": ys})
+
+        #replay the sensor history recorded during the ride (see WorkoutData.py)
+        if ride["hrm"]:
             lastNonZeroVal = 0
             lastNonZeroValIndex = 0
-            for timestamp, hr in WorkoutData.heartRate.rows():
+            for timestamp, hr in data["heartRate"].rows():
                 #(the same hold-last-value smoothing as the live gauge: a 0 is only held over for a few readings)
                 val = hr
                 if hr == 0:
@@ -1207,16 +1331,12 @@ class SynopsisWindow(QWidget):
                     lastNonZeroVal = hr
                 deltaSeconds = timestamp - startSeconds
                 if deltaSeconds > 0:
-                    self.processedHRVals[0].append(deltaSeconds)
+                    self.processedHRVals[0].append(offset + deltaSeconds)
                     self.processedHRVals[1].append(val)
-        #plots get long dropouts as zero (see WithDropoutsAsZero); the processed lists stay real readings
-        #only, for the best power and max value stats
-        self.hrPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedHRVals, endTime=AppState.secondsPassed),
-                                            **sensor_pens("hr"))
 
         lastNonZeroVal = 0
         lastNonZeroValIndex = 0
-        for timestamp, watts in WorkoutData.power.rows():
+        for timestamp, watts in data["power"].rows():
             #(as for heart rate above: coasting's 0s show as 0 once they've gone on for more than a few readings)
             val = watts
             if watts == 0:
@@ -1230,56 +1350,48 @@ class SynopsisWindow(QWidget):
                 lastNonZeroVal = watts
             deltaSeconds = timestamp - startSeconds
             if deltaSeconds > 0:
-                self.processedPowerVals[0].append(deltaSeconds)
+                self.processedPowerVals[0].append(offset + deltaSeconds)
                 self.processedPowerVals[1].append(val)
-        self.powerProducedPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedPowerVals, endTime=AppState.secondsPassed),
-                                            **sensor_pens("power"))
 
+        #(each ride's counters start over, on its own wheel)
+        self.speedLast = None
+        self.cadenceLast = None
+        self.wheelCircumference = ride["wheelCircumference"]
         self.lastNonZeroSpeed = 0
         self.lastNonZeroSpeedIndex = 0
         self.lastNonZeroCadence = 0
         self.lastNonZeroCadenceIndex = 0
-        if AppState.any_speed_cadence():
+        if ride["speedCadence"]:
             #combined (121) sensor: both counters arrive together in one row
-            for timestamp, speedRevs, speedTime, cadenceRevs, cadenceTime in WorkoutData.speedCadence.rows():
+            for timestamp, speedRevs, speedTime, cadenceRevs, cadenceTime in data["speedCadence"].rows():
                 deltaSeconds = timestamp - startSeconds
                 if deltaSeconds > 0:
-                    self.process_speed_reading(deltaSeconds, speedRevs, speedTime)
+                    self.process_speed_reading(offset + deltaSeconds, speedRevs, speedTime)
                     #Early Exit for odd error values (only ever seen on the combined sensor's cadence time)
                     if cadenceTime not in [513, 2305]:
-                        self.process_cadence_reading(deltaSeconds, cadenceRevs, cadenceTime)
+                        self.process_cadence_reading(offset + deltaSeconds, cadenceRevs, cadenceTime)
             #discrete cadence (122) / speed (123) sensors
-            for timestamp, cadenceRevs, cadenceTime in WorkoutData.cadence.rows():
+            for timestamp, cadenceRevs, cadenceTime in data["cadence"].rows():
                 deltaSeconds = timestamp - startSeconds
                 if deltaSeconds > 0:
-                    self.process_cadence_reading(deltaSeconds, cadenceRevs, cadenceTime)
-            for timestamp, speedRevs, speedTime in WorkoutData.speed.rows():
+                    self.process_cadence_reading(offset + deltaSeconds, cadenceRevs, cadenceTime)
+            for timestamp, speedRevs, speedTime in data["speed"].rows():
                 deltaSeconds = timestamp - startSeconds
                 if deltaSeconds > 0:
-                    self.process_speed_reading(deltaSeconds, speedRevs, speedTime)
+                    self.process_speed_reading(offset + deltaSeconds, speedRevs, speedTime)
         #power meter cadence, used while there was no dedicated cadence sensor reading (and all of it in Musical
         #Cadence Mode without a speed/cadence sensor)
-        for timestamp, cadence in WorkoutData.fallbackCadence.rows():
+        for timestamp, cadence in data["fallbackCadence"].rows():
             deltaSeconds = timestamp - startSeconds
             if deltaSeconds > 0:
-                self.add_cadence_value(deltaSeconds, cadence)
-        #a sensor dropout mid-ride interleaves the two sources, so put them back in time order
-        if self.processedCadenceVals[0]:
-            times, values = zip(*sorted(zip(*self.processedCadenceVals)))
-            self.processedCadenceVals = (list(times), list(values))
-        self.cadencePlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedCadenceVals, endTime=AppState.secondsPassed),
-                                            **sensor_pens("cadence"))
-        self.speedPlot = pg.PlotCurveItem(*WithDropoutsAsZero(*self.processedSpeedVals, endTime=AppState.secondsPassed),
-                                            **sensor_pens("speed"))
+                self.add_cadence_value(offset + deltaSeconds, cadence)
 
-        #Get averages. Durations are increasing, so stop at the first one the
-        #recorded power doesn't span - the stats text pairs bestPowerRange with
-        #its labels by position, so only trailing entries may be left out
-        for targetTime in self.BEST_POWER_SECONDS:
-            bestAvePower = self.findBestPowerRange(targetTime)
-            if bestAvePower is None:
-                break
-            self.bestPowerRange.append(round(bestAvePower,2))
+        #a ride with no ring of its own (a free ride) gets one from its readings, for the next rides' spiral
+        if ride["ring"] is None:
+            power = ([t - offset for t in self.processedPowerVals[0][powerFrom:]], self.processedPowerVals[1][powerFrom:])
+            cadence = sorted(zip(self.processedCadenceVals[0][cadenceFrom:], self.processedCadenceVals[1][cadenceFrom:]))
+            cadence = ([t - offset for t, _ in cadence], [c for _, c in cadence])
+            ride["ring"] = Session.ring_from_readings(ride["seconds"], power, cadence, ride["speedCadence"])
 
     def process_speed_reading(self, deltaSeconds, cumulativeSpeedRevolutions, speedEventTime):
         if self.speedLast is None:
@@ -1295,13 +1407,14 @@ class SynopsisWindow(QWidget):
 
         if deltaSpeedEventTime > 0:
             #speed in MPH, 2290.62656 constant is because time events are in 1/1024 seconds units x 2.23694mph=1m/s
-            speed = (float(AppState.wheelCircumference) * deltaRevCount * 2290.62656) / deltaSpeedEventTime
+            speed = (self.wheelCircumference * deltaRevCount * 2290.62656) / deltaSpeedEventTime
             if speed > 60: #remove any crazy values - and their revolutions from the distance, as live
                 return
-            #distance only counts revolutions from accepted readings, as live
-            self.totalRevolutions = self.totalRevolutions + deltaRevCount
-            self.speedRevolutions[0].append(deltaSeconds)
-            self.speedRevolutions[1].append(deltaRevCount)
+            #distance only counts revolutions from accepted readings, as live (in meters: each ride on its own wheel)
+            meters = self.wheelCircumference * deltaRevCount
+            self.totalMeters += meters
+            self.speedDistance[0].append(deltaSeconds)
+            self.speedDistance[1].append(meters)
             if speed < 5:
                 if self.lastNonZeroSpeedIndex < HOLD_SPEED_READINGS:
                     #possible misread, keep the last value for a few cycles
@@ -1349,24 +1462,32 @@ class SynopsisWindow(QWidget):
         self.processedCadenceVals[1].append(cadence)
 
     def findBestPowerRange(self, targetTime, times=None, watts=None):
-        """Highest average power over any stretch of the ride at least
+        """Highest average power over any stretch of the session at least
         targetTime seconds long, or None when the recorded power doesn't
         span targetTime (sensor connected late, dropped out, short ride).
-        Searches the whole ride's power unless given (times, watts).
-        A stretch is unbroken readings: a sensor dropout (readings further
-        apart than DROPOUT_ZERO_SECONDS, where the graph drops to zero too)
-        ends one - except in a 20m or 1h FTP test (dropoutsKeepAverage),
-        where the power is taken to have stayed at the stretch's average
-        through a dropout"""
+        Searches the whole session's power unless given (times, watts).
+        A stretch is unbroken readings of one ride: the next ride, or a
+        sensor dropout (readings further apart than DROPOUT_ZERO_SECONDS,
+        where the graph drops to zero too) ends one - except in a 20m or 1h
+        FTP test's ride (keepAverageSpans), where the power is taken to have
+        stayed at the stretch's average through a dropout"""
         if times is None:
             times, watts = self.processedPowerVals
         best = None
         total = 0
         startIndex = 0
+        starts = self.rideStarts
+        nextStart = bisect.bisect_right(starts, times[0]) if len(times) else 0
         for endIndex in range(len(times)):
-            if not self.dropoutsKeepAverage and endIndex > startIndex and \
-                    times[endIndex] - times[endIndex - 1] > DROPOUT_ZERO_SECONDS:
-                #a dropout: the next stretch starts with this reading
+            #(the first reading of the next ride)
+            newRide = False
+            while nextStart < len(starts) and starts[nextStart] <= times[endIndex]:
+                nextStart += 1
+                newRide = True
+            dropout = endIndex > 0 and times[endIndex] - times[endIndex - 1] > DROPOUT_ZERO_SECONDS and \
+                not any(start <= times[endIndex] < end for start, end in self.keepAverageSpans)
+            if endIndex > startIndex and (newRide or dropout):
+                #the next stretch starts with this reading
                 startIndex, total = endIndex, 0
             total += watts[endIndex]
             #drop readings off the front while the window would still span targetTime without them

@@ -305,3 +305,46 @@ def test_hud_sample_cadence(cadenceSensor, powerAt, cadenceAt, expected):
     HUDWindow.record_spiral_sample(hud)
     power = 200 if powerAt > 5 else 0
     assert got == [(5.0, 3.0, power, expected)]
+
+
+###The session's earlier rides (see Session.py)
+def test_ring_carries_on_from_the_sessions_rides(qapp):
+    """The ring starts with the rides before this workout, each in the zones it was ridden in, a tick where each
+    ends; this workout goes on from there"""
+    AppState.ftp = "200"
+    now = FtpColors.power_ranges()
+    #ridden when the FTP was 400: 250 W was a low zone then
+    then = [limit*2 for limit in now]
+    spiral = PowerSpiral()
+    spiral.resize(300, 300)
+    spiral.clear(300, [(300, [(t + 0.5, 250, 110) for t in range(300)], then)])
+    spiral.set_block(60)
+    #half the ring is the earlier ride, this workout's yet to start
+    assert spiral.workout.duration == 600 and spiral.workout.fraction() == pytest.approx(0.5)
+    ride(spiral, 290, 250, 110, block=False)
+    spiral.set_progress(290, 300, 0, 60)
+    assert spiral.workout.seconds == pytest.approx(590)
+    image = drawn(spiral)
+    assert close(on_ring(spiral, image, 0.25), FtpColors.zone_color(250, then))
+    assert close(on_ring(spiral, image, 0.75), FtpColors.zone_color(250, now))
+    assert FtpColors.zone_color(250, then) != FtpColors.zone_color(250, now)
+    #the tick across the ring where the earlier ride ends, in the line's color
+    g = spiral.geometry_now()
+    tick = at(image, g, math.pi, g["ringR"])
+    line = QColor(AppTheme.THEME.map_hex(ClassPowerSpiral.LINE_COLOR))
+    assert close(tick, line, by=40)
+
+    #what this workout added, for the session's next ride: its own seconds, one sample a second
+    seconds, samples = spiral.ridden()
+    assert seconds == pytest.approx(290)
+    #(the ride's 0.1s steps add up to just under 290)
+    assert len(samples) in (290, 291) and samples[0] == (0.5, pytest.approx(250), pytest.approx(110))
+    assert all(b[0] - a[0] == 1 for a, b in zip(samples, samples[1:]))
+
+
+def test_ring_without_rides_before_is_the_workout(qapp):
+    spiral = spiral_of((300, 300), workout=600)
+    assert spiral.workout.duration == 600 and spiral.historyRanges == []
+    spiral.set_progress(60, 600, 0, 60)
+    assert spiral.workout.fraction() == pytest.approx(0.1)
+    assert spiral.ridden()[0] == pytest.approx(60)

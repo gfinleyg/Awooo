@@ -270,3 +270,114 @@ def test_trainer_follows_the_workout(app_window):
     window.workoutHudWidget.w.endWorkoutConfirmButton.click()
     assert wait_until(lambda: (sensors.round(), target_power_payload(0) in
                                [p for _, p, _ in native.calls_to("send_acknowledged")])[1])
+
+
+def to_synopsis(window):
+    window.escape_pressed()
+    window.workoutHudWidget.w.endWorkoutConfirmButton.click()
+    assert wait_until(window.synopsisWidget.isVisible)
+    return window.synopsisWidget
+
+
+def back_to_setup(window, sensors):
+    bridge, setup = window.startExe, window.setupWidget
+    window.synopsisWidget.SynopsisRestartButton.click()
+    assert wait_until(lambda: bridge.ant.mode == MODE_SCAN and setup.isVisible())
+    sensors.channels = {}
+    assert wait_until(lambda: (sensors.round(), bridge.is_ready())[1], timeout=15)
+    sensors.channels = {identity[0]: channel for channel, identity in bridge.ant.channel_devices().items()}
+    return setup
+
+
+def test_session_keeps_every_ride_until_cleared(app_window):
+    """A workout, then a free ride with the FTP changed between them: the synopsis shows both, one after the other,
+    the workout still in the zones it was ridden in; Clear Session forgets them"""
+    import FtpColors
+    import Session
+    from ClassPowerSpiral import PowerSpiral
+    window, native, errors = app_window
+    sensors = Sensors(native)
+    bridge, setup = connect_sensors(window, native, sensors)
+    #nothing ridden yet: nothing to clear
+    assert not setup.clearSessionButton.isEnabled()
+
+    load_workout(setup)
+    assert wait_until(setup.introStartButton.isEnabled)
+    setup.introStartButton.click()
+    window.workoutHudWidget.startEndButton.click()
+    ride(window, sensors, 60)
+    synopsis = to_synopsis(window)
+    assert [ride["kind"] for ride in AppState.sessionRides] == ["workout"]
+    workout = AppState.sessionRides[0]
+    #its ring, from START to the end (50s), for the next rides' spiral
+    assert workout["ring"][0] == pytest.approx(50, abs=1) and workout["ring"][1]
+    #the only ride: no rides' strip, no dividers
+    assert synopsis.rideStrip is None and synopsis.rideStarts == []
+    assert window.title_bar is not None and "App Flow" in window.windowTitle()
+    workoutZones = FtpColors.power_ranges()
+
+    setup = back_to_setup(window, sensors)
+    assert setup.clearSessionButton.isEnabled()
+    setup.apply_ftp(FTP + 100)
+    assert FtpColors.power_ranges() != workoutZones
+    next(button for button, mode in setup.modeButtons if mode == "free").click()
+    assert wait_until(setup.introStartButton.isEnabled)
+    setup.introStartButton.click()
+    ride(window, sensors, 20)
+    synopsis = to_synopsis(window)
+    assert errors == []
+
+    workout, free = AppState.sessionRides
+    assert free["kind"] == "free" and free["start"] == pytest.approx(workout["seconds"])
+    assert synopsis.totalSeconds == pytest.approx(workout["seconds"] + free["seconds"])
+    #a heading for each ride along the top, a divider where the free ride starts
+    assert [title for _, _, title in synopsis.rideStrip.bands] == ["Workout: App Flow", "Free Ride"]
+    assert synopsis.rideStarts == [free["start"]]
+    #the headings at the max labels' size, the theme's Text size too
+    import AppTheme
+    def label_points():
+        return {marker["label"].font().pointSizeF() for marker in synopsis.maxMarkers}
+    assert label_points() == {synopsis.rideStrip.font.pointSizeF()}
+    AppTheme.THEME.fonts[AppTheme.ROLE_MAIN]["scale"] = 150
+    AppTheme.apply()
+    QApplication.sendPostedEvents()
+    synopsis.layout_max_labels()
+    assert label_points() == {synopsis.rideStrip.font.pointSizeF()}
+    assert synopsis.rideStrip.font.pointSizeF() == pytest.approx(1.5*11*AppTheme.ui_scale)
+    AppTheme.THEME.fonts[AppTheme.ROLE_MAIN]["scale"] = 100
+    AppTheme.apply()
+    #the free ride's readings come after the workout's
+    assert synopsis.processedPowerVals[0][-1] > free["start"]
+    assert min(synopsis.processedPowerVals[0]) < workout["seconds"]
+    #the workout's bars and its zones, from before the FTP changed
+    [bars] = synopsis.targetBars
+    assert bars["ride"] is workout and bars["plot"].opts["ranges"] == workout["targetRanges"]
+    assert workout["powerRanges"] == workoutZones and free["powerRanges"] == FtpColors.power_ranges()
+    #the session's two rides are more than one ride: no workout name in the title
+    assert "App Flow" not in window.windowTitle()
+    #the grades: just the workout's, each ride under its own heading
+    assert synopsis.grading and synopsis.workoutGradeText.text().startswith("Workout Grade")
+    synopsis.show_block_grades(True)
+    rows = synopsis.blockGradeList.rows
+    headings = [row["label"] for row in rows if row["kind"] == "ride"]
+    assert headings == ["Workout: App Flow", "Free Ride"]
+    assert rows[0]["kind"] == "ride" and rows[-1]["kind"] == "ride" and rows[-1]["note"].endswith("not graded")
+    synopsis.show_block_grades(False)
+    #a block's grade opens from the graph, from the workout's own record
+    synopsis.step_grade(1)
+    assert synopsis.gradePopup is not None
+    synopsis.close_grade_popup()
+    #the free ride got a ring from its readings: the next workout's spiral starts with both
+    history = Session.ring_history()
+    assert [seconds for seconds, _, _ in history] == [pytest.approx(workout["ring"][0]), pytest.approx(free["seconds"])]
+    spiral = PowerSpiral()
+    spiral.clear(100, history)
+    assert spiral.workout.duration == pytest.approx(workout["ring"][0] + free["seconds"] + 100)
+    assert errors == []
+
+    #Clear Session (after a Yes) forgets them
+    setup = back_to_setup(window, sensors)
+    setup.clearSessionButton.click()
+    setup.w.clearSessionConfirmButton.click()
+    assert AppState.sessionRides == [] and not setup.clearSessionButton.isEnabled()
+    assert errors == []

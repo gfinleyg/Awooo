@@ -178,10 +178,17 @@ CADENCE_SCALE_TOP_RPM = 115
 CADENCE_FADE_FROM = 0.5
 
 
+class CadenceRanges(list):
+    """Musical Cadence Mode's zone limits kept after it's no longer selected (an earlier ride of the session, see
+    Session.py), so they still fade as cadence zones"""
+
+
 def fade_from(ranges=None):
     """How far along its fade each zone starts for these ranges: CADENCE_FADE_FROM for Musical Cadence Mode's
-    zones (AppState.ftpRanges while it's selected), else 0"""
+    zones (AppState.ftpRanges while it's selected, or kept as CadenceRanges), else 0"""
     ranges = AppState.ftpRanges if ranges is None else ranges
+    if isinstance(ranges, CadenceRanges):
+        return CADENCE_FADE_FROM
     return CADENCE_FADE_FROM if AppState.cadenceMode and list(ranges) == list(AppState.ftpRanges) else 0.0
 
 

@@ -207,6 +207,10 @@ def reset_ride_state():
     AppState.savedHRVals = ([], [])
     AppState.savedCadenceVals = ([], [])
     AppState.totalRevolutions = 0
+    #a simulated ride is the only one in its session (see Session.py)
+    AppState.sessionRides = []
+    AppState.rideStart = None
+    AppState.rideRecorded = False
     WorkoutData.clear()
 
 

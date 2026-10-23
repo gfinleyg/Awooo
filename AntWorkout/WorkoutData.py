@@ -33,6 +33,14 @@ class SensorHistory:
         """(timestamp, value, ...) per reading, oldest first"""
         return zip(self.times, *self.columns)
 
+    def copy(self):
+        """Another history with the same readings (the session keeps each ride's, see Session.py)"""
+        history = SensorHistory(len(self.columns))
+        history.times.extend(self.times)
+        for mine, theirs in zip(history.columns, self.columns):
+            mine.extend(theirs)
+        return history
+
     def clear(self):
         del self.times[:]
         for column in self.columns:
