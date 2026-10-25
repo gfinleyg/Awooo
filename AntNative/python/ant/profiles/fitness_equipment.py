@@ -1,18 +1,20 @@
 from dataclasses import dataclass
-from .base import ANTProfile
+
+from .base import ANTProfile, core_module
 
 
-# ANT+ FE-C data pages decoded here
+# ANT+ FE-C data pages decoded into `latest` and `capabilities` (every page is
+# also decoded field by field into `pages`, see ant.pages)
 GENERAL_FE_DATA_PAGE = 0x10
 SPECIFIC_TRAINER_DATA_PAGE = 0x19
 FE_CAPABILITIES_PAGE = 0x36
 
-# ANT+ FE-C control page: Basic Resistance (page 48), 0.5% units
-BASIC_RESISTANCE_PAGE = 0x30
-
-# ANT+ FE-C control page: Target Power (page 49), 0.25 W units. The
-# profile's accepted target range is 0-4000 W.
-TARGET_POWER_PAGE = 0x31
+# ANT+ FE-C control pages
+BASIC_RESISTANCE_PAGE = 0x30      # page 48, 0.5% units
+TARGET_POWER_PAGE = 0x31          # page 49, 0.25 W units, 0-4000 W
+WIND_RESISTANCE_PAGE = 0x32       # page 50
+TRACK_RESISTANCE_PAGE = 0x33      # page 51
+USER_CONFIGURATION_PAGE = 0x37    # page 55
 TARGET_POWER_MIN_WATTS = 0
 TARGET_POWER_MAX_WATTS = 4000
 
@@ -20,25 +22,34 @@ TARGET_POWER_MAX_WATTS = 4000
 def target_power_payload(watts):
     """8-byte FE-C Target Power (page 49) command for `watts`, clamped to
     the profile's accepted 0-4000 W range."""
-    watts = max(TARGET_POWER_MIN_WATTS, min(TARGET_POWER_MAX_WATTS, watts))
-    quarter_watts = int(round(watts * 4))
-    return bytes([
-        TARGET_POWER_PAGE,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        quarter_watts & 0xFF, (quarter_watts >> 8) & 0xFF,
-    ])
+    return core_module().page_target_power(watts)
 
 
 def basic_resistance_payload(percent):
     """8-byte FE-C Basic Resistance (page 48) command for `percent` of the
     trainer's maximum resistance, clamped to 0-100%. Sending it takes the
     trainer out of target power (ERG) mode."""
-    half_percent = int(round(max(0, min(100, percent)) * 2))
-    return bytes([
-        BASIC_RESISTANCE_PAGE,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        half_percent,
-    ])
+    return core_module().page_basic_resistance(percent)
+
+
+def wind_resistance_payload(coefficient_kg_per_m=None, wind_speed_kmh=None, drafting_factor=None):
+    """8-byte FE-C Wind Resistance (page 50) command: simulation mode's air resistance. None leaves a field at the
+    trainer's default (0.51 kg/m, no wind, no drafting)."""
+    return core_module().page_wind_resistance(coefficient_kg_per_m, wind_speed_kmh, drafting_factor)
+
+
+def track_resistance_payload(grade_percent=None, rolling_resistance=None):
+    """8-byte FE-C Track Resistance (page 51) command: simulation mode's slope (-200 to 200%, 0.01% steps) and
+    coefficient of rolling resistance. None leaves a field at the trainer's default (flat, 0.004)."""
+    return core_module().page_track_resistance(grade_percent, rolling_resistance)
+
+
+def user_configuration_payload(user_weight_kg=None, bicycle_weight_kg=None, wheel_diameter_m=None, gear_ratio=None,
+                               wheel_diameter_offset_mm=None):
+    """8-byte FE-C User Configuration (page 55): what simulation mode computes resistance and speed from. None
+    sends a field as invalid (the trainer assumes 75 kg rider, 10 kg bike, 0.7 m wheel)."""
+    return core_module().page_user_configuration(user_weight_kg, bicycle_weight_kg, wheel_diameter_m, gear_ratio,
+                                                 wheel_diameter_offset_mm)
 
 
 @dataclass(frozen=True)
@@ -77,67 +88,34 @@ class FitnessEquipmentCapabilities:
 class FitnessEquipmentProfile(ANTProfile):
     """ANT+ Fitness Equipment (FE-C) receive-side profile.
 
-    Device type 17. Every page is kept raw (last_raw) so further decoders
-    can be added independently; the trainer data page (0x19) is decoded
-    into `latest` (instantaneous power and cadence) and FE Capabilities
-    (0x36) into `capabilities`. Control pages (Target Power) are built by
-    target_power_payload() and transmitted by the owner of the channel.
+    Device type 17. The trainer data page (0x19) becomes `latest` (instantaneous power and cadence) and FE
+    Capabilities (0x36) `capabilities`; every page is decoded field by field into `pages` (general FE data with
+    speed and distance, settings, metabolic data, treadmill/rower/... data, command status, ...). Control pages are
+    built by the *_payload() functions above and sent by the owner of the channel.
     """
     device_type = 17
 
     def __init__(self):
-        self.latest = None
-        self.last_raw = None
-        self.last_page = None
-        self.pages_received = 0
-        # New trainer data (page 0x19) readings only - see PowerMeterProfile
-        self.readings_received = 0
-        self.capabilities = None
-        self.page_counts = {}
-        self._last_payload_key = None
+        self._attach(core_module().FitnessEquipmentProfile())
 
-    def on_message(self, message):
-        payload = message.get("payload", b"")
-        if len(payload) < 8:
-            return
-        raw_page = payload[0]
-        page = raw_page & 0x7F
-        toggle = bool(raw_page & 0x80)
-        key = (page, bytes(payload))
-        if key == self._last_payload_key:
-            return
-        self._last_payload_key = key
-        self.last_page = page
-        self.pages_received += 1
-        self.page_counts[page] = self.page_counts.get(page, 0) + 1
-        self.last_raw = FitnessEquipmentPage(page, raw_page, toggle, bytes(payload))
+    def _attach(self, core):
+        super()._attach(core)
+        self._capabilities = None
+        self._capabilities_version = None
 
-        if page == SPECIFIC_TRAINER_DATA_PAGE:
-            self._decode_trainer_data(payload)
-        elif page == FE_CAPABILITIES_PAGE:
-            self._decode_capabilities(payload)
+    def _reading(self, fields):
+        return FitnessEquipmentData(**fields)
 
-    def _decode_trainer_data(self, payload):
-        # byte 2 cadence (RPM), bytes 5-6 bits 0-11 instantaneous power (W),
-        # 0xFFF meaning invalid
-        watts = payload[5] | ((payload[6] & 0x0F) << 8)
-        if watts == 0xFFF:
-            return
-        cadence = payload[2]
-        self.readings_received += 1
-        self.latest = FitnessEquipmentData(
-            page=SPECIFIC_TRAINER_DATA_PAGE,
-            instantaneous_power_watts=watts,
-            power_meter_cadence_rpm=None if cadence == 0xFF else cadence,
-            trainer_status=(payload[6] >> 4) & 0x0F,
-        )
+    @property
+    def capabilities(self):
+        version = self._core.capabilities_version
+        if version != self._capabilities_version:
+            fields = self._core.capabilities
+            self._capabilities = None if fields is None else FitnessEquipmentCapabilities(**fields)
+            self._capabilities_version = version
+        return self._capabilities
 
-    def _decode_capabilities(self, payload):
-        max_resistance = payload[5] | (payload[6] << 8)
-        flags = payload[7]
-        self.capabilities = FitnessEquipmentCapabilities(
-            maximum_resistance_newtons=None if max_resistance == 0xFFFF else max_resistance,
-            supports_basic_resistance=bool(flags & 0x01),
-            supports_target_power=bool(flags & 0x02),
-            supports_simulation=bool(flags & 0x04),
-        )
+    @property
+    def last_raw(self):
+        raw = self._core.last_raw
+        return None if raw is None else FitnessEquipmentPage(*raw)

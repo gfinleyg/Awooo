@@ -89,10 +89,21 @@
        is self-contained -->
   <ItemGroup>
     <ClCompile Include="src\core\ant_core.cpp" />
+    <ClCompile Include="src\core\ant_pages.cpp" />
+    <ClCompile Include="src\core\ant_profiles.cpp" />
+    <ClCompile Include="src\core\ant_manager.cpp" />
+    <ClCompile Include="src\core\ant_recovery.cpp" />
     <ClCompile Include="src\python\ant_native_module.cpp" />
+    <ClCompile Include="src\python\py_common.cpp" />
+    <ClCompile Include="src\python\sensor_bindings.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\core\ant_core.hpp" />
+    <ClInclude Include="src\core\ant_pages.hpp" />
+    <ClInclude Include="src\core\ant_profiles.hpp" />
+    <ClInclude Include="src\core\ant_manager.hpp" />
+    <ClInclude Include="src\core\ant_recovery.hpp" />
+    <ClInclude Include="src\python\py_common.hpp" />
   </ItemGroup>
 
 

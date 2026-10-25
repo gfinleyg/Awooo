@@ -1,4 +1,4 @@
-﻿#include "ant_core.hpp"
+#include "ant_core.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -77,16 +77,17 @@ inline unsigned u16le(const std::uint8_t* payload, std::size_t offset) {
            (static_cast<unsigned>(payload[offset + 1]) << 8);
 }
 
-// ANT+ HRM pages 0-4 all carry the same event-time/beat-count/computed-HR
-// fields in bytes 4-7; page 4 additionally carries the previous beat's
-// event time in bytes 2-3, from which the RR interval is derived.
+// ANT+ HRM data pages 0-7 all carry the same event-time/beat-count/computed-HR
+// fields in bytes 4-7 (common pages, 0x40 and up, don't); page 4
+// additionally carries the previous beat's event time in bytes 2-3, from
+// which the RR interval is derived.
 void decode_heart_rate(const std::uint8_t* payload, DecodedMessage& message) {
     const std::uint8_t raw_page = payload[0];
     const std::uint8_t page = raw_page & 0x7F;
     message.page = static_cast<int>(page);
     message.page_change_toggle = (raw_page & 0x80) != 0;
 
-    if (page > 4) {
+    if (page > 7) {
         return;
     }
 
@@ -381,12 +382,16 @@ DecodedMessage decode_message(const RawMessage& event) {
 
     if (decoded_device_type != -1) {
         profile_decode::decode(decoded_device_type, payload_ptr, payload_len, message);
+        PageData page_data = decode_page(decoded_device_type, payload_ptr, payload_len);
+        if (page_data.page >= 0) {
+            message.page_data = std::move(page_data);
+        }
     }
 
     return message;
 }
 
-std::vector<UsbDeviceInfo> Device::list_devices() {
+std::vector<UsbDeviceInfo> Stick::list_devices() {
     // GetAllDevices() returns the SDK's current USB ANT device enumeration.
     // The returned USBDevice pointers are owned by the local ANTDeviceList and
     // must not be retained after this function returns. We copy only metadata.
@@ -421,11 +426,11 @@ std::vector<UsbDeviceInfo> Device::list_devices() {
     return result;
 }
 
-Device::~Device() {
+Stick::~Stick() {
     close();
 }
 
-bool Device::open(std::uint32_t baudrate, std::uint8_t device_number) {
+bool Stick::open(std::uint32_t baudrate, std::uint8_t device_number) {
     std::lock_guard<std::mutex> lock(state_mutex_);
     if (opened_) {
         return true;
@@ -461,7 +466,7 @@ bool Device::open(std::uint32_t baudrate, std::uint8_t device_number) {
     return true;
 }
 
-void Device::close() {
+void Stick::close() {
     stop_message_pump();
 
     // operation_mutex_ keeps another thread's in-flight blocking_call() from
@@ -478,12 +483,12 @@ void Device::close() {
     opened_ = false;
 }
 
-bool Device::is_open() const {
+bool Stick::is_open() const {
     std::lock_guard<std::mutex> lock(state_mutex_);
     return opened_;
 }
 
-bool Device::request_message(int channel, int message_id) {
+bool Stick::request_message(int channel, int message_id) {
     if (channel < 0 || channel > 255) {
         throw std::runtime_error("channel must be 0..255");
     }
@@ -508,7 +513,7 @@ bool Device::request_message(int channel, int message_id) {
         static_cast<UCHAR>(message_id));
 }
 
-std::optional<ChannelId> Device::get_channel_id(int channel, std::uint32_t response_timeout_ms) {
+std::optional<ChannelId> Stick::get_channel_id(int channel, std::uint32_t response_timeout_ms) {
     if (channel < 0 || channel > 255) {
         throw std::runtime_error("channel must be 0..255");
     }
@@ -532,7 +537,7 @@ std::optional<ChannelId> Device::get_channel_id(int channel, std::uint32_t respo
     return ChannelId{device_number, device_type, transmission_type};
 }
 
-void Device::start_message_pump(MessageHandler handler) {
+void Stick::start_message_pump(MessageHandler handler) {
     std::lock_guard<std::mutex> lock(pump_mutex_);
     if (pump_running_) {
         return;
@@ -549,10 +554,10 @@ void Device::start_message_pump(MessageHandler handler) {
     handler_ = std::move(handler);
     cancel_ = false;
     pump_running_ = true;
-    pump_thread_ = std::thread(&Device::message_pump, this);
+    pump_thread_ = std::thread(&Stick::message_pump, this);
 }
 
-void Device::stop_message_pump() {
+void Stick::stop_message_pump() {
     // Held through the join, so a start can't begin until this pump thread
     // is gone. The handler must not start or stop the pump: it would wait
     // here on the thread it's running on.
@@ -568,13 +573,13 @@ void Device::stop_message_pump() {
     handler_ = nullptr;
 }
 
-bool Device::reset(std::uint32_t response_timeout_ms) {
+bool Stick::reset(std::uint32_t response_timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
         return framer->ResetSystem(response_timeout_ms != 0 ? response_timeout_ms : 0);
     });
 }
 
-bool Device::set_network_key(std::uint8_t network_number, const std::vector<std::uint8_t>& key,
+bool Stick::set_network_key(std::uint8_t network_number, const std::vector<std::uint8_t>& key,
                              std::uint32_t response_timeout_ms) {
     if (key.size() != 8) {
         throw std::invalid_argument("ANT network key must contain exactly 8 bytes");
@@ -586,20 +591,20 @@ bool Device::set_network_key(std::uint8_t network_number, const std::vector<std:
     });
 }
 
-bool Device::assign_channel(std::uint8_t channel, std::uint8_t channel_type,
+bool Stick::assign_channel(std::uint8_t channel, std::uint8_t channel_type,
                             std::uint8_t network_number, std::uint32_t timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
         return framer->AssignChannel(channel, channel_type, network_number, timeout_ms);
     });
 }
 
-bool Device::unassign_channel(std::uint8_t channel, std::uint32_t timeout_ms) {
+bool Stick::unassign_channel(std::uint8_t channel, std::uint32_t timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
         return framer->UnAssignChannel(channel, timeout_ms);
     });
 }
 
-bool Device::set_channel_id(std::uint8_t channel, std::uint16_t device_number,
+bool Stick::set_channel_id(std::uint8_t channel, std::uint16_t device_number,
                             std::uint8_t device_type, std::uint8_t transmission_type,
                             std::uint32_t timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
@@ -608,42 +613,42 @@ bool Device::set_channel_id(std::uint8_t channel, std::uint16_t device_number,
     });
 }
 
-bool Device::set_channel_period(std::uint8_t channel, std::uint16_t period,
+bool Stick::set_channel_period(std::uint8_t channel, std::uint16_t period,
                                 std::uint32_t timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
         return framer->SetChannelPeriod(channel, period, timeout_ms);
     });
 }
 
-bool Device::set_channel_rf_frequency(std::uint8_t channel, std::uint8_t rf_frequency,
+bool Stick::set_channel_rf_frequency(std::uint8_t channel, std::uint8_t rf_frequency,
                                       std::uint32_t timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
         return framer->SetChannelRFFrequency(channel, rf_frequency, timeout_ms);
     });
 }
 
-bool Device::set_search_priority(std::uint8_t channel, std::uint8_t priority,
+bool Stick::set_search_priority(std::uint8_t channel, std::uint8_t priority,
                                  std::uint32_t timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
         return framer->SetChannelSearchPriority(channel, priority, timeout_ms);
     });
 }
 
-bool Device::set_search_timeout(std::uint8_t channel, std::uint8_t timeout,
+bool Stick::set_search_timeout(std::uint8_t channel, std::uint8_t timeout,
                                 std::uint32_t timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
         return framer->SetChannelSearchTimeout(channel, timeout, timeout_ms);
     });
 }
 
-bool Device::set_low_priority_search_timeout(std::uint8_t channel, std::uint8_t timeout,
+bool Stick::set_low_priority_search_timeout(std::uint8_t channel, std::uint8_t timeout,
                                              std::uint32_t timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
         return framer->SetLowPriorityChannelSearchTimeout(channel, timeout, timeout_ms);
     });
 }
 
-bool Device::set_rx_extended_messages_enabled(bool enabled, std::uint32_t timeout_ms) {
+bool Stick::set_rx_extended_messages_enabled(bool enabled, std::uint32_t timeout_ms) {
     // Vendor SDK API: RxExtMesgsEnable() forces the module to emit
     // extended receive messages when enabled.
     return blocking_call([&](DSIFramerANT* framer) {
@@ -651,25 +656,25 @@ bool Device::set_rx_extended_messages_enabled(bool enabled, std::uint32_t timeou
     });
 }
 
-bool Device::open_rx_scan_mode(std::uint32_t timeout_ms) {
+bool Stick::open_rx_scan_mode(std::uint32_t timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
         return framer->OpenRxScanMode(timeout_ms);
     });
 }
 
-bool Device::open_channel(std::uint8_t channel, std::uint32_t timeout_ms) {
+bool Stick::open_channel(std::uint8_t channel, std::uint32_t timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
         return framer->OpenChannel(channel, timeout_ms);
     });
 }
 
-bool Device::close_channel(std::uint8_t channel, std::uint32_t timeout_ms) {
+bool Stick::close_channel(std::uint8_t channel, std::uint32_t timeout_ms) {
     return blocking_call([&](DSIFramerANT* framer) {
         return framer->CloseChannel(channel, timeout_ms);
     });
 }
 
-bool Device::send_broadcast(std::uint8_t channel, const std::vector<std::uint8_t>& payload) {
+bool Stick::send_broadcast(std::uint8_t channel, const std::vector<std::uint8_t>& payload) {
     require_payload_8(payload, "broadcast payload");
     UCHAR data[8];
     std::copy(payload.begin(), payload.end(), data);
@@ -678,7 +683,7 @@ bool Device::send_broadcast(std::uint8_t channel, const std::vector<std::uint8_t
     });
 }
 
-int Device::send_acknowledged(std::uint8_t channel, const std::vector<std::uint8_t>& payload,
+int Stick::send_acknowledged(std::uint8_t channel, const std::vector<std::uint8_t>& payload,
                               std::uint32_t timeout_ms) {
     require_payload_8(payload, "acknowledged payload");
     UCHAR data[8];
@@ -688,7 +693,7 @@ int Device::send_acknowledged(std::uint8_t channel, const std::vector<std::uint8
     }));
 }
 
-bool Device::send_burst_packet(std::uint8_t channel_sequence, const std::vector<std::uint8_t>& payload) {
+bool Stick::send_burst_packet(std::uint8_t channel_sequence, const std::vector<std::uint8_t>& payload) {
     if (payload.size() != 8) {
         throw std::invalid_argument("burst packet payload must contain exactly 8 bytes");
     }
@@ -699,11 +704,11 @@ bool Device::send_burst_packet(std::uint8_t channel_sequence, const std::vector<
     });
 }
 
-unsigned int Device::get_message_buffer_capacity() {
+unsigned int Stick::get_message_buffer_capacity() {
     return static_cast<unsigned int>(sizeof(ANT_MESSAGE{}.aucData));
 }
 
-unsigned int Device::get_channel_number(std::uint8_t message_id, const std::vector<std::uint8_t>& data) {
+unsigned int Stick::get_channel_number(std::uint8_t message_id, const std::vector<std::uint8_t>& data) {
     if (data.size() > MESG_MAX_SIZE_VALUE) {
         throw std::invalid_argument("ANT message data is too large");
     }
@@ -713,7 +718,7 @@ unsigned int Device::get_channel_number(std::uint8_t message_id, const std::vect
     return static_cast<unsigned int>(require_framer()->GetChannelNumber(&message));
 }
 
-DSIFramerANT* Device::require_framer() const {
+DSIFramerANT* Stick::require_framer() const {
     std::lock_guard<std::mutex> lock(state_mutex_);
     if (!opened_ || framer_ == nullptr) {
         throw std::runtime_error("ANT device is not open");
@@ -721,7 +726,7 @@ DSIFramerANT* Device::require_framer() const {
     return framer_;
 }
 
-void Device::message_pump() {
+void Stick::message_pump() {
     while (!cancel_) {
         DSIFramerANT* framer = nullptr;
         {

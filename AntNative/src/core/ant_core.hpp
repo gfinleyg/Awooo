@@ -20,13 +20,15 @@
 #include <thread>
 #include <vector>
 
+#include "ant_pages.hpp"
+
 class DSISerialGeneric;
 class DSIFramerANT;
 
 namespace antnative {
 
 // ANT SDK framer result codes (DSIFramerANT's ANTFRAMER_*), as returned by
-// Device::send_acknowledged()
+// Stick::send_acknowledged()
 constexpr int kFramerFail = 0;
 constexpr int kFramerPass = 1;
 constexpr int kFramerTimeout = 2;
@@ -99,11 +101,15 @@ struct DecodedMessage {
     std::optional<int> event_code;
     const char* event_name{nullptr};
 
+    // The payload's page decoded field by field (ant_pages.hpp), once the
+    // device type is known from the extended data
+    std::optional<PageData> page_data;
+
     // ANT+ profile pages, decoded once the device type is known (see
     // decode_profile in ant_core.cpp)
     std::optional<int> page;
     std::optional<bool> page_change_toggle;
-    // Heart rate (120) pages 0-4
+    // Heart rate (120) pages 0-7
     std::optional<double> heart_beat_event_time;
     std::optional<int> heart_beat_event_ticks;
     std::optional<int> heart_beat_count;
@@ -132,16 +138,16 @@ DecodedMessage decode_message(const RawMessage& message);
 // Name of an ANT RESPONSE_EVENT code ("UNKNOWN" for codes not listed)
 const char* response_event_name(std::uint8_t code);
 
-class Device {
+class Stick {
 public:
     using MessageHandler = std::function<void(const RawMessage&)>;
 
     static std::vector<UsbDeviceInfo> list_devices();
 
-    Device() = default;
-    ~Device();
-    Device(const Device&) = delete;
-    Device& operator=(const Device&) = delete;
+    Stick() = default;
+    ~Stick();
+    Stick(const Stick&) = delete;
+    Stick& operator=(const Stick&) = delete;
 
     bool open(std::uint32_t baudrate = 57600, std::uint8_t device_number = 0);
     void close();

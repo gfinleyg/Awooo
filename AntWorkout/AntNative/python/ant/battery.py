@@ -19,11 +19,13 @@ sharing the same "descriptive bit field" byte layout:
 Combined speed/cadence sensors (121) use a page-less format and have no way
 to report battery status at all.
 
-Decoded here from the raw payload rather than in ant_native.cpp so no
-native rebuild is needed; it's a handful of byte reads per page.
+The decoding is the native layer's (src/core/ant_profiles.cpp decode_battery);
+BatteryStatus is how it's handed out.
 """
 
 from dataclasses import dataclass
+
+from .transport.native import ant_native as _core
 
 
 COMMON_PAGE_BATTERY = 0x52
@@ -48,9 +50,6 @@ BATTERY_STATUS_NAMES = {
 # Only used when a device reports a percentage but no usable status (some
 # HRM straps do this)
 LOW_BATTERY_PERCENT = 15
-
-# Device types whose page byte carries the page-change toggle in bit 7
-_TOGGLE_PAGE_DEVICE_TYPES = {120, 122, 123}
 
 
 @dataclass(frozen=True)
@@ -84,46 +83,14 @@ class BatteryStatus:
         return 0
 
 
-def _voltage(fractional, descriptive):
-    coarse = descriptive & 0x0F
-    if coarse == 0x0F:
-        return None
-    return coarse + fractional / 256.0
+def battery_status(fields):
+    """A BatteryStatus from the native layer's fields, or None"""
+    return None if fields is None else BatteryStatus(**fields)
 
 
 def decode_battery(device_type, payload):
     """Return a BatteryStatus if `payload` is a battery status page for
     `device_type`, else None."""
-    if payload is None or len(payload) < 8 or device_type == 121:
+    if payload is None:
         return None
-    payload = bytes(payload)
-
-    page = payload[0]
-    if device_type in _TOGGLE_PAGE_DEVICE_TYPES:
-        page &= 0x7F
-
-    if page == COMMON_PAGE_BATTERY:
-        descriptive = payload[7]
-        return BatteryStatus(
-            status=(descriptive >> 4) & 0x07,
-            voltage=_voltage(payload[6], descriptive),
-            battery_id=(payload[2] >> 4) & 0x0F if payload[2] != 0xFF else 0,
-        )
-
-    if device_type == 120 and page == HRM_PAGE_BATTERY:
-        descriptive = payload[3]
-        level = payload[1] if payload[1] <= 100 else None
-        return BatteryStatus(
-            status=(descriptive >> 4) & 0x07,
-            level_percent=level,
-            voltage=_voltage(payload[2], descriptive),
-        )
-
-    if device_type in (122, 123) and page == BSC_PAGE_BATTERY:
-        descriptive = payload[3]
-        return BatteryStatus(
-            status=(descriptive >> 4) & 0x07,
-            voltage=_voltage(payload[2], descriptive),
-        )
-
-    return None
+    return battery_status(_core.decode_battery(device_type, bytes(payload)))

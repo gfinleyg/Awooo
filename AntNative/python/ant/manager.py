@@ -1,18 +1,19 @@
-from threading import RLock
+"""ANTManager: the stick's channel set-up (one scan channel for discovery, or one dedicated channel per chosen
+device) and routing each message to the ANTDevice it came from.
+
+A thin layer over the native Manager (src/core/ant_manager.cpp), which does the work. It drives whatever `native`
+object it's given exactly as this class used to (the real stick through NativeTransport, or the tests' fake), and
+takes its time from this module's monotonic() and sleep(), which the tests replace with a fake clock.
+"""
+
+import weakref
 from time import monotonic, sleep
 
+from . import device as _device_module
 from .device import ANTDevice
-from .exceptions import (
-    ANTNotOpenError,
-    ANTConfigurationError
-)
-
-from .profiles import (
-    PROFILE_CLASSES,
-    SpeedCadenceProfile
-)
-
+from .profiles import wrap_profile
 from .transport import NativeTransport
+from .transport.native import ant_native as _core
 
 
 #
@@ -30,7 +31,8 @@ CHANNEL_TYPE_SCAN = 1
 CHANNEL_TYPE_SLAVE = 0x00
 
 #
-# ANT+ message periods (1/32768 s units) per device profile
+# ANT+ message periods (1/32768 s units) per device profile (the native
+# manager's, Manager::channel_period)
 #
 CHANNEL_PERIODS = {
     120: 8070,   # heart rate
@@ -43,35 +45,41 @@ CHANNEL_PERIODS = {
 DEFAULT_CHANNEL_PERIOD = 8192
 
 #
-# Search timeouts, 2.5 s units. A dedicated channel whose device drops out
-# returns to searching on its own; searching forever (0xFF) in low priority
-# keeps the stick from closing the channel and doesn't disturb the other
-# channels' reception the way a high priority search would.
+# Search timeouts, 2.5 s units: a dedicated channel searches forever in low
+# priority when its device drops out (Manager::open_slave_channel)
 #
 LOW_PRIORITY_SEARCH_FOREVER = 0xFF
 HIGH_PRIORITY_SEARCH_OFF = 0x00
 SEARCH_FOREVER = 0xFF
 
 #
-# Our own channel closes (switching modes, reopening a channel) make the
-# stick report EVENT_CHANNEL_CLOSED right back; RecoveryManager ignores
-# those for this long after a reconfiguration (see _suppress_events_until).
+# Our own channel closes make the stick report EVENT_CHANNEL_CLOSED right
+# back; they're ignored for this long after a reconfiguration (see
+# events_suppressed())
 #
 RECONFIGURE_EVENT_GRACE_S = 3.0
 
 #
-# Closing the scan channel right after opening it (both within the same
-# millisecond, as a full reapply after a stick reset used to do) leaves the
-# stick refusing every later channel change - open_channel answers
-# CHANNEL_IN_WRONG_STATE and open_rx_scan_mode CLOSE_ALL_CHANNELS - until
-# it's reset again. Seen on an ANT USBStick2: 0ms fails every time, 10ms
-# already works; this leaves a wide margin.
+# Closing the scan channel right after opening it leaves the stick refusing
+# every later channel change until it's reset (seen on an ANT USBStick2: 0 ms
+# fails every time, 10 ms already works), so it's kept open at least this long
 #
 SCAN_MIN_OPEN_S = 0.1
 
 
-class ANTManager:
+def _manager_clock():
+    return monotonic()
 
+
+def _manager_sleep(seconds):
+    sleep(seconds)
+
+
+def _sensor_clock():
+    return _device_module.monotonic()
+
+
+class ANTManager:
 
     def __init__(self, native=None, on_log=None):
 
@@ -80,256 +88,80 @@ class ANTManager:
             or NativeTransport()
         )
 
-        self.devices = {}
-
-        self.device_number = None
-
         #
-        # Recovery test hook:
-        #
-        # Device numbers placed here will have
-        # packets discarded before ANTDevice.update()
-        #
-        self.drop_devices = set()
-
-        self._lock = RLock()
-
-        self._callback = None
-
-        # Set by configure_scan() once it succeeds - RecoveryManager reads
-        # this (as self.manager._scan_config) to reopen the same channel
-        # on a tier-1 retry, or to fully reapply it after a tier-2 device
-        # reset (native.reset() wipes the network key/channel assignment,
-        # so it has to be redone from scratch either way). None until the
-        # first successful configure_scan().
-        self._scan_config = None
-
-        #
-        # Current channel mode (MODE_SCAN/MODE_CHANNELS, None before the
-        # first configure_scan()) and, in MODE_CHANNELS, the dedicated
-        # channel -> (device_type, device_number, transmission_type) each
-        # device is on. Every channel (re)configuration runs under
-        # _config_lock, since the bridge thread and RecoveryManager's
-        # thread both reconfigure.
-        #
-        self.mode = None
-        self._channel_ids = {}
-        self._config_lock = RLock()
-
-        #
-        # When the scan channel was last opened (see SCAN_MIN_OPEN_S), and
-        # whether the stick has stopped accepting channel changes - a
-        # channel switch and the fall back to the scan channel both failed,
-        # which only a reset clears (RecoveryManager resets it, see
-        # reapply_configuration()).
-        #
-        self._scan_opened_at = 0.0
-        self.needs_reset = False
-
-        #
-        # EVENT_CHANNEL_CLOSED grace after our own reconfiguration (see
-        # events_suppressed()): until when for every channel (mode
-        # switches, full reapply), and per channel for a single channel's
-        # reopen, so reopening one channel doesn't hide a real closure on
-        # another.
-        #
-        self._suppress_events_until = 0.0
-        self._suppress_channel_until = {}
-
-        #
-        # The dedicated channels asked for by the last
-        # open_device_channels(), kept while they're wanted even if
-        # opening them failed and the stick fell back to scan mode, so
-        # retry_device_channels() and reapply_configuration() know what to
-        # reopen. Cleared by return_to_scan().
-        #
-        self._wanted_channels = None
-
-        #
-        # Optional callable(str) for routing this manager's own log
-        # lines (device enumeration, currently) to a caller's logging
-        # instead of stdout. Never raised through if it fails.
+        # Optional callable(str) for routing this manager's own log lines
+        # (device enumeration, channel reapply) to a caller's logging.
+        # Never raised through if it fails.
         #
         self.on_log = on_log
 
         #
-        # NOTE: this manager does NOT own a RecoveryManager. It used to
-        # construct one here and start()/stop() it alongside the message
-        # pump, but every real caller (AntWorkoutBridge, the standalone
-        # ant_recovery_test.py) already builds and runs its own
-        # RecoveryManager against this same manager - so that internal
-        # instance was a second, untuned (default 1.5s/3s/7s/7s timing,
-        # no on_event wired up) watchdog running silently in parallel
-        # the whole time, able to independently retry/reset the same
-        # channel the caller's own (properly tuned) RecoveryManager was
-        # already managing. Removed rather than fixed in place, since
-        # nothing outside this file ever referenced self.recovery.
+        # Recovery test hook: device numbers placed here have their packets
+        # discarded before ANTDevice.update(), simulating a device going
+        # silent on the ANT link
+        #
+        self.drop_devices = set()
+        self._dropping = frozenset()
 
+        self._callback = None
+        self._devices = {}
 
-    def open(
-        self,
-        baudrate=57600,
-        device_number=None
-    ):
+        # The native manager reaches back through weak references, so it
+        # doesn't keep this one alive
+        this = weakref.ref(self)
+
+        def sink(message):
+            manager = this()
+            if manager is not None:
+                manager._on_message(message)
+
+        def log(message):
+            manager = this()
+            if manager is not None:
+                manager._log(message)
+
+        self._core = _core.Manager(self.native, sink, _manager_clock, _manager_sleep, _sensor_clock, log)
 
         #
-        # Explicit device requested
+        # NOTE: this manager does NOT own a RecoveryManager - every caller
+        # (AntWorkoutBridge, ant_recovery_test.py) builds and runs its own
+        # against it.
         #
-        if device_number is not None:
 
-            result = self.native.open(
-                baudrate,
-                device_number
-            )
+    @property
+    def device_number(self):
+        return self._core.device_number
 
-            if result:
-                self.device_number = device_number
+    @property
+    def mode(self):
+        """MODE_SCAN, MODE_CHANNELS, or None before the first configure_scan()"""
+        return self._core.mode
 
-            return result
+    @property
+    def needs_reset(self):
+        """The stick has stopped accepting channel changes - a channel switch and the fall back to the scan channel
+        both failed, which only a reset clears (RecoveryManager resets it, see reapply_configuration())"""
+        return self._core.needs_reset
 
+    @property
+    def _scan_config(self):
+        """configure_scan()'s arguments once it succeeded, or None"""
+        return self._core.scan_config
 
-        #
-        # Automatic device selection
-        #
-        devices = self.native.list_devices()
+    @property
+    def devices(self):
+        return {device.identity: device for device in self.get_devices()}
 
-        for device in devices:
-
-            index = device["index"]
-
-            self._log(
-                f"Trying ANT device {index}: "
-                f"{device.get('product_description')}"
-            )
-
-            if self.native.open(
-                baudrate,
-                index
-            ):
-
-                self.device_number = index
-
-                self._log(
-                    f"Selected ANT device {index}"
-                )
-
-                return True
-
-
-        return False
-
-
+    def open(self, baudrate=57600, device_number=None):
+        """Opens stick `device_number`, or the first one that opens"""
+        return self._core.open(baudrate, device_number)
 
     def close(self):
+        self._core.close()
+        self._callback = None
 
-        self.stop()
-
-        self.native.close()
-
-
-
-    def configure_scan(
-        self,
-        network_key,
-        network_number=0,
-        channel=0,
-        rf_frequency=57
-    ):
-
-
-        if not self.native.is_open():
-
-            raise ANTNotOpenError(
-                "ANT device is not open"
-            )
-
-        with self._config_lock:
-
-            self._configure_scan(network_key, network_number, channel, rf_frequency)
-
-
-
-    def _configure_scan(self, network_key, network_number, channel, rf_frequency):
-
-        steps = [
-
-            (
-                self.native.reset,
-                ()
-            ),
-
-            (
-                self.native.set_network_key,
-                (
-                    network_number,
-                    bytes(network_key)
-                )
-            ),
-
-            (
-                self.native.assign_channel,
-                (
-                    channel,
-                    1,
-                    network_number
-                )
-            ),
-
-            (
-                self.native.set_channel_id,
-                (
-                    channel,
-                    0,
-                    0,
-                    0
-                )
-            ),
-
-            (
-                self.native.set_channel_rf_frequency,
-                (
-                    channel,
-                    rf_frequency
-                )
-            ),
-
-            (
-                self.native.set_rx_extended_messages_enabled,
-                (True,)
-            ),
-
-            (
-                self.native.open_rx_scan_mode,
-                ()
-            )
-
-        ]
-
-
-        for fn,args in steps:
-
-            if not fn(*args):
-
-                raise ANTConfigurationError(
-                    "ANT scan configuration failed"
-                )
-
-        # Recorded as kwargs matching this method's own signature, since
-        # _attempt_device_reset() calls self.manager.configure_scan(
-        # **scan_config) to reapply it verbatim after a full reset.
-        self._scan_config = {
-            "network_key": network_key,
-            "network_number": network_number,
-            "channel": channel,
-            "rf_frequency": rf_frequency,
-        }
-
-        self.mode = MODE_SCAN
-        self._channel_ids = {}
-        self._scan_opened_at = monotonic()
-        self.needs_reset = False
-
-
+    def configure_scan(self, network_key, network_number=0, channel=0, rf_frequency=57):
+        self._core.configure_scan(bytes(network_key), network_number, channel, rf_frequency)
 
     #
     # Dedicated channels (MODE_CHANNELS)
@@ -344,573 +176,93 @@ class ANTManager:
         ANTConfigurationError if a channel can't be opened, leaving the
         stick back in scan mode.
         """
-
-        if self._scan_config is None:
-
-            raise ANTConfigurationError(
-                "open_device_channels() needs configure_scan() first"
-            )
-
-        with self._config_lock:
-
-            self._wanted_channels = [tuple(i) for i in identities]
-
-            if self.mode == MODE_SCAN:
-
-                wait = SCAN_MIN_OPEN_S - (monotonic() - self._scan_opened_at)
-
-                if wait > 0:
-                    sleep(wait)
-
-            self._suppress_events()
-
-            self._close_all_channels()
-
-            self.mode = MODE_CHANNELS
-
-            try:
-
-                for channel, identity in enumerate(identities):
-
-                    self._open_slave_channel(channel, identity)
-
-                    self._channel_ids[channel] = tuple(identity)
-
-            except Exception as e:
-
-                self._close_all_channels()
-
-                try:
-
-                    self._open_scan_channel()
-
-                except ANTConfigurationError as scan_error:
-
-                    #
-                    # The stick won't take any channel change now - left
-                    # looking like scan mode (so the dedicated channels are
-                    # still wanted, see wants_device_channels()), flagged
-                    # for RecoveryManager to reset it
-                    #
-                    self.mode = MODE_SCAN
-                    self._channel_ids = {}
-                    self.needs_reset = True
-
-                    raise ANTConfigurationError(
-                        f"{e}; falling back to the scan channel also "
-                        f"failed ({scan_error}), the stick needs a reset"
-                    ) from e
-
-                raise
-
-
+        self._core.open_device_channels([tuple(identity) for identity in identities])
 
     def return_to_scan(self):
         """Close every dedicated channel and go back to the scan channel
         (discovery), e.g. for Disconnect and Rescan."""
-
-        with self._config_lock:
-
-            self._wanted_channels = None
-
-            if self.mode != MODE_CHANNELS:
-                return
-
-            self._suppress_events()
-
-            self._close_all_channels()
-
-            try:
-
-                self._open_scan_channel()
-
-            except ANTConfigurationError:
-
-                #
-                # Same as a failed fall back in open_device_channels()
-                #
-                self.mode = MODE_SCAN
-                self._channel_ids = {}
-                self.needs_reset = True
-
-                raise
-
-
+        self._core.return_to_scan()
 
     def wants_device_channels(self):
         """True when dedicated channels were asked for but the stick is on
         the scan channel instead (opening them failed). False while
-        another thread is reconfiguring - mid switch, they're wanted and
-        the stick is still on the scan channel, but nothing has failed."""
-
-        if not self._config_lock.acquire(blocking=False):
-            return False
-
-        try:
-            return self.mode == MODE_SCAN and self._wanted_channels is not None
-        finally:
-            self._config_lock.release()
-
-
+        another thread is reconfiguring."""
+        return self._core.wants_device_channels()
 
     def retry_device_channels(self):
         """Try again to open the dedicated channels that failed to open
         (recovery). Returns True if they're open now. Raises
         ANTConfigurationError like open_device_channels()."""
-
-        with self._config_lock:
-
-            #
-            # Re-checked under the lock - a disconnect (return_to_scan) on
-            # the bridge thread may have landed since the caller looked
-            #
-            if not self.wants_device_channels():
-                return self.mode == MODE_CHANNELS
-
-            self.open_device_channels(self._wanted_channels)
-
-            return True
-
-
+        return self._core.retry_device_channels()
 
     def reopen_channel(self, channel):
         """Close and reopen one dedicated channel (recovery)."""
-
-        with self._config_lock:
-
-            identity = self._channel_ids.get(channel)
-
-            if self.mode != MODE_CHANNELS or identity is None:
-                return
-
-            self._suppress_events(channel)
-
-            self.native.close_channel(channel)
-            self.native.unassign_channel(channel)
-
-            self._open_slave_channel(channel, identity)
-
-
+        self._core.reopen_channel(channel)
 
     def reopen_scan_channel(self):
         """Close and reopen the scan channel (recovery, MODE_SCAN)."""
-
-        with self._config_lock:
-
-            if self.mode != MODE_SCAN:
-                return
-
-            channel = self._scan_config["channel"] if self._scan_config else 0
-
-            self._suppress_events(channel)
-
-            self.native.close_channel(channel)
-            self.native.unassign_channel(channel)
-
-            self._open_scan_channel()
-
-
+        self._core.reopen_scan_channel()
 
     def reapply_configuration(self):
         """Rebuild the whole setup after native.reset() wiped the network
         key and channel assignments - scan mode, or the same dedicated
         channels as before."""
-
-        with self._config_lock:
-
-            #
-            # The wanted channels, not just the open ones - a reset is
-            # also a chance to get dedicated channels that failed to open
-            # earlier going
-            #
-            identities = self._wanted_channels
-
-            self._configure_scan(**self._scan_config)
-
-            if identities:
-
-                #
-                # A failure here leaves the stick working in scan mode -
-                # don't raise out of the reset over it (the caller still
-                # has to restart the message pump), retry_device_channels()
-                # picks it up from there.
-                #
-                try:
-
-                    self.open_device_channels(identities)
-
-                except ANTConfigurationError as e:
-
-                    self._log(
-                        f"Dedicated channels failed to reopen after reset, "
-                        f"staying on the scan channel: {e}"
-                    )
-
-
+        self._core.reapply_configuration()
 
     def channel_for(self, device_type, device_number):
         """The dedicated channel a device is on, or None (not in
         MODE_CHANNELS, or not one of the opened devices)."""
-
-        for channel, identity in list(self._channel_ids.items()):
-
-            if identity[0] == device_type and identity[1] == device_number:
-
-                return channel
-
-        return None
-
-
+        return self._core.channel_for(device_type, device_number)
 
     def channel_devices(self):
         """{channel: (device_type, device_number, transmission_type)}"""
-
-        return dict(self._channel_ids)
-
-
-
-    def _suppress_events(self, channel=None):
-        """Start the EVENT_CHANNEL_CLOSED grace for one channel, or for
-        every channel when None."""
-
-        until = monotonic() + RECONFIGURE_EVENT_GRACE_S
-
-        if channel is None:
-
-            self._suppress_events_until = until
-            self._suppress_channel_until = {}
-
-        else:
-
-            self._suppress_channel_until[channel] = until
-
-
+        return self._core.channel_devices()
 
     def events_suppressed(self, channel, now=None):
         """Whether a channel event on `channel` (None = unknown channel)
         is still within the grace after our own reconfiguration."""
+        return self._core.events_suppressed(channel, now)
 
-        if now is None:
-            now = monotonic()
-
-        if now < self._suppress_events_until:
-            return True
-
-        if channel is None:
-
-            return any(
-                now < until for until in self._suppress_channel_until.values()
-            )
-
-        return now < self._suppress_channel_until.get(channel, 0.0)
-
-
-
-    def _close_all_channels(self):
-
-        #
-        # Best-effort: a channel may already be closed/unassigned
-        #
-        channels = set(self._channel_ids)
-
-        if self._scan_config is not None:
-            channels.add(self._scan_config["channel"])
-
-        for channel in sorted(channels):
-
-            self.native.close_channel(channel)
-            self.native.unassign_channel(channel)
-
-        self._channel_ids = {}
-
-
-
-    def _open_scan_channel(self):
-
-        config = self._scan_config
-
-        channel = config["channel"]
-
-        ok = (
-            self.native.assign_channel(
-                channel, CHANNEL_TYPE_SCAN, config["network_number"]
-            )
-            and self.native.set_channel_id(channel, 0, 0, 0)
-            and self.native.set_channel_rf_frequency(
-                channel, config["rf_frequency"]
-            )
-            and self.native.set_rx_extended_messages_enabled(True)
-            and self.native.open_rx_scan_mode()
-        )
-
-        if not ok:
-
-            raise ANTConfigurationError(
-                "ANT scan channel configuration failed"
-            )
-
-        self.mode = MODE_SCAN
-        self._channel_ids = {}
-        self._scan_opened_at = monotonic()
-
-
-
-    def _open_slave_channel(self, channel, identity):
-
-        device_type, device_number, transmission_type = identity
-
-        config = self._scan_config
-
-        ok = (
-            self.native.assign_channel(
-                channel, CHANNEL_TYPE_SLAVE, config["network_number"]
-            )
-            and self.native.set_channel_id(
-                channel, device_number, device_type, transmission_type
-            )
-            and self.native.set_channel_period(
-                channel,
-                CHANNEL_PERIODS.get(device_type, DEFAULT_CHANNEL_PERIOD)
-            )
-            and self.native.set_channel_rf_frequency(
-                channel, config["rf_frequency"]
-            )
-        )
-
-        if not ok:
-
-            raise ANTConfigurationError(
-                f"ANT channel {channel} configuration failed for "
-                f"device type={device_type} number={device_number}"
-            )
-
-        #
-        # Search forever in low priority. A stick without low priority
-        # search support falls back to searching forever in high priority.
-        #
-        if not (
-            self.native.set_low_priority_search_timeout(
-                channel, LOW_PRIORITY_SEARCH_FOREVER
-            )
-            and self.native.set_search_timeout(
-                channel, HIGH_PRIORITY_SEARCH_OFF
-            )
-        ):
-
-            self.native.set_search_timeout(channel, SEARCH_FOREVER)
-
-        if not self.native.open_channel(channel):
-
-            raise ANTConfigurationError(
-                f"ANT channel {channel} failed to open for "
-                f"device type={device_type} number={device_number}"
-            )
-
-
-
-    def start(
-        self,
-        callback=None
-    ):
-
+    def start(self, callback=None):
         self._callback = callback
-
-
-        self.native.start_message_pump(
-            self._on_message
-        )
-
-
+        self._core.start()
 
     def stop(self):
-
-        self.native.stop_message_pump()
-
+        self._core.stop()
         self._callback = None
 
-
-
     def _log(self, message):
-
         if self.on_log:
             try:
                 self.on_log(message)
             except Exception:
                 pass
 
+    def _device(self, sensor):
+        """The ANTDevice over a native sensor, the same one every time"""
+        key = (sensor.device_number, sensor.device_type, sensor.transmission_type)
+        device = self._devices.get(key)
+        if device is None:
+            device = ANTDevice._wrap(sensor, wrap_profile(sensor.profile))
+            self._devices[key] = device
+        return device
 
+    def _on_message(self, message):
+        if self.drop_devices != self._dropping:
+            self._dropping = frozenset(self.drop_devices)
+            self._core.set_drop_devices(set(self._dropping))
 
-    def _on_message(
-        self,
-        message
-    ):
-
+        sensor, changed, dropped = self._core.on_message(message)
+        if dropped:
+            return
 
         device = None
-
-        identity = None
-
-
-        if message.get(
-            "has_device_id"
-        ):
-
-
-            identity = (
-
-                message.get(
-                    "device_number"
-                ),
-
-                message.get(
-                    "device_type"
-                ),
-
-                message.get(
-                    "transmission_type"
-                )
-
-            )
-
-        elif "payload" in message and message.get("channel") in self._channel_ids:
-
-            #
-            # A dedicated channel only ever receives its own device, so a
-            # data message without extended device ID still belongs to it
-            # (as long as its full ID, transmission type included, is known)
-            #
-            device_type, device_number, transmission_type = self._channel_ids[message["channel"]]
-
-            if transmission_type:
-
-                identity = (device_number, device_type, transmission_type)
-
-
-        if identity is not None:
-
-
-            if all(
-                x is not None
-                for x in identity
-            ):
-
-
-                with self._lock:
-
-
-                    device = self.devices.get(
-                        identity
-                    )
-
-
-                    if device is None:
-
-
-                        profile_cls = next(
-                            (
-                                cls
-                                for cls
-                                in PROFILE_CLASSES
-                                if cls.can_handle(
-                                    identity[1]
-                                )
-                            ),
-                            None
-                        )
-
-
-                        if profile_cls is SpeedCadenceProfile:
-
-                            profile = profile_cls(
-                                identity[1]
-                            )
-
-                        elif profile_cls:
-
-                            profile = profile_cls()
-
-                        else:
-
-                            profile = None
-
-
-
-                        device = ANTDevice(
-
-                            identity[0],
-                            identity[1],
-                            identity[2],
-                            int(
-                                message.get(
-                                    "channel",
-                                    0
-                                )
-                            ),
-
-                            profile
-
-                        )
-
-
-                        self.devices[
-                            identity
-                        ] = device
-
-
-
-                    #
-                    # Recovery test packet filter
-                    #
-                    # Drop BEFORE update().
-                    #
-                    # This simulates a device
-                    # going silent on the ANT link.
-                    #
-
-                    if device.device_number in self.drop_devices:
-
-                        return
-
-
-
-                    #
-                    # A device heard on the scan channel moves to its own
-                    # channel in MODE_CHANNELS
-                    #
-                    if "channel" in message:
-                        device.channel = int(message["channel"])
-
-                    changed = device.update(message)
-
-
-
-                if self._callback:
-
-                    self._callback(
-                        message,
-                        device,
-                        changed
-                    )
-
-
-                return
-
-
+        if sensor is not None:
+            device = self._device(sensor)
+            device.last_message = message
 
         if self._callback:
-
-            self._callback(
-                message,
-                device,
-                False
-            )
-
-
+            self._callback(message, device, changed)
 
     def get_devices(self):
-
-        with self._lock:
-
-            return list(
-                self.devices.values()
-            )
+        return [self._device(sensor) for sensor in self._core.get_devices()]

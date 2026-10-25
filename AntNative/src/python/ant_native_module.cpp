@@ -1,6 +1,7 @@
 // The ant_native Python module: a pybind11 layer over the AntNative core
-// (src/core/ant_core.hpp). Everything ANT-specific lives in the core; this
-// file only converts between Python and C++ types and manages the GIL.
+// (src/core). Everything ANT-specific lives in the core; this file and
+// sensor_bindings.cpp only convert between Python and C++ types and manage
+// the GIL.
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -12,98 +13,25 @@
 #include <vector>
 
 #include "../core/ant_core.hpp"
+#include "py_common.hpp"
 
 namespace py = pybind11;
 
 namespace {
 
 using antnative::DecodedMessage;
-using antnative::Device;
+using antnative::Stick;
 using antnative::RawMessage;
-
-std::vector<std::uint8_t> to_vector(const py::bytes& value) {
-    const std::string text = value;
-    return std::vector<std::uint8_t>(text.begin(), text.end());
-}
-
-py::bytes to_bytes(const std::vector<std::uint8_t>& value) {
-    return py::bytes(reinterpret_cast<const char*>(value.data()), value.size());
-}
-
-template <typename T>
-void put(py::dict& message, const char* key, const std::optional<T>& value) {
-    if (value) {
-        message[key] = *value;
-    }
-}
-
-void put(py::dict& message, const char* key, const std::optional<std::vector<std::uint8_t>>& value) {
-    if (value) {
-        message[key] = to_bytes(*value);
-    }
-}
-
-// The message dict the pump's callback gets: a key for every field the
-// decode filled
-py::dict to_dict(const DecodedMessage& decoded) {
-    py::dict message;
-    message["message_id"] = decoded.message_id;
-    message["data"] = to_bytes(decoded.data);
-    put(message, "channel", decoded.channel);
-    put(message, "payload", decoded.payload);
-    message["message_size"] = decoded.message_size;
-
-    message["has_extended_data"] = decoded.has_extended_data;
-    put(message, "extended_bitfield", decoded.extended_bitfield);
-    put(message, "has_device_id", decoded.has_device_id);
-    put(message, "has_rssi", decoded.has_rssi);
-    put(message, "has_timestamp", decoded.has_timestamp);
-    put(message, "has_extension", decoded.has_extension);
-    put(message, "extended_data", decoded.extended_data);
-    put(message, "device_number", decoded.device_number);
-    put(message, "device_type", decoded.device_type);
-    put(message, "transmission_type", decoded.transmission_type);
-    put(message, "rssi_data", decoded.rssi_data);
-    put(message, "has_timestamp_field", decoded.has_timestamp_field);
-
-    message["message_name"] = decoded.message_name;
-    put(message, "response_to_message_id", decoded.response_to_message_id);
-    put(message, "event_code", decoded.event_code);
-    if (decoded.event_name != nullptr) {
-        message["event_name"] = decoded.event_name;
-    }
-
-    message["is_error"] = decoded.is_error;
-    put(message, "error_code", decoded.error_code);
-
-    put(message, "page", decoded.page);
-    put(message, "page_change_toggle", decoded.page_change_toggle);
-    put(message, "heart_beat_event_time", decoded.heart_beat_event_time);
-    put(message, "heart_beat_event_ticks", decoded.heart_beat_event_ticks);
-    put(message, "heart_beat_count", decoded.heart_beat_count);
-    put(message, "computed_heart_rate", decoded.computed_heart_rate);
-    put(message, "previous_heart_beat_event_time", decoded.previous_heart_beat_event_time);
-    put(message, "rr_interval", decoded.rr_interval);
-    put(message, "instantaneous_power_watts", decoded.instantaneous_power_watts);
-    put(message, "power_meter_cadence_rpm", decoded.power_meter_cadence_rpm);
-    put(message, "cadence_event_time", decoded.cadence_event_time);
-    put(message, "cadence_event_ticks", decoded.cadence_event_ticks);
-    put(message, "cadence_revolution_count", decoded.cadence_revolution_count);
-    put(message, "speed_event_time", decoded.speed_event_time);
-    put(message, "speed_event_ticks", decoded.speed_event_ticks);
-    put(message, "speed_revolution_count", decoded.speed_revolution_count);
-    put(message, "event_time", decoded.event_time);
-    put(message, "event_ticks", decoded.event_ticks);
-    put(message, "revolution_count", decoded.revolution_count);
-    return message;
-}
+using antnative_py::to_bytes;
+using antnative_py::to_dict;
+using antnative_py::to_vector;
 
 py::list list_devices() {
     // USB enumeration can block, so it runs without the GIL; the Python
     // objects below are only built once the GIL is back.
     const std::vector<antnative::UsbDeviceInfo> devices = [] {
         py::gil_scoped_release release;
-        return Device::list_devices();
+        return Stick::list_devices();
     }();
 
     py::list result;
@@ -302,7 +230,7 @@ public:
     }
 
     unsigned int get_message_buffer_capacity() const {
-        return Device::get_message_buffer_capacity();
+        return Stick::get_message_buffer_capacity();
     }
 
     unsigned int get_channel_number(std::uint8_t message_id, py::bytes data) {
@@ -333,7 +261,7 @@ private:
         }
     }
 
-    Device device_;
+    Stick device_;
     mutable std::mutex callback_mutex_;
     py::object callback_{py::none()};
     std::string callback_error_;
@@ -358,7 +286,9 @@ py::dict decode_message(int message_id, py::bytes data, py::object channel,
 }  // namespace
 
 PYBIND11_MODULE(ant_native, module) {
-    module.doc() = "Minimal Python binding for the ANT SDK DSIFramerANT transport layer.";
+    module.doc() = "AntNative: the ANT USB stick (ANTNative) and the sensors, profiles and watchdog above it.";
+
+    antnative_py::bind_sensors(module);
 
     module.def("list_devices", &list_devices);
     module.def("_decode_message", &decode_message,
