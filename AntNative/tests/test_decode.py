@@ -66,11 +66,12 @@ def test_heart_rate_background_page_has_the_beat_too():
     assert m["page_data"]["battery_level_percent"] == 90
 
 
-def test_heart_rate_common_page_has_no_beat():
-    m = decode(*extended([0x50, 0xFF, 0xFF, 1, 0x0F, 0x00, 0x02, 0x00], 1, 120))
+def test_heart_rate_unknown_page_still_has_the_beat():
+    # HRM Rev 2.5: bytes 4-7 carry the beat on every page; a heart rate monitor sends no common pages
+    m = decode(*extended([0x50, 0xFF, 0xFF, 1, 0x00, 0x04, 0x02, 66], 1, 120))
     assert m["page"] == 0x50
-    assert "computed_heart_rate" not in m
-    assert m["page_data"]["manufacturer_id"] == 15
+    assert (m["computed_heart_rate"], m["heart_beat_count"]) == (66, 2)
+    assert m["page_data"] == {"page": 0x50, "page_name": "unknown"}
 
 
 def test_power_only_page():

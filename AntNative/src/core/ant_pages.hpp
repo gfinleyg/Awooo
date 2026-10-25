@@ -10,9 +10,9 @@
 // same in every language: the Python message dict's "page_data", the C API's
 // ant_message.page_fields and each profile's per-page store.
 //
-// Sources: the Fitness Equipment (Rev 5.0) and Bike Speed and Cadence
-// (Rev 2.1) device profiles and the Recording Bike Power Data application
-// note (Rev 1.0). Pages those don't define are marked where they're decoded.
+// Sources: the ANT+ device profiles Heart Rate (Rev 2.5), Bike Speed and
+// Cadence (Rev 2.1), Bicycle Power (Rev 5.1) and Fitness Equipment (Rev 5.0),
+// and Common Data Pages (Rev 3.1); each page notes its section or table.
 
 #include <cstdint>
 #include <optional>
@@ -79,10 +79,27 @@ std::vector<std::uint8_t> user_configuration(std::optional<double> user_weight_k
                                              std::optional<double> gear_ratio,
                                              std::optional<int> wheel_diameter_offset_mm);
 // Common page 70: ask the sensor to send `page` `times` times (1-127), or
-// until it's acknowledged when `acknowledged`
-std::vector<std::uint8_t> request_page(int page, int times = 1, bool acknowledged = false);
+// until it's acknowledged when `acknowledged`. The descriptors pick a
+// subpage, e.g. bicycle power parameters subpage 1 (crank) or 0xFE.
+std::vector<std::uint8_t> request_page(int page, int times = 1, bool acknowledged = false,
+                                       std::optional<int> descriptor_1 = std::nullopt,
+                                       std::optional<int> descriptor_2 = std::nullopt);
+// Common page 76: sport mode (1 running, 2 cycling, 5 swimming)
+std::vector<std::uint8_t> mode_settings(int sport_mode);
+// Heart rate page 32: gym mode on or off; empty leaves it as it is
+std::vector<std::uint8_t> heart_rate_feature_command(std::optional<bool> gym_mode);
 // Bicycle power page 1, manual zero (calibration ID 0xAA)
 std::vector<std::uint8_t> power_manual_zero();
+// Bicycle power page 1, auto zero on or off (calibration ID 0xAB)
+std::vector<std::uint8_t> power_auto_zero(bool enabled);
+// Bicycle power page 2 subpage 1: crank length in mm (110-236.5, 0.5 mm
+// steps); empty asks the sensor to determine it
+std::vector<std::uint8_t> power_crank_length(std::optional<double> millimetres);
+// Bicycle power page 2 subpage 0xFE: switch the cycling dynamics pages on or
+// off - force angles (power phase), pedal center offset, rider position
+// (seated/standing) and torque barycenter, which need the sensor at 8 Hz
+std::vector<std::uint8_t> power_cycling_dynamics(bool eight_hz, bool power_phase, bool pedal_center_offset,
+                                                 bool rider_position, bool torque_barycenter);
 
 }  // namespace pages
 

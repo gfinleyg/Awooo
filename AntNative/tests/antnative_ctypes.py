@@ -150,11 +150,17 @@ def load():
     lib.ant_page_wind_resistance.argtypes = [ctypes.c_double] * 3 + [out8]
     lib.ant_page_track_resistance.argtypes = [ctypes.c_double] * 2 + [out8]
     lib.ant_page_user_configuration.argtypes = [ctypes.c_double] * 4 + [out8]
-    lib.ant_page_request.argtypes = [u8, u8, ctypes.c_int, out8]
+    lib.ant_page_request.argtypes = [u8, u8, ctypes.c_int, ctypes.c_int, ctypes.c_int, out8]
+    lib.ant_page_mode_settings.argtypes = [u8, out8]
+    lib.ant_page_heart_rate_feature_command.argtypes = [ctypes.c_int, out8]
     lib.ant_page_power_manual_zero.argtypes = [out8]
+    lib.ant_page_power_auto_zero.argtypes = [ctypes.c_int, out8]
+    lib.ant_page_power_crank_length.argtypes = [ctypes.c_double, out8]
+    lib.ant_page_power_cycling_dynamics.argtypes = [ctypes.c_int] * 5 + [out8]
     for name in ("ant_page_basic_resistance", "ant_page_target_power", "ant_page_wind_resistance",
                  "ant_page_track_resistance", "ant_page_user_configuration", "ant_page_request",
-                 "ant_page_power_manual_zero"):
+                 "ant_page_mode_settings", "ant_page_heart_rate_feature_command", "ant_page_power_manual_zero",
+                 "ant_page_power_auto_zero", "ant_page_power_crank_length", "ant_page_power_cycling_dynamics"):
         getattr(lib, name).restype = None
 
     lib.ant_manager_create.restype = ctypes.c_void_p

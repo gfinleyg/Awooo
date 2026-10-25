@@ -77,8 +77,9 @@ inline unsigned u16le(const std::uint8_t* payload, std::size_t offset) {
            (static_cast<unsigned>(payload[offset + 1]) << 8);
 }
 
-// ANT+ HRM data pages 0-7 all carry the same event-time/beat-count/computed-HR
-// fields in bytes 4-7 (common pages, 0x40 and up, don't); page 4
+// Every page a heart rate monitor sends carries the same event-time/beat-
+// count/computed-HR fields in bytes 4-7 (HRM Rev 2.5 Table 7; it never sends
+// common pages, and a legacy one's page byte means nothing); page 4
 // additionally carries the previous beat's event time in bytes 2-3, from
 // which the RR interval is derived.
 void decode_heart_rate(const std::uint8_t* payload, DecodedMessage& message) {
@@ -86,10 +87,6 @@ void decode_heart_rate(const std::uint8_t* payload, DecodedMessage& message) {
     const std::uint8_t page = raw_page & 0x7F;
     message.page = static_cast<int>(page);
     message.page_change_toggle = (raw_page & 0x80) != 0;
-
-    if (page > 7) {
-        return;
-    }
 
     const unsigned event_ticks = u16le(payload, 4);
     message.heart_beat_event_time = event_ticks / 1024.0;

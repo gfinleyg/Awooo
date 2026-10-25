@@ -275,9 +275,40 @@ inline Payload user_configuration(std::optional<double> user_weight_kg, std::opt
                                 or_default(wheel_diameter_m), or_default(gear_ratio), p.data());
     return p;
 }
-inline Payload request_page(std::uint8_t page, std::uint8_t times = 1, bool acknowledged = false) {
+inline Payload request_page(std::uint8_t page, std::uint8_t times = 1, bool acknowledged = false,
+                            std::optional<std::uint8_t> descriptor_1 = std::nullopt,
+                            std::optional<std::uint8_t> descriptor_2 = std::nullopt) {
     Payload p{};
-    ant_page_request(page, times, acknowledged ? 1 : 0, p.data());
+    ant_page_request(page, times, acknowledged ? 1 : 0, descriptor_1 ? *descriptor_1 : -1,
+                     descriptor_2 ? *descriptor_2 : -1, p.data());
+    return p;
+}
+inline Payload mode_settings(std::uint8_t sport_mode) {
+    Payload p{};
+    ant_page_mode_settings(sport_mode, p.data());
+    return p;
+}
+inline Payload heart_rate_feature_command(std::optional<bool> gym_mode) {
+    Payload p{};
+    ant_page_heart_rate_feature_command(gym_mode ? (*gym_mode ? 1 : 0) : -1, p.data());
+    return p;
+}
+inline Payload power_auto_zero(bool enabled) {
+    Payload p{};
+    ant_page_power_auto_zero(enabled ? 1 : 0, p.data());
+    return p;
+}
+inline Payload power_crank_length(std::optional<double> millimetres) {
+    Payload p{};
+    ant_page_power_crank_length(or_default(millimetres), p.data());
+    return p;
+}
+// Seated/standing (page 0xE2) and the other cycling dynamics pages
+inline Payload power_cycling_dynamics(bool eight_hz = true, bool power_phase = true, bool pedal_center_offset = true,
+                                      bool rider_position = true, bool torque_barycenter = true) {
+    Payload p{};
+    ant_page_power_cycling_dynamics(eight_hz, power_phase, pedal_center_offset, rider_position, torque_barycenter,
+                                    p.data());
     return p;
 }
 

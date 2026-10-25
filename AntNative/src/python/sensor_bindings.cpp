@@ -343,10 +343,28 @@ void bind_sensors(py::module_& m) {
     }, py::arg("user_weight_kg") = py::none(), py::arg("bicycle_weight_kg") = py::none(),
        py::arg("wheel_diameter_m") = py::none(), py::arg("gear_ratio") = py::none(),
        py::arg("wheel_diameter_offset_mm") = py::none());
-    m.def("page_request", [](int page, int times, bool acknowledged) {
-        return to_bytes(pages::request_page(page, times, acknowledged));
-    }, py::arg("page"), py::arg("times") = 1, py::arg("acknowledged") = false);
+    m.def("page_request", [](int page, int times, bool acknowledged, std::optional<int> descriptor_1,
+                             std::optional<int> descriptor_2) {
+        return to_bytes(pages::request_page(page, times, acknowledged, descriptor_1, descriptor_2));
+    }, py::arg("page"), py::arg("times") = 1, py::arg("acknowledged") = false, py::arg("descriptor_1") = py::none(),
+       py::arg("descriptor_2") = py::none());
+    m.def("page_mode_settings", [](int sport_mode) { return to_bytes(pages::mode_settings(sport_mode)); },
+          py::arg("sport_mode"));
+    m.def("page_heart_rate_feature_command", [](std::optional<bool> gym_mode) {
+        return to_bytes(pages::heart_rate_feature_command(gym_mode));
+    }, py::arg("gym_mode"));
     m.def("page_power_manual_zero", [] { return to_bytes(pages::power_manual_zero()); });
+    m.def("page_power_auto_zero", [](bool enabled) { return to_bytes(pages::power_auto_zero(enabled)); },
+          py::arg("enabled"));
+    m.def("page_power_crank_length", [](std::optional<double> millimetres) {
+        return to_bytes(pages::power_crank_length(millimetres));
+    }, py::arg("millimetres"));
+    m.def("page_power_cycling_dynamics", [](bool eight_hz, bool power_phase, bool pedal_center_offset,
+                                            bool rider_position, bool torque_barycenter) {
+        return to_bytes(pages::power_cycling_dynamics(eight_hz, power_phase, pedal_center_offset, rider_position,
+                                                      torque_barycenter));
+    }, py::arg("eight_hz"), py::arg("power_phase"), py::arg("pedal_center_offset"), py::arg("rider_position"),
+       py::arg("torque_barycenter"));
 
     // ---- Profiles ----------------------------------------------------------
 

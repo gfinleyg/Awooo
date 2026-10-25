@@ -109,7 +109,7 @@ struct DecodedMessage {
     // decode_profile in ant_core.cpp)
     std::optional<int> page;
     std::optional<bool> page_change_toggle;
-    // Heart rate (120) pages 0-7
+    // Heart rate (120), every page
     std::optional<double> heart_beat_event_time;
     std::optional<int> heart_beat_event_ticks;
     std::optional<int> heart_beat_count;

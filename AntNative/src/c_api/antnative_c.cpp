@@ -690,12 +690,41 @@ void ant_page_user_configuration(double user_weight_kg, double bicycle_weight_kg
               out);
 }
 
-void ant_page_request(uint8_t page, uint8_t times, int acknowledged, uint8_t out[8]) {
-    copy_page(antnative::pages::request_page(page, times, acknowledged != 0), out);
+void ant_page_request(uint8_t page, uint8_t times, int acknowledged, int descriptor_1, int descriptor_2,
+                      uint8_t out[8]) {
+    auto descriptor = [](int value) { return value < 0 ? std::nullopt : std::optional<int>(value); };
+    copy_page(antnative::pages::request_page(page, times, acknowledged != 0, descriptor(descriptor_1),
+                                             descriptor(descriptor_2)),
+              out);
+}
+
+void ant_page_mode_settings(uint8_t sport_mode, uint8_t out[8]) {
+    copy_page(antnative::pages::mode_settings(sport_mode), out);
+}
+
+void ant_page_heart_rate_feature_command(int gym_mode, uint8_t out[8]) {
+    copy_page(antnative::pages::heart_rate_feature_command(gym_mode < 0 ? std::nullopt
+                                                                        : std::optional<bool>(gym_mode != 0)),
+              out);
 }
 
 void ant_page_power_manual_zero(uint8_t out[8]) {
     copy_page(antnative::pages::power_manual_zero(), out);
+}
+
+void ant_page_power_auto_zero(int enabled, uint8_t out[8]) {
+    copy_page(antnative::pages::power_auto_zero(enabled != 0), out);
+}
+
+void ant_page_power_crank_length(double millimetres, uint8_t out[8]) {
+    copy_page(antnative::pages::power_crank_length(given(millimetres)), out);
+}
+
+void ant_page_power_cycling_dynamics(int eight_hz, int power_phase, int pedal_center_offset, int rider_position,
+                                     int torque_barycenter, uint8_t out[8]) {
+    copy_page(antnative::pages::power_cycling_dynamics(eight_hz != 0, power_phase != 0, pedal_center_offset != 0,
+                                                       rider_position != 0, torque_barycenter != 0),
+              out);
 }
 
 // ---- Sensors -------------------------------------------------------------------

@@ -71,17 +71,23 @@ Nothing ever calls back into the program: messages queue up and are read wheneve
 
 | Sensor | Device type | Pages decoded |
 |---|---|---|
-| Heart rate | 120 | default, operating time, manufacturer/product id, previous beat (RR interval), swim interval summary, capabilities, battery |
+| Heart rate | 120 | default, operating time, manufacturer/product id, previous beat (RR interval), swim interval summary, capabilities (features supported/enabled), battery, device information (beat type); the beat fields on every page |
 | Speed / cadence | 123 / 122 | default, operating time, manufacturer/product id, battery, motion (stopped) |
 | Speed & cadence | 121 | its single page-less layout |
-| Bicycle power | 11 | calibration response, power only (pedal balance, accumulated power), wheel torque, crank torque, torque effectiveness/pedal smoothness, crank torque frequency |
+| Bicycle power | 11 | calibration (request/response, auto zero, crank torque frequency), get/set parameters (crank parameters, peak torque threshold, transition time, advanced capabilities 1 and 2), measurement output, power only (pedal balance, accumulated power), wheel torque, crank torque, torque effectiveness/pedal smoothness, torque barycenter, crank torque frequency, right/left force angle, pedal position (seated/standing, pedal center offset) |
 | Fitness equipment (FE-C) | 17 | calibration, general FE data (speed, distance, elapsed time, heart rate, state), settings, metabolic, treadmill, elliptical, rower, climber, Nordic skier, trainer data and torque, control pages, capabilities, user configuration |
-| all but 121 | | common pages: request, command status, manufacturer and product information, battery |
+| power and FE | | common pages: request, command status, generic command, open channel, mode settings, multi-component system, manufacturer and product information, battery, time and date, subfield data (temperature, pressure, humidity, wind...), memory level, paired devices, error description |
 
-Layouts come from the Fitness Equipment (Rev 5.0) and Bike Speed and Cadence (Rev 2.1) device profiles and the
-Recording Bike Power Data application note; `src/core/ant_pages.cpp` notes the few taken from elsewhere (heart rate
-pages 5 and 6, common pages 80-82). Bicycle power's cycling dynamics (0xE0-0xE2) and get/set parameters (0x02)
-aren't decoded: they aren't defined in the documents on hand.
+Layouts come from the ANT+ device profiles (Heart Rate Rev 2.5, Bike Speed and Cadence Rev 2.1, Bicycle Power
+Rev 5.1, Fitness Equipment Rev 5.0) and the Common Data Pages (Rev 3.1); `src/core/ant_pages.cpp` cites the table
+for each page and the tests use the documents' worked examples. Heart rate and speed/cadence sensors send no common
+pages (their page byte can be a legacy sensor's toggle), so a page number they don't define decodes as `unknown`.
+
+Other pages built for sending (`ant.pages`, `ant_page_*`): Mode Settings (common page 76), the heart rate monitor's
+gym-mode feature command (page 32), the power meter's manual and auto zero (0x01), crank length (0x02 subpage 1,
+or auto) and cycling dynamics settings (0x02 subpage 0xFE: 4 or 8 Hz, power phase, pedal center offset, rider
+position, torque barycenter). Request Data Page takes the descriptor bytes, so a power meter's parameter subpages
+can be asked for, e.g. `request_page(0x02, descriptor_1=0x01)` for its crank parameters.
 
 ## Trainer control (FE-C)
 

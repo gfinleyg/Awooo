@@ -282,9 +282,23 @@ ANT_API void ant_page_track_resistance(double grade_percent, double rolling_resi
                                        uint8_t out[8]);                    /* FE-C 51: -200 to 200% */
 ANT_API void ant_page_user_configuration(double user_weight_kg, double bicycle_weight_kg, double wheel_diameter_m,
                                          double gear_ratio, uint8_t out[8]);   /* FE-C 55 */
-/* Common page 70: ask for `page` `times` times (1-127), or until acknowledged */
-ANT_API void ant_page_request(uint8_t page, uint8_t times, int acknowledged, uint8_t out[8]);
+/* Common page 70: ask for `page` `times` times (1-127), or until acknowledged.
+ * Descriptors pick a subpage (e.g. power page 2 subpage 1 or 0xFE); < 0 for none. */
+ANT_API void ant_page_request(uint8_t page, uint8_t times, int acknowledged, int descriptor_1, int descriptor_2,
+                              uint8_t out[8]);
+/* Common page 76: sport mode (1 running, 2 cycling, 5 swimming) */
+ANT_API void ant_page_mode_settings(uint8_t sport_mode, uint8_t out[8]);
+/* Heart rate page 32: gym mode 1 on, 0 off, -1 leave as it is */
+ANT_API void ant_page_heart_rate_feature_command(int gym_mode, uint8_t out[8]);
 ANT_API void ant_page_power_manual_zero(uint8_t out[8]);                   /* power page 1 */
+ANT_API void ant_page_power_auto_zero(int enabled, uint8_t out[8]);        /* power page 1 */
+/* Power page 2 subpage 1: crank length 110-236.5 mm; NAN asks the sensor to work it out */
+ANT_API void ant_page_power_crank_length(double millimetres, uint8_t out[8]);
+/* Power page 2 subpage 0xFE: switch the cycling dynamics pages on or off (force
+ * angles, pedal center offset, rider position - seated/standing - and torque
+ * barycenter, which need the sensor at 8 Hz) */
+ANT_API void ant_page_power_cycling_dynamics(int eight_hz, int power_phase, int pedal_center_offset,
+                                             int rider_position, int torque_barycenter, uint8_t out[8]);
 
 /* ---- Sensors -------------------------------------------------------------
  *
