@@ -3,10 +3,11 @@ __pycache__/
 *.pyc
 
 # AntNative build intermediates and debug symbols (the .pyd modules in build/Release are what the apps load, those
-# stay tracked)
+# stay tracked, as do antnative.dll and its import library antnative.lib, which C/C++ programs link against)
 AntNative/build/obj/
 AntNative/build/Release/*.exp
 AntNative/build/Release/*.lib
+!AntNative/build/Release/antnative.lib
 AntNative/build.log
 *.pdb
 

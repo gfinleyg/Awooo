@@ -1,7 +1,8 @@
 param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
-    [string]$ANTLibRoot = "..\antlib\ANT_LIB",
+    # The ANT SDK, beside the Awooo checkout by default
+    [string]$ANTLibRoot = "..\..\antlib\ANT_LIB",
     # One or more Python installs to build for (each gets its own ant_native.cpXYZ-win_amd64.pyd).
     # Default: every Python 3.10 or newer the py launcher knows about.
     [string[]]$PythonHome = @(),
@@ -77,6 +78,10 @@ if (-not (Test-Path $AntWorkoutRoot)) {
 # at the location used by the wrapper linker.
 & msbuild (Join-Path $ANTLibRoot "ANT_Lib.vcxproj") /m /p:Configuration=$Configuration /p:Platform=x64 /p:SolutionDir="$ANTLibRoot\"
 if ($LASTEXITCODE -ne 0) { throw "ANT_LIB build failed." }
+
+# antnative.dll, the C/C++ library (include\antnative.h, antnative.hpp): one build serves every program
+& msbuild (Join-Path $PSScriptRoot "antnative.vcxproj") /m /p:Configuration=$Configuration /p:Platform=x64 /p:ANTLibRoot="$ANTLibRoot"
+if ($LASTEXITCODE -ne 0) { throw "antnative.dll build failed." }
 
 foreach ($python in $pythons) {
     & msbuild $project /m /p:Configuration=$Configuration /p:Platform=x64 /p:ANTLibRoot="$ANTLibRoot" /p:PythonHome="$($python.Home)" /p:PythonVersion=$($python.Version) /p:Pybind11Dir="$Pybind11Dir" /p:AntWorkoutRoot="$AntWorkoutRoot"

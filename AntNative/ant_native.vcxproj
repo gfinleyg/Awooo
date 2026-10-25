@@ -85,15 +85,20 @@
     </Link>
   </ItemDefinitionGroup>
 
+  <!-- The core is compiled straight into the module (and into antnative.dll, see antnative.vcxproj), so each
+       is self-contained -->
   <ItemGroup>
-    <ClCompile Include="src\ant_native.cpp" />
+    <ClCompile Include="src\core\ant_core.cpp" />
+    <ClCompile Include="src\python\ant_native_module.cpp" />
   </ItemGroup>
-
+  <ItemGroup>
+    <ClInclude Include="src\core\ant_core.hpp" />
+  </ItemGroup>
 
 
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <PropertyGroup Label="ANT SDK">
-    <ANTLibRoot Condition="'$(ANTLibRoot)' == ''">..\ANT_LIB</ANTLibRoot>
+    <ANTLibRoot Condition="'$(ANTLibRoot)' == ''">..\..\antlib\ANT_LIB</ANTLibRoot>
   </PropertyGroup>
 
   <!--
