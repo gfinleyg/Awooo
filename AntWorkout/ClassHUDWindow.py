@@ -1217,8 +1217,9 @@ class HUDWindow(QWidget):
         self.updateSpiralColors()
 
     def updateSpiralColors(self):
-        #(the spiral colors itself from the power ridden: redrawn for new power zone colors)
-        self.spiralWorkoutProgress.update()
+        #(the spiral colors itself from the power ridden: redrawn for new power zone colors; workout mode only)
+        if hasattr(self, "spiralWorkoutProgress"):
+            self.spiralWorkoutProgress.update()
 
     def spiral_block_time(self, sinceTick=0.0):
         """(seconds along, seconds long) of the whole block for the spiral: an interval's every rep of every
