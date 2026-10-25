@@ -1,5 +1,6 @@
 import bisect
 import math
+import time
 from html import escape
 
 import pyqtgraph as pg
@@ -16,6 +17,7 @@ import FtpColors
 from ClassSpiralProgressBar import *
 from ClassWorkoutGraph import *
 from ClassCustomTitleBar import *
+from ClassMaxStar import MaxStar, STEP_MS
 
 from AppState import AppState
 from ClassConfirmExitWindow import ConfirmExitWindow
@@ -332,14 +334,17 @@ class SynopsisWindow(QWidget):
         powerMax = GetMaxOrZero([maxWorkoutPower,maxProducedPower])
         if powerMax == 0:
             powerMax = 400
-        self.synopsisGraphLabel.powerVBox.setYRange(0,powerMax+100,padding=0)
+        #(and again, a little higher if need be, to make room for the max stars, see fit_star_room)
+        self.powerTop = powerMax+100
+        self.synopsisGraphLabel.powerVBox.setYRange(0,self.powerTop,padding=0)
         maxSavedHr, maxSavedHrIndex = GetMaxOrZeroAndIndex(self.processedHRVals[1])
         maxCadence, maxCadenceIndex = GetMaxOrZeroAndIndex(self.processedCadenceVals[1])
         maxSpeed, maxSpeedIndex = GetMaxOrZeroAndIndex(self.processedSpeedVals[1])
         hrCadenceSpeedMax = GetMaxOrZero([maxSavedHr, maxCadence, maxSpeed, maxTargetCadence])
         if hrCadenceSpeedMax == 0:
             hrCadenceSpeedMax = 190
-        self.synopsisGraphLabel.hrCadenceVBox.setYRange(0,hrCadenceSpeedMax+20,padding=0)
+        self.hrCadenceTop = hrCadenceSpeedMax+20
+        self.synopsisGraphLabel.hrCadenceVBox.setYRange(0,self.hrCadenceTop,padding=0)
 
         #stats live in their own panel beside the graph so they can never overlap the plot or get clipped
         self.datapointsTextbox = QLabel(self.stats_text(0, self.totalSeconds))
@@ -405,6 +410,7 @@ class SynopsisWindow(QWidget):
         #add max value markers; their labels are placed by layout_max_labels() so they never overlap or leave the plot
         #label texts are formats for the max value, so a zoomed-in selection can show its own max
         self.maxMarkers = []
+        self._themeColors = (MaxStar.COLOR, MaxStar.EDGE_COLOR) #(LayoutViewer lists them with the colors a theme can change)
         self.add_max_marker(self.synopsisGraphLabel.powerVBox, self.processedPowerVals, maxProducedPowerIndex, maxProducedPower,
                             lambda watts: f"Max Power: {watts:.0f} W" + Units.power_to_weight_text(watts),
                             self.powerProducedPlot)
@@ -570,6 +576,11 @@ class SynopsisWindow(QWidget):
         self.selectionTimer.setSingleShot(True)
         self.selectionTimer.setInterval(100)
         self.selectionTimer.timeout.connect(self.update_selection)
+        #the max markers' stars: riding to a new max, or twinkling at rest
+        self.starTimer = QTimer(self)
+        self.starTimer.setInterval(STEP_MS)
+        self.starTimer.timeout.connect(self.animate_stars)
+        self.starTimer.start()
         self.synopsisGraphLabel.plotScreen.vb.sigXRangeChanged.connect(self.selectionTimer.start)
         self.update_selection()
         QTimer.singleShot(1000, self.fix_size)
@@ -1001,13 +1012,10 @@ class SynopsisWindow(QWidget):
         QTimer.singleShot(0, self.layout_max_labels)
 
     def add_max_marker(self, vbox, vals, index, value, fmt, curve):
-        #vals is (times, values); skip when there's no data for this sensor
+        #vals is (times, values); skip when there's no data for this sensor. A star marks the max (see ClassMaxStar.py)
         if len(vals[0]) == 0:
             return
         x = vals[0][index]
-        target = pg.TargetItem(pos=(x, value), movable=False)
-        AppTheme.theme_pen(target, pg.mkPen('black'))
-        vbox.addItem(target)
         scene = self.synopsisGraphLabel.scene()
         line = QGraphicsLineItem()
         AppTheme.theme_pen(line, QPen(QColor(0, 0, 0, 160), 1))
@@ -1021,7 +1029,10 @@ class SynopsisWindow(QWidget):
         #clicking the label highlights its curve, the same as clicking the curve itself
         label.onClick = lambda: self.select_curve(curve)
         scene.addItem(label)
-        self.maxMarkers.append({"label": label, "line": line, "target": target, "vbox": vbox, "vals": vals, "fmt": fmt,
+        star = MaxStar(curve, vbox, self.view_range)
+        star.go_to(x, value)
+        scene.addItem(star)
+        self.maxMarkers.append({"label": label, "line": line, "star": star, "vbox": vbox, "vals": vals, "fmt": fmt,
                                 "fullX": x, "fullY": value, "x": x, "y": value, "shown": True})
 
     @staticmethod
@@ -1087,20 +1098,37 @@ class SynopsisWindow(QWidget):
             else:
                 shown = True
                 marker["x"], marker["y"] = marker["fullX"], marker["fullY"]
-            marker["shown"] = shown
-            for item in (marker["label"], marker["line"], marker["target"]):
+            marker["shown"] = marker["star"].shown = shown
+            for item in (marker["label"], marker["line"]):
                 item.setVisible(shown)
             if not shown:
                 continue
-            marker["target"].setPos(marker["x"], marker["y"])
             if selection:
-                AppTheme.theme_pen(marker["target"], pg.mkPen(self.SELECTION_COLOR, width=3))
                 marker["label"].setText("(Selection) " + self.marker_text(marker["fmt"], marker["y"]))
                 marker["label"].setBorderColor(QColor(self.SELECTION_COLOR), 2.5)
             else:
-                AppTheme.theme_pen(marker["target"], pg.mkPen('black'))
                 marker["label"].setText(self.marker_text(marker["fmt"], marker["y"]))
                 marker["label"].setBorderColor(PlotLabel.borderColor, 1.2)
+            marker["star"].set_color(self.SELECTION_COLOR if selection else MaxStar.COLOR)
+            marker["star"].go_to(marker["x"], marker["y"])
+
+    def fit_star_room(self):
+        #each graph's top high enough for its stars over the whole ride's maxes (a selection's are no higher), under
+        #the strips along the top
+        graph = self.synopsisGraphLabel
+        reserved = sum(strip.height for strip in self.strips)
+        for vbox, top in ((graph.powerVBox, self.powerTop), (graph.hrCadenceVBox, self.hrCadenceTop)):
+            stars = [(marker["star"], marker["fullY"]) for marker in self.maxMarkers if marker["vbox"] is vbox]
+            top = MaxStar.top_with_room(vbox, top, stars, reserved)
+            if abs(vbox.viewRange()[1][1] - top) > 1e-6:
+                vbox.setYRange(0, top, padding=0)
+
+    def animate_stars(self):
+        if not self.isVisible():
+            return
+        now = time.monotonic()
+        for i, marker in enumerate(self.maxMarkers):
+            marker["star"].step(now, i)
 
     def stats_text(self, start, end):
         #stats for the whole ride, or recalculated for just the readings in view when zoomed in
@@ -1210,17 +1238,21 @@ class SynopsisWindow(QWidget):
         #another label, and not covering any plot line or workout power column
         #(the strips along the top first: a new theme can change their size with the labels', see AppTheme.apply)
         self.layout_strips()
+        self.fit_star_room()
         area = self.synopsisGraphLabel.plotScreen.vb.sceneBoundingRect()
         area.setTop(area.top() + sum(strip.height for strip in self.strips))
         if area.width() < 20 or area.height() < 20:
             return
         gap = 12
-        placed = []
+        #the stars' resting spots too, so no label covers one
+        placed = [marker["star"].rest_rect(marker["vbox"].mapViewToScene(QPointF(marker["x"], marker["y"])))
+                  for marker in self.maxMarkers if marker["shown"]]
         for marker in self.maxMarkers:
             if not marker["shown"]:
                 continue
             label, line, vbox, x, y = marker["label"], marker["line"], marker["vbox"], marker["x"], marker["y"]
-            pt = vbox.mapViewToScene(QPointF(x, y))
+            #(the star marking it, resting over it)
+            pt = marker["star"].rest_rect(vbox.mapViewToScene(QPointF(x, y))).center()
             br = label.boundingRect()
             w, h = br.width(), br.height()
             maxLeft = max(area.left(), area.right() - w)

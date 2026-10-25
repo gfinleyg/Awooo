@@ -215,7 +215,7 @@ class DisplayWindow(QMainWindow):
         view = self.views.pop(name, None)
         if view is None:
             return
-        for timerName in ("timer", "blinkTimer", "smoothBarTimer", "selectionTimer"):
+        for timerName in ("timer", "blinkTimer", "smoothBarTimer", "selectionTimer", "starTimer"):
             if hasattr(view, timerName):
                 getattr(view, timerName).stop()
         self.mainLayout.removeWidget(view)

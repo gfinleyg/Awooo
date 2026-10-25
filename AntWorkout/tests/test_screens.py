@@ -8,7 +8,7 @@ import sys
 from collections import defaultdict
 
 import pytest
-from PyQt6.QtCore import QEvent, Qt
+from PyQt6.QtCore import QEvent, QPointF, Qt
 from PyQt6.QtWidgets import QApplication
 
 from AppState import AppState
@@ -40,7 +40,7 @@ def viewer(qapp, tmp_path, monkeypatch):
     yield LayoutViewer, display, errors
     display.pause()
     for view in display.views.values():
-        for timerName in ("timer", "blinkTimer", "smoothBarTimer", "selectionTimer"):
+        for timerName in ("timer", "blinkTimer", "smoothBarTimer", "selectionTimer", "starTimer"):
             if hasattr(view, timerName):
                 getattr(view, timerName).stop()
         view.hide()
@@ -188,3 +188,121 @@ def test_cadence_synopsis_shows_the_songs_heard(viewer):
     #a block's grade names its song
     key = min(AppState.blockGrades, key=lambda key: AppState.blockGrades[key]["start"])
     assert LayoutViewer.VIEWER_SONGS[0][0] in synopsis.grade_details_html(AppState.blockGrades[key])
+
+
+def test_max_stars_ride_to_the_selection_max(viewer, monkeypatch):
+    """Zooming away from the power max sends its star along the curve to the selection's max, where it settles
+    above it; every max is marked by a star"""
+    LayoutViewer, display, errors = viewer
+    display.build("workout", os.path.join(LayoutViewer.WORKOUT_DIR, LayoutViewer.DEFAULT_WORKOUT), 40)
+    display.show_view("Synopsis")
+    QApplication.processEvents()
+    synopsis = display.views["Synopsis"]
+    import AppTheme
+    import ClassSynopsisWindow
+    clock = [1000.0]
+    monkeypatch.setattr(ClassSynopsisWindow.time, "monotonic", lambda: clock[0])
+    assert synopsis.maxMarkers and all("star" in marker and "target" not in marker for marker in synopsis.maxMarkers)
+    power = synopsis.maxMarkers[0]
+    assert power["vbox"] is synopsis.synopsisGraphLabel.powerVBox
+
+    #a minute on the far side of the ride from the max
+    total = synopsis.totalSeconds
+    start = 0 if power["fullX"] > total / 2 else total - 60
+    synopsis.synopsisGraphLabel.plotScreen.vb.setXRange(start, start + 60, padding=0)
+    synopsis.update_selection()
+    star = power["star"]
+    assert power["x"] != power["fullX"] and star.x == power["x"]
+    assert star.tripFrom == power["fullX"] and 0.5 <= star.tripSeconds <= 1.4
+
+    #halfway: on its way, near the line
+    clock[0] += star.tripSeconds / 2
+    synopsis.animate_stars()
+    assert min(start, power["x"]) <= star.at <= max(start + 60, power["x"])
+    #there: resting above the marker
+    clock[0] += star.tripSeconds
+    for _ in range(40):
+        synopsis.animate_stars()
+    pt = power["vbox"].mapViewToScene(QPointF(power["x"], power["y"]))
+    assert abs(power["star"].pos().x() - pt.x()) < 0.01
+    assert abs(power["star"].pos().y() - (pt.y() - star.rest_offset())) < 0.01
+    assert power["star"].isVisible()
+    #the layout viewer lists the star's colors with the ones a theme can change
+    assert {ClassSynopsisWindow.MaxStar.COLOR, ClassSynopsisWindow.MaxStar.EDGE_COLOR} <= LayoutViewer.widget_colors(synopsis)[0]
+    assert errors == []
+
+
+def test_workout_graph_stars_ride_to_a_new_max(viewer, monkeypatch):
+    """The workout screen's graph: a star over each sensor curve's highest reading in view; a new higher reading
+    sends it along the curve to that one, where it settles"""
+    LayoutViewer, display, errors = viewer
+    display.build("workout", os.path.join(LayoutViewer.WORKOUT_DIR, LayoutViewer.DEFAULT_WORKOUT), 40)
+    display.show_view("Workout")
+    hud = display.views["Workout"]
+    hud.progressGraph.setMinimumHeight(160) #(as tall as on a full size screen: the test window squeezes it)
+    QApplication.processEvents()
+    import time
+    import ClassHUDWindow
+    import ClassMaxStar
+    clock = [1000.0]
+
+    class Clock:
+        #(the stars' and the workout screen's clock only: the gauges keep the real one)
+        def __getattr__(self, name):
+            return (lambda: clock[0]) if name == "monotonic" else getattr(time, name)
+    for module in (ClassMaxStar, ClassHUDWindow):
+        monkeypatch.setattr(module, "time", Clock())
+    start = hud.progressGraph.plotScreen.vb.viewRange()[0][0]
+    hud.update_max_stars(start)
+    star, savedName = hud.maxStars[0]
+    assert savedName == "savedPowerVals" and star.shown
+    times, values = AppState.savedPowerVals
+    best = max(v for t, v in zip(times, values) if t >= start)
+    assert star.y == best
+    oldX = star.x
+
+    #a new best a second after the last reading
+    times.append(times[-1] + 1)
+    values.append(best + 50)
+    hud.hud_graph_data_update()
+    assert star.x == times[-1] and star.tripFrom == oldX
+    clock[0] += star.tripSeconds + 0.1
+    for _ in range(40): #(its gap over the line eases to a new one)
+        hud.step_max_stars()
+    pt = star.vbox.mapViewToScene(QPointF(star.x, star.y))
+    assert abs(star.pos().x() - pt.x()) < 0.01
+    #just over the new best, clear of its diamond, with room for it under the graph's top
+    assert star.markerReach == hud.CURRENT_MARKER_REACH
+    assert abs(star.pos().y() - (pt.y() - star.rest_offset())) < 0.01
+    graphTop = star.vbox.mapViewToScene(QPointF(0, star.vbox.viewRange()[1][1])).y()
+    assert pt.y() - star.headroom() >= graphTop - 0.01
+
+    #its bubble, once grown in: the new best, beside the star and clear of it and of the line
+    bubble = hud.maxBubbles[0]
+    for _ in range(2): #(the bubble from before pops first)
+        clock[0] += 1
+        hud.step_max_stars()
+    assert bubble.state == "shown" and bubble.isVisible() and bubble.text == f"Max Pwr: {best + 50:.0f} W"
+    rect = bubble.sceneBoundingRect()
+    assert not rect.intersects(star.sceneBoundingRect())
+    assert rect.bottom() < pt.y() - star.line_reach()
+    #with room for it under the graph's top, popping included, and still after the graph changes size
+    assert pt.y() - bubble.headroom() >= graphTop - 0.01 and rect.top() >= graphTop
+    hud.progressGraph.setMinimumHeight(120)
+    QApplication.processEvents()
+    graphTop = star.vbox.mapViewToScene(QPointF(0, star.vbox.viewRange()[1][1])).y()
+    pt = star.vbox.mapViewToScene(QPointF(star.x, star.y))
+    assert pt.y() - bubble.headroom() >= graphTop - 0.01
+    #the next best pops it; a new one appears once the star gets there
+    times.append(times[-1] + 1)
+    values.append(best + 80)
+    hud.hud_graph_data_update()
+    hud.step_max_stars()
+    assert bubble.state == "popping"
+    clock[0] += bubble.POP_SECONDS
+    hud.step_max_stars()
+    assert not bubble.isVisible()
+    clock[0] += star.tripSeconds
+    hud.step_max_stars()
+    assert bubble.state == "appearing" and bubble.text == f"Max Pwr: {best + 80:.0f} W"
+    assert errors == []
