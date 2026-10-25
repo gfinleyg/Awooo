@@ -394,3 +394,61 @@ def test_shipped_theme_parts_load(path):
             assert key in FtpColors.DEFAULTS
             if isinstance(FtpColors.DEFAULTS[key], dict):
                 assert set(value) <= set(FtpColors.DEFAULTS[key])
+
+
+###Text reads on what it sits on, in every shipped colors file
+#(text, background) where the app draws them, as original colors (a gradient's text: where it sits on it)
+TEXT_PAIRS = {
+    "text on the panels and plots": [("#000000", "#bdd6de")],
+    "text on the pickers and light boxes": [("#000000", "#9fc5d1")],
+    "button text (centered on the button's gradient)": [(AppTheme.BUTTON_TEXT, ("#1cb5e0", "#dadbde", t))
+                                                         for t in (0.35, 0.5, 0.65)],
+    "pressed button text": [(AppTheme.BUTTON_TEXT, ("#1cb5e0", AppTheme.PRESSED, 0.5))],
+    "light text (left aligned on the window gradient)": [(AppTheme.LIGHT_TEXT, ("#28275e", "#9fc5d1", t))
+                                                          for t in (0, 0.25, 0.5)],
+}
+MIN_TEXT_CONTRAST = 3
+
+
+def shipped_colors_files():
+    import glob, os
+    return sorted(glob.glob(os.path.join(__import__("conftest").APP_DIR, "themes", "colors", "*.json")))
+
+
+@pytest.mark.parametrize("path", shipped_colors_files(), ids=lambda p: p.split("\\")[-1].split("/")[-1])
+def test_shipped_colors_set_every_color_and_read(path):
+    colors = {k.lower(): v.lower() for k, v in AppTheme._read(path)["colors"].items()}
+    assert set(AppTheme.THEME_KEYS) <= set(colors)
+    assert not {AppTheme.FIXED_DARK_TEXT, AppTheme.FIXED_LIGHT_TEXT, FtpColors.BLOCK_TEXT} & set(colors)
+    themed = lambda color: colors.get(color, color)
+    for what, pairs in TEXT_PAIRS.items():
+        for text, background in pairs:
+            if isinstance(background, tuple):
+                start, end, amount = background
+                background = FtpColors.mix(themed(start), themed(end), amount)
+            else:
+                background = themed(background)
+            assert AppTheme.contrast(themed(text), background) >= MIN_TEXT_CONTRAST, (what, background)
+
+
+def test_text_on_the_zone_and_grade_colors():
+    #the theme's text on its own colors, else dark or light by the background, whatever the theme
+    AppTheme.THEME.colors = {"#000000": "#ffffff"}
+    assert AppTheme.text_on("#9fc5d1") == "#000000"
+    assert AppTheme.text_on("#f5c400") == AppTheme.FIXED_DARK_TEXT
+    assert AppTheme.text_on("#202060") == AppTheme.FIXED_LIGHT_TEXT
+    assert AppTheme.THEME.css(f"color: {AppTheme.text_on('#f5c400')};") == f"color: {AppTheme.FIXED_DARK_TEXT};"
+    assert FtpColors.block_text("#d1d1d1", "#e0c200") == FtpColors.BLOCK_TEXT
+    assert FtpColors.block_text("#000426", "#001299") == AppTheme.FIXED_LIGHT_TEXT
+
+
+def test_themed_pens_follow_the_theme():
+    from PyQt6.QtGui import QPen
+    from PyQt6.QtWidgets import QGraphicsLineItem
+    line = QGraphicsLineItem()
+    AppTheme.THEME.colors = {"#000000": "#ffffff"}
+    AppTheme.theme_pen(line, QPen(QColor(0, 0, 0, 160), 1))
+    assert line.pen().color().name() == "#ffffff" and line.pen().color().alpha() == 160
+    AppTheme.THEME.reset()
+    line.setPen(AppTheme.themed_pen(line._themeOrigPen))
+    assert line.pen().color().name() == "#000000"

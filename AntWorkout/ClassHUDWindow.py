@@ -29,6 +29,7 @@ from ClassWorkoutGraph import *
 from ClassCustomTitleBar import *
 
 from AppState import AppState
+import AppTheme
 import FtpColors
 from ClassAntDevices import TARGET_POWER_MIN_WATTS, TARGET_POWER_MAX_WATTS
 from ClassAntDevicesPoller import AntDevicesPoller
@@ -305,18 +306,18 @@ class HUDWindow(QWidget):
         smTextStyleSheet = "font: 900 10pt 'Orbitron';"
         
         #Widget Style Settings
-        self.startButtonBlinkOnStyle = "QPushButton {color: black; \
+        self.startButtonBlinkOnStyle = "QPushButton {color: #000001; \
                                             background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,stop: 0 #1CB5E0, stop: 1 #dadbde); \
                                             border-style: solid; border-width: 2px; border-radius: 15px; padding: 4px; \
                                             font: bold 34px 'Segoe UI Black'; border-color: white;} \
-                                            QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e1);} \
+                                            QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e2);} \
                                             QPushButton:disabled { background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #4a4952, stop: 1 #716f7d); \
                                             color: grey;}"
-        self.startButtonBlinkOffStyle = "QPushButton {color: black; \
+        self.startButtonBlinkOffStyle = "QPushButton {color: #000001; \
                                             background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,stop: 0 #1CB5E0, stop: 1 #dadbde); \
                                             border-style: outset; border-width: 2px; border-radius: 15px; padding: 4px; \
                                             font: bold 34px 'Segoe UI Black'; border-color: black;} \
-                                            QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e1);} \
+                                            QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e2);} \
                                             QPushButton:disabled { background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #4a4952, stop: 1 #716f7d); \
                                             color: grey;}"
 
@@ -578,11 +579,12 @@ class HUDWindow(QWidget):
         #subtle dark grid and axis labels so they read against the shaded background
         for axisName in ('bottom', 'left'):
             self.progressGraph.plotScreen.getAxis(axisName).setPen(pg.mkPen(QColor(0,0,0)))
-            self.progressGraph.plotScreen.getAxis(axisName).setTextPen(pg.mkPen(QColor(20,20,40)))
+            self.progressGraph.plotScreen.getAxis(axisName).setTextPen(pg.mkPen(QColor(0,0,0))) #(black: a theme recolors it, axis titles too)
         self.progressGraph.plotScreen.showGrid(x=True, y=True, alpha=0.25)
         #thin light blue line with caret ends at the current time splitting what has occurred (left) from what is coming (right);
         #above the workout bars, below the produced curves
-        self.nowLine = pg.InfiniteLine(pos=0, angle=90, movable=False, pen=pg.mkPen(QColor("#bdd6de"), width=1.5))
+        self.nowLine = pg.InfiniteLine(pos=0, angle=90, movable=False)
+        AppTheme.theme_pen(self.nowLine, pg.mkPen(QColor("#bdd6de"), width=1.5))
         self.nowLine.addMarker('v', position=0.0, size=14)
         self.nowLine.addMarker('^', position=1.0, size=14)
         self.nowLine.setZValue(5)

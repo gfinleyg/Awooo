@@ -42,7 +42,8 @@ class PlotLabel(QGraphicsSimpleTextItem):
     FONT_POINTS = 11
     #called on a left click (pyqtgraph's scene delivers clicks to any item with mouseClickEvent)
     onClick = None
-    borderColor = QColor(40, 40, 40)
+    #(drawn in the theme's color for black, see AppTheme.install: this one is near (40, 40, 40) on the light label)
+    borderColor = QColor(0, 0, 0, 215)
     borderWidth = 1.2
 
     def setBorderColor(self, color, width):
@@ -200,7 +201,8 @@ def sensor_pens(sensor):
 
 def grade_badge_css(grade, points):
     return (f"background-color:{WorkoutGrading.grade_color(grade)}; border: 2px solid #808080; border-radius: 12px;"
-            f" font: 900 {points}pt 'Orbitron'; color: black; qproperty-alignment: AlignCenter;")
+            f" font: 900 {points}pt 'Orbitron'; color: {AppTheme.text_on(WorkoutGrading.grade_color(grade))};"
+            " qproperty-alignment: AlignCenter;")
 
 
 class SynopsisWindow(QWidget):
@@ -211,7 +213,7 @@ class SynopsisWindow(QWidget):
     #marker and label border for a max that's only the max of the zoomed-in selection
     SELECTION_COLOR = "#e65100"
     #the dashed line where each of the session's rides after the first starts (RGBA)
-    DIVIDER_COLOR = (30, 30, 60, 210)
+    DIVIDER_COLOR = (0, 0, 0, 200) #(in the theme's color for black)
 
     def __init__(self, parent):
         super(SynopsisWindow, self).__init__()
@@ -356,8 +358,8 @@ class SynopsisWindow(QWidget):
             self.synopsisGraphLabel.hrCadenceVBox.addItem(self.speedPlot)
         #a divider where each ride after the first starts, over the power bars (under a highlighted curve)
         for start in self.rideStarts:
-            divider = pg.InfiniteLine(pos=start, angle=90, movable=False,
-                                      pen=pg.mkPen(QColor(*self.DIVIDER_COLOR), width=2, style=Qt.PenStyle.DashLine))
+            divider = pg.InfiniteLine(pos=start, angle=90, movable=False)
+            AppTheme.theme_pen(divider, pg.mkPen(QColor(*self.DIVIDER_COLOR), width=2, style=Qt.PenStyle.DashLine))
             divider.setZValue(5)
             graph.powerVBox.addItem(divider, ignoreBounds=True)
 
@@ -961,14 +963,14 @@ class SynopsisWindow(QWidget):
             overlay.installEventFilter(self)
             sheet = QFrame(overlay)
             sheet.setObjectName("blockGradesSheet")
-            sheet.setStyleSheet("#blockGradesSheet { border: 2px solid white; border-radius: 18px;"
+            sheet.setStyleSheet("#blockGradesSheet { border: 2px solid #fffffe; border-radius: 18px;"
                                 " background-color: qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #28275e stop:1 #9fc5d1); }")
             layout = QVBoxLayout(sheet)
             margin = round(16*AppTheme.ui_scale)
             layout.setContentsMargins(margin, margin, margin, margin)
             layout.setSpacing(round(8*AppTheme.ui_scale))
             header = QLabel("Block Grades")
-            header.setStyleSheet("font: 900 22pt 'Orbitron'; color: white; background-color: transparent;")
+            header.setStyleSheet("font: 900 22pt 'Orbitron'; color: #fffffe; background-color: transparent;")
             layout.addWidget(header)
             self.blockGradeList = GradeList()
             layout.addWidget(self.blockGradeList, 1)
@@ -1003,11 +1005,12 @@ class SynopsisWindow(QWidget):
         if len(vals[0]) == 0:
             return
         x = vals[0][index]
-        target = pg.TargetItem(pos=(x, value), pen='black', movable=False)
+        target = pg.TargetItem(pos=(x, value), movable=False)
+        AppTheme.theme_pen(target, pg.mkPen('black'))
         vbox.addItem(target)
         scene = self.synopsisGraphLabel.scene()
         line = QGraphicsLineItem()
-        line.setPen(QPen(QColor(0, 0, 0, 160), 1))
+        AppTheme.theme_pen(line, QPen(QColor(0, 0, 0, 160), 1))
         line.setZValue(999)
         scene.addItem(line)
         label = PlotLabel(self.marker_text(fmt, value))
@@ -1091,13 +1094,13 @@ class SynopsisWindow(QWidget):
                 continue
             marker["target"].setPos(marker["x"], marker["y"])
             if selection:
-                marker["target"].setPen(pg.mkPen(self.SELECTION_COLOR, width=3))
+                AppTheme.theme_pen(marker["target"], pg.mkPen(self.SELECTION_COLOR, width=3))
                 marker["label"].setText("(Selection) " + self.marker_text(marker["fmt"], marker["y"]))
                 marker["label"].setBorderColor(QColor(self.SELECTION_COLOR), 2.5)
             else:
-                marker["target"].setPen(pg.mkPen('black'))
+                AppTheme.theme_pen(marker["target"], pg.mkPen('black'))
                 marker["label"].setText(self.marker_text(marker["fmt"], marker["y"]))
-                marker["label"].setBorderColor(QColor(40, 40, 40), 1.2)
+                marker["label"].setBorderColor(PlotLabel.borderColor, 1.2)
 
     def stats_text(self, start, end):
         #stats for the whole ride, or recalculated for just the readings in view when zoomed in

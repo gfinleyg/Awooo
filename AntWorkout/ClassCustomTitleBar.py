@@ -41,7 +41,7 @@ class CustomTitleBar(QWidget):
             self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.title.setStyleSheet("""font: 900 20pt 'Orbitron';
                                         background-color:#9fc5d1;
-                                        border: 2px solid white;
+                                        border: 2px solid #fffffe;
                                         border-radius: 16px;
                                         """
             )
@@ -69,6 +69,7 @@ class CustomTitleBar(QWidget):
             settings_menu.setStyleSheet(
                 """
                 QMenu {
+                    color: black;
                     background-color: #bdd6de;
                     border: 2px solid #bdd6de;
                     font: 900 14pt 'Orbitron';
@@ -140,14 +141,14 @@ class CustomTitleBar(QWidget):
             button.setFixedSize(QSize(28, 28))
             if mainWindow:
                 button.setStyleSheet(
-                    """QToolButton { border: 1px solid #bdd6de;
+                    """QToolButton { color: black; border: 1px solid #bdd6de;
                                     border-radius: 12px;
                                     }
                     """
                 )
             else:
                 button.setStyleSheet(
-                    """QToolButton { border: 1px solid white;
+                    """QToolButton { color: black; border: 1px solid #fffffe;
                                     border-radius: 12px;
                                     }
                     """

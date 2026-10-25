@@ -2,6 +2,7 @@
 
 Laid out for 1920x1200; the app scales it (and everything else) to fit other screen sizes, see AppLayout.py.
 Text is black on purpose rather than left to Qt's default: a theme recolors black, never the default.
+Button text is #000001, its own entry for a theme (black with no theme): see AppTheme.BUTTON_TEXT.
 """
 
 APP_STYLESHEET = """
@@ -14,7 +15,7 @@ APP_STYLESHEET = """
                     QAbstractSpinBox{color: black;}
                     QLabel{color: black; font: 900 14pt 'Orbitron'; qproperty-indent:3; border-radius: 15px; background-color: transparent;}
                     QPushButton {
-                                color: black;
+                                color: #000001;
                                 background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,stop: 0 #1CB5E0, stop: 1 #dadbde);
                                 border-style: outset;
                                 border-width: 2px;
@@ -23,7 +24,7 @@ APP_STYLESHEET = """
                                 padding: 4px;
                                 }
                     QPushButton:pressed {
-                                background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e1);
+                                background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e2);
                                 }
                     QPushButton:disabled {
                                 color: grey;

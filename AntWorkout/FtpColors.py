@@ -469,6 +469,15 @@ def all_colors():
 BLOCK_TEXT = "#111111"
 
 
+def block_text(start, end):
+    """The block label's text for its gradient: BLOCK_TEXT, or light text where the zone colors are dark (some
+    gradients files' are)"""
+    import AppTheme
+    middle = mix(start, end, 0.5)
+    light = AppTheme.FIXED_LIGHT_TEXT
+    return BLOCK_TEXT if AppTheme.contrast(middle, BLOCK_TEXT) >= AppTheme.contrast(middle, light) else light
+
+
 def block_colors(power0, power1=0, ranges=None):
     """A block label's background colors (start, end) as "#rrggbb": a range from its low power's color to its high
     power's, a single power from its color to its zone's pale end"""
@@ -480,7 +489,8 @@ def block_colors(power0, power1=0, ranges=None):
 def block_css(power0, power1=0, ranges=None):
     """A block label's background (see block_colors)"""
     start, end = block_colors(power0, power1, ranges)
-    return f"background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 {start} stop:1 {end}); color:{BLOCK_TEXT};"
+    return (f"background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 {start} stop:1 {end});"
+            f" color:{block_text(start, end)};")
 
 
 def free_ride_colors():
@@ -489,7 +499,8 @@ def free_ride_colors():
 
 def free_ride_css():
     start, end = free_ride_colors()
-    return f"background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 {start} stop:1 {end}); color:{BLOCK_TEXT};"
+    return (f"background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 {start} stop:1 {end});"
+            f" color:{block_text(start, end)};")
 
 
 #the graph's bars: a little see-through (the grid shows), the ones not ridden yet mixed with grey, more so paused

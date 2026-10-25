@@ -20,7 +20,7 @@ class PerformanceWindow(QDialog):
             QLabel {font: 900 14pt 'Orbitron';}
             QPushButton {font: 12pt 'Segoe UI Black'; padding: 6px 18px; border-radius: 12px; border: 2px outset black;
                 background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #dadbde);}
-            QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e1);}
+            QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e2);}
             """)
         layout = QVBoxLayout(self)
         self.title_bar = CustomTitleBar(self, False)

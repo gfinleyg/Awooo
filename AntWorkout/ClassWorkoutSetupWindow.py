@@ -130,20 +130,20 @@ class WorkoutSetupWindow(QWidget):
         smBtnTextStyleSheet = "font: 10pt 'Segoe UI Black';"
 
         #Blink stylesheet text (buttons keep Segoe UI Black; everything else is Orbitron)
-        self.btnBlinkOn = "QPushButton {color: black; background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,stop: 0 #1CB5E0, stop: 1 #dadbde); \
+        self.btnBlinkOn = "QPushButton {color: #000001; background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,stop: 0 #1CB5E0, stop: 1 #dadbde); \
                                 border-style: solid; border-width: 2px; border-color: white; border-radius: 15px; padding: 4px;" + xlBtnTextStyleSheet + \
-                                "}QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e1);} \
+                                "}QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e2);} \
                                 QPushButton:disabled {color: grey;background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #4a4952, stop: 1 #716f7d);}"
-        self.btnBlinkOff = "QPushButton {color: black; background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,stop: 0 #1CB5E0, stop: 1 #dadbde); \
+        self.btnBlinkOff = "QPushButton {color: #000001; background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,stop: 0 #1CB5E0, stop: 1 #dadbde); \
                                 border-style: outset; border-width: 2px; border-color: black; border-radius: 15px; padding: 4px;" + xlBtnTextStyleSheet + \
-                                "}QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e1);} \
+                                "}QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e2);} \
                                 QPushButton:disabled {color: grey;background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #4a4952, stop: 1 #716f7d);}"
-        self.tinyBtnBlinkOn = "QPushButton {color: black; background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,stop: 0 #1CB5E0, stop: 1 #dadbde); \
+        self.tinyBtnBlinkOn = "QPushButton {color: #000001; background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,stop: 0 #1CB5E0, stop: 1 #dadbde); \
                                 border-style: solid; border-width: 2px; border-color: white; border-radius: 15px; padding: 4px;" + smBtnTextStyleSheet + \
-                                "}QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e1);}"
-        self.tinyBtnBlinkOff = "QPushButton {color: black; background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,stop: 0 #1CB5E0, stop: 1 #dadbde); \
+                                "}QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e2);}"
+        self.tinyBtnBlinkOff = "QPushButton {color: #000001; background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,stop: 0 #1CB5E0, stop: 1 #dadbde); \
                                 border-style: outset; border-width: 2px; border-color: black; border-radius: 15px; padding: 4px;" + smBtnTextStyleSheet + \
-                                "}QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e1);}"
+                                "}QPushButton:pressed {background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #1f15e2);}"
         self.txtBlinkOn = "QLineEdit{border-style:solid; border-color:white; border-width: 2px; \
                                 background-color: qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #bdd6de stop:1 #9fc5d1);" + \
                                 mdTextStyleSheet + "}"

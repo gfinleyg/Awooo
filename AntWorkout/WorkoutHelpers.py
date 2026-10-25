@@ -53,7 +53,7 @@ def ProcessWorkoutLine(line, difficulty):
     
 #Musical Cadence Mode's song lines in the workout lists ("<length> : <Artist> - <Title>", see
 #MusicCadence.song_header) and their look; no block's text has " : " in it
-SONG_HEADER_CSS = "background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #28275e stop:1 #9fc5d1); color: white;"
+SONG_HEADER_CSS = "background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #28275e stop:1 #9fc5d1); color: #fffffe;" #(AppTheme.LIGHT_TEXT)
 
 def IsSongHeader(txt):
     return AppState.cadenceMode and " : " in txt

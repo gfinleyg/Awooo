@@ -79,7 +79,7 @@ def draw_badge(painter, rect, grade, points):
     painter.setPen(QPen(QColor(0, 0, 0, 140), max(1.0, 2*scale)))
     painter.setBrush(theme_color(WorkoutGrading.grade_color(grade)))
     painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius)
-    painter.setPen(QColor("black"))
+    painter.setPen(theme_color(AppTheme.text_on(WorkoutGrading.grade_color(grade))))
     painter.setFont(fitted_font(theme_font("Orbitron", points), grade, rect.width()*0.86, rect.height()*0.9))
     painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, grade)
 
@@ -358,7 +358,8 @@ class GradeList(QWidget):
             elif row["kind"] == "song":
                 draw_badge(painter, QRectF(0, y, badgeWidth, rowHeight), row["grade"], 17)
                 start, end = (theme_color(color) for color in self.SONG_COLORS)
-                self.draw_label(painter, labelRect, "♪ " + row["label"], labelFont, start, end, textColor=QColor("white"))
+                self.draw_label(painter, labelRect, "♪ " + row["label"], labelFont, start, end,
+                                textColor=theme_color(AppTheme.LIGHT_TEXT))
             else:
                 draw_badge(painter, QRectF(0, y, badgeWidth, rowHeight), row["grade"], 17)
                 start, end = label_gradient_colors(row["label"], row.get("ranges"))
@@ -376,7 +377,7 @@ class GradeList(QWidget):
         painter.setBrush(QBrush(gradient))
         painter.drawRoundedRect(rect, radius, radius)
         inner = rect.adjusted(self.scaled(14), 0, -self.scaled(10), 0)
-        painter.setPen(textColor or QColor("black"))
+        painter.setPen(textColor or QColor(FtpColors.block_text(start.name(), end.name())))
         if note:
             noteFont = theme_font("Orbitron", 10)
             noteWidth = min(QFontMetricsF(noteFont).horizontalAdvance(note), inner.width()*0.45)
@@ -406,7 +407,7 @@ class GradeList(QWidget):
         inner = rect.adjusted(self.scaled(14), 0, -self.scaled(14), 0)
         font = theme_font("Orbitron", 16)
         painter.setFont(font)
-        painter.setPen(QColor("black"))
+        painter.setPen(theme_color("#000000"))
         pctText = "" if self.average is None else f"{self.average:.1f}%"
         painter.drawText(inner, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, pctText)
         inner.setRight(inner.right() - QFontMetricsF(font).horizontalAdvance(pctText) - self.scaled(10))

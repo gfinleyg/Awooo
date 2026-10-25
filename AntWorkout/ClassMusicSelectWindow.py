@@ -31,10 +31,11 @@ PICKER_STYLE = """
     %s {background-color:#9fc5d1;}
     QLabel {font: 900 12pt 'Orbitron';}
     QPushButton {font: 14pt 'Segoe UI Black'; border-radius: 10px; padding: 6px 12px;}
-    QListWidget {font: 11pt 'Segoe UI'; background-color:#bdd6de; border: 2px solid black; border-radius: 6px;}
-    QListWidget::item:selected {background-color:#1CB5E0; color: black;}
+    QListWidget {font: 11pt 'Segoe UI'; color: black; background-color:#bdd6de; border: 2px solid black; border-radius: 6px;}
+    QListWidget::item:selected {color: #000001;
+        background-color: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, stop: 0 #1CB5E0, stop: 1 #dadbde);}
     QSpinBox {font: 900 12pt 'Orbitron'; background-color:#bdd6de; min-width: 130px; min-height: 30px;}
-    QProgressBar {font: 900 10pt 'Orbitron'; background-color:#bdd6de; border: 1px solid black; text-align: center;}
+    QProgressBar {font: 900 10pt 'Orbitron'; color: black; background-color:#bdd6de; border: 1px solid black; text-align: center;}
     QProgressBar::chunk {background-color:#1CB5E0;}
 """
 

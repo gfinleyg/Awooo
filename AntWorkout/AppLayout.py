@@ -79,7 +79,7 @@ def symbol_icon(fileName, size, dpr=1.0):
     painter = QPainter(pixmap)
     QSvgRenderer(os.path.join(os.path.dirname(os.path.abspath(__file__)), fileName)).render(painter)
     painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-    painter.fillRect(pixmap.rect(), QColor(AppTheme.THEME.colors.get("#000000", "#000000")))
+    painter.fillRect(pixmap.rect(), QColor(AppTheme.THEME.map_hex(AppTheme.BUTTON_TEXT)))
     painter.end()
     pixmap.setDevicePixelRatio(dpr)
     return QIcon(pixmap) #its disabled look (greyed) comes free

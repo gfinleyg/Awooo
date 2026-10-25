@@ -75,6 +75,20 @@ PART_DIRS = {"colors": os.path.join(THEMES_DIR, "colors"), "ftpColors": os.path.
 #the synopsis max value labels paint this background themselves
 PLOT_LABEL_BG = "#bdd6de"
 
+#colors that look like black/white with no theme but are their own entries, so a theme can set them apart from
+#the text color: a button's text (on the accent, #1cb5e0), the pressed button's gradient end (#1f15e1 is the
+#progress bars' chunk) and light text on the window gradient (#28275e to #9fc5d1)
+BUTTON_TEXT = "#000001"
+PRESSED = "#1f15e2"
+LIGHT_TEXT = "#fffffe"
+#text no theme recolors (themes never map these): on the power zone and grade colors, which the gradients
+#files set, not the colors files, see text_on
+FIXED_DARK_TEXT = "#010101"
+FIXED_LIGHT_TEXT = "#fefefe"
+#every color a colors file maps (see tests/test_colors_and_theme.py)
+THEME_KEYS = ("#28275e", "#9fc5d1", "#bdd6de", "#1cb5e0", "#1f15e1", "#dadbde", "#029cde", "#808080",
+              "#000000", "#28285e", BUTTON_TEXT, PRESSED, LIGHT_TEXT)
+
 HEX_RE = re.compile(r"#([0-9a-fA-F]{8}|[0-9a-fA-F]{6})\b")
 NAMED_RE = re.compile(r"((?:background-)?color|border-color|background)(\s*:\s*)(black|white|grey|gray|red|green|blue)\b", re.I)
 #font shorthand (font: [modifiers] <size><unit> '<family>'), or any other pixel length
@@ -187,6 +201,44 @@ def colors_in_value(color):
     if isinstance(color, tuple) and len(color) == 3:
         return {QColor(*color).name()}
     return set()
+
+
+def luminance(color):
+    """WCAG relative luminance (0 black to 1 white) of a "#rrggbb" or QColor"""
+    color = QColor(color)
+    channels = [c/255 for c in (color.red(), color.green(), color.blue())]
+    r, g, b = (c/12.92 if c <= 0.03928 else ((c + 0.055)/1.055)**2.4 for c in channels)
+    return 0.2126*r + 0.7152*g + 0.0722*b
+
+
+def contrast(a, b):
+    """WCAG contrast ratio (1 to 21) of two colors"""
+    high, low = sorted((luminance(a), luminance(b)), reverse=True)
+    return (high + 0.05)/(low + 0.05)
+
+
+def text_on(background):
+    """The text color for a background the colors theme doesn't set (a power zone or grade color): the theme's
+    text color if it does set it, else whichever of dark or light reads on it"""
+    if background.lower() in THEME_KEYS:
+        return "#000000"
+    return FIXED_DARK_TEXT if contrast(background, "#000000") >= contrast(background, "#ffffff") else FIXED_LIGHT_TEXT
+
+
+def themed_pen(pen):
+    """A copy of the pen in the theme's color for its color (its alpha kept)"""
+    pen = QPen(pen)
+    color = pen.color()
+    themed = QColor(THEME.map_hex(color.name()))
+    themed.setAlpha(color.alpha())
+    pen.setColor(themed)
+    return pen
+
+
+def theme_pen(item, pen):
+    """Sets a pyqtgraph or QGraphics item's pen in the theme's colors, and again whenever the theme changes"""
+    item._themeOrigPen = QPen(pen)
+    item.setPen(themed_pen(pen))
 
 
 THEME = Theme()
@@ -342,7 +394,7 @@ def install():
         self.value_fontsize *= settings["scale"]/100
     AnalogGaugeWidget.rescale_method = rescale_method
 
-    #the gauges paint their tick marks and scale numbers themselves (black, on the window background): in
+    #the gauges paint their tick marks, scale numbers and units themselves (black, on the window background): in
     #the theme's colors for them. The value in the middle is on the gauge's own white face, so it stays as is
     def themed_colors(method, attrs):
         drawn = getattr(AnalogGaugeWidget, method)
@@ -361,6 +413,7 @@ def install():
     themed_colors("draw_big_scaled_marker", ("bigScaleMarker",))
     themed_colors("create_fine_scaled_marker", ("fineScaleColor",))
     themed_colors("create_scale_marker_values_text", ("ScaleValueColor",))
+    themed_colors("create_units_text", ("DisplayValueColor",))
 
     _origPlotLabelSetFont = ClassSynopsisWindow.PlotLabel.setFont
     def plotLabelSetFont(self, font):
@@ -370,7 +423,7 @@ def install():
 
     def plotLabelPaint(self, painter, option, widget=None):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(self.borderColor, self.borderWidth))
+        painter.setPen(themed_pen(QPen(self.borderColor, self.borderWidth)))
         painter.setBrush(QColor(THEME.map_hex(PLOT_LABEL_BG)))
         painter.drawRoundedRect(self.boundingRect().adjusted(0.6, 0.6, -0.6, -0.6), self.RADIUS, self.RADIUS)
         #the text in the theme's color for black (only set when it changes: setting it repaints)
@@ -419,6 +472,8 @@ def apply():
                 if hasattr(item, "_themeOrigFont"):
                     _origPlotLabelSetFont(item, THEME.map_font(item._themeOrigFont, ui_scale))
                     item.update()
+                if hasattr(item, "_themeOrigPen"):
+                    item.setPen(themed_pen(item._themeOrigPen))
         if _SynopsisWindow is not None and isinstance(widget, _SynopsisWindow):
             QTimer.singleShot(0, widget.layout_max_labels)
         if type(widget).__name__ == "WorkoutGraph":
@@ -462,8 +517,14 @@ def theme_graph(graph):
             tickFont = axis.style.get("tickFont")
             axis._themeOrig = (QFont(tickFont) if tickFont is not None else QFont(graph.font()),
                                axis.labelText, axis.labelUnits, dict(axis.labelStyle), QPen(axis.textPen()))
+            #the axis line and its ticks (the grid is drawn with the ticks' pen); None: the ticks use the line's
+            axis._themeOrigPens = (QPen(axis.pen()), None if axis._tickPen is None else QPen(axis._tickPen))
         tickFont, labelText, labelUnits, labelStyle, textPen = axis._themeOrig
         axis.setTextPen(QPen(QColor(black)) if black else textPen)
+        linePen, tickPen = axis._themeOrigPens
+        axis.setPen(themed_pen(linePen))
+        if tickPen is not None:
+            axis.setTickPen(themed_pen(tickPen))
         if "color" in labelStyle:
             labelStyle = {**labelStyle, "color": THEME.map_color(labelStyle["color"])}
         font = QFont(tickFont)
