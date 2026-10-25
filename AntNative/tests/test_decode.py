@@ -58,10 +58,19 @@ def test_heart_rate_rr_interval_across_rollover():
     assert m["rr_interval"] == pytest.approx(1.0)
 
 
-def test_heart_rate_page_without_beat_fields():
-    m = decode(*extended([0x07, 90, 0, 0, 0, 0, 0, 0], 1, 120))
+def test_heart_rate_background_page_has_the_beat_too():
+    # every HRM data page (0-7) carries the beat in bytes 4-7
+    m = decode(*extended([0x07, 90, 0, 0x30, 0x00, 0x04, 9, 75], 1, 120))
     assert m["page"] == 7
+    assert (m["computed_heart_rate"], m["heart_beat_count"], m["heart_beat_event_ticks"]) == (75, 9, 1024)
+    assert m["page_data"]["battery_level_percent"] == 90
+
+
+def test_heart_rate_common_page_has_no_beat():
+    m = decode(*extended([0x50, 0xFF, 0xFF, 1, 0x0F, 0x00, 0x02, 0x00], 1, 120))
+    assert m["page"] == 0x50
     assert "computed_heart_rate" not in m
+    assert m["page_data"]["manufacturer_id"] == 15
 
 
 def test_power_only_page():

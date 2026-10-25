@@ -13,7 +13,13 @@ set(ANT_LIB_OUTPUT_DIR "${ANT_LIB_ROOT}/x64/${ANT_LIB_CONFIG}" CACHE PATH "ANT_L
 option(ANTNATIVE_BUILD_PYTHON "Build the ant_native Python module (needs Python and pybind11)" ON)
 
 # The core: ANT SDK transport and message decode, shared by both libraries below
-add_library(antnative_core STATIC src/core/ant_core.cpp)
+add_library(antnative_core STATIC
+    src/core/ant_core.cpp
+    src/core/ant_pages.cpp
+    src/core/ant_profiles.cpp
+    src/core/ant_manager.cpp
+    src/core/ant_recovery.cpp
+)
 target_compile_features(antnative_core PUBLIC cxx_std_17)
 target_include_directories(antnative_core
     PUBLIC
@@ -39,6 +45,10 @@ target_link_libraries(antnative PRIVATE antnative_core)
 if(ANTNATIVE_BUILD_PYTHON)
     find_package(Python COMPONENTS Interpreter Development.Module REQUIRED)
     find_package(pybind11 CONFIG REQUIRED)
-    pybind11_add_module(ant_native MODULE src/python/ant_native_module.cpp)
+    pybind11_add_module(ant_native MODULE
+        src/python/ant_native_module.cpp
+        src/python/py_common.cpp
+        src/python/sensor_bindings.cpp
+    )
     target_link_libraries(ant_native PRIVATE antnative_core)
 endif()

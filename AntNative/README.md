@@ -1,17 +1,25 @@
-# AntNative v22
+# AntNative v23
 
-ANT USB stick access for Python, C and C++, sharing one native core.
+ANT+ sensors for Python, C and C++: the USB stick, every data page of six sensor types, per-sensor profiles,
+dedicated channels for sending to a sensor, and a watchdog that recovers dropped sensors. It's all one native core;
+each language gets a thin layer over it.
 
 ## Layout
 
 ```
-src/core/      ant_core.hpp/.cpp: the ANT SDK transport (stick, channels, message pump) and the
-               per-message decode. Nothing language-specific; both libraries below compile it in.
-src/python/    ant_native_module.cpp: the ant_native Python module (pybind11), a thin layer over the core
+src/core/      The core, nothing language-specific:
+                 ant_core      the ANT SDK transport (stick, channels, message pump) and the per-message decode
+                 ant_pages     every ANT+ data page of the six sensor types, decoded; the control pages, built
+                 ant_profiles  battery status and the per-sensor profiles (rates, rollover, each page received)
+                 ant_manager   Sensor and Manager: scan/dedicated channels, routing messages to sensors
+                 ant_recovery  the watchdog: stale/lost sensors, frozen readings, channel reopens, stick resets
+src/python/    The ant_native Python module (pybind11): the stick (ant_native_module), sensors/profiles/watchdog
+               (sensor_bindings), conversions (py_common)
 src/c_api/     antnative_c.cpp: the C API, built as antnative.dll
 include/       antnative.h (C API) and antnative.hpp (header-only C++ wrapper over the C API)
-python/ant/    The Python package above ant_native: manager, recovery, ANT+ profiles
-examples/      list_devices.c and scan.cpp: the C and C++ APIs in use
+python/ant/    The Python package: ANTManager, RecoveryManager, ANTDevice, the profiles and ant.pages - thin
+               layers over the core with the original Python API
+examples/      list_devices.c, scan.cpp (the stick) and sensors.cpp (the sensor manager)
 tests/         Tests that need no stick (pytest); python/*_test.py are the hardware scripts
 ```
 
@@ -29,6 +37,16 @@ This builds ANT_LIB, then `build\Release\antnative.dll` (+ `antnative.lib`, its 
 
 Then run the tests (no stick needed): `cd tests; py -m pytest`
 
+## Python
+
+The `ant` package keeps its API: `ANTManager`, `RecoveryManager`, `ANTDevice` and the profiles work as before, with
+the work done in the core. They drive whatever `native` object they're given (the real stick, or a test fake) and
+take their time from each module's `monotonic()`/`sleep()`, so tests can still substitute both.
+
+Every received message has a `page_data` dict (the payload's page, field by field); every profile keeps the last
+page of each number in `profile.pages` (also `device.pages`); `ant.pages` decodes a payload and builds the control
+pages. See `python/ant/pages.py` for what each sensor type's pages contain.
+
 ## C and C++ API
 
 `antnative.dll` exposes the core through a C ABI, so it works from any compiler or language that can call a C DLL
@@ -36,49 +54,51 @@ Then run the tests (no stick needed): `cd tests; py -m pytest`
 wraps it in RAII classes and exceptions; it's built on the C API rather than exporting C++ classes, so the program
 can use any compiler or runtime library.
 
-Messages are polled, never called back: the stick's messages queue up (newest 4096 kept) and `ant_poll` /
-`Device::poll()` hands them over, decoded into `ant_message` (its `fields` bitmask says which groups are set), once
-per frame or whenever suits. See `include/antnative.h` for the full API and `examples/scan.cpp` for a working scan.
+Two levels, see `include/antnative.h`:
 
-The Python package (`python/ant`: ANTManager, RecoveryManager, the ANT+ profiles) is still Python only.
+- **Sensors** (`ant_manager`, `antnative::Manager`): what most programs want. Open a stick, scan, read each
+  sensor's latest values (`ant_manager_sensors`: heart rate, power, cadence, speed, trainer status, battery, ...;
+  cadence and speed are held through repeated events and drop to 0 when stopped), read any page a sensor has sent
+  (`ant_manager_sensor_page`), move sensors to their own channels and send to them (`ant_manager_send`, e.g. a
+  trainer's target power or grade), and run the watchdog. `examples/sensors.cpp` is a working example.
+- **The stick** (`ant_device`, `antnative::Device`): raw channel configuration and messages, polled from a queue
+  (`ant_poll`), each decoded into `ant_message` (its `fields` bitmask says which groups are set, `page_data` holds the
+  page). `examples/scan.cpp`.
 
-## Profiles
+Nothing ever calls back into the program: messages queue up and are read whenever suits, e.g. once per frame.
 
-- Heart Rate (device type 120)
-- Bicycle Speed/Cadence (device types 121/122/123)
-- Bicycle Power (device type 11): Standard Power-Only page (0x10) decoded into instantaneous power and cadence; every other page is kept raw
-- Fitness Equipment / FE-C trainer (device type 17): Specific Trainer Data (0x19) decoded into instantaneous power, cadence and trainer status; FE Capabilities (0x36) decoded into supported control modes and maximum resistance; every other page is kept raw
+## Sensors and pages
 
-The core decodes each page's fields (heart rate pages 0-4, the Standard Power-Only page, speed/cadence page 0 and
-the combined sensor's layout) the same for every language. Anything stateful across messages (rollover-safe rates,
-wheel size, dedup) and the FE-C pages stay in the Python profiles.
+| Sensor | Device type | Pages decoded |
+|---|---|---|
+| Heart rate | 120 | default, operating time, manufacturer/product id, previous beat (RR interval), swim interval summary, capabilities, battery |
+| Speed / cadence | 123 / 122 | default, operating time, manufacturer/product id, battery, motion (stopped) |
+| Speed & cadence | 121 | its single page-less layout |
+| Bicycle power | 11 | calibration response, power only (pedal balance, accumulated power), wheel torque, crank torque, torque effectiveness/pedal smoothness, crank torque frequency |
+| Fitness equipment (FE-C) | 17 | calibration, general FE data (speed, distance, elapsed time, heart rate, state), settings, metabolic, treadmill, elliptical, rower, climber, Nordic skier, trainer data and torque, control pages, capabilities, user configuration |
+| all but 121 | | common pages: request, command status, manufacturer and product information, battery |
+
+Layouts come from the Fitness Equipment (Rev 5.0) and Bike Speed and Cadence (Rev 2.1) device profiles and the
+Recording Bike Power Data application note; `src/core/ant_pages.cpp` notes the few taken from elsewhere (heart rate
+pages 5 and 6, common pages 80-82). Bicycle power's cycling dynamics (0xE0-0xE2) and get/set parameters (0x02)
+aren't decoded: they aren't defined in the documents on hand.
 
 ## Trainer control (FE-C)
 
-`ant.profiles.fitness_equipment` builds the 8-byte control pages:
+Control pages, built in the core (`ant.profiles.fitness_equipment`, `ant.pages`, `ant_page_*` in C):
 
-- `target_power_payload(watts)` - Target Power (page 49, ERG mode), clamped to 0-4000 W
-- `basic_resistance_payload(percent)` - Basic Resistance (page 48), clamped to 0-100%; sending it takes the trainer out of ERG mode
+- Basic Resistance (page 48) - percent of maximum resistance; leaves ERG mode
+- Target Power (page 49, ERG mode) - 0-4000 W
+- Wind Resistance (page 50) and Track Resistance (page 51, grade -200 to 200%) - simulation mode
+- User Configuration (page 55) - rider and bike weight, wheel size, gear ratio
+- Request Data Page (common page 70) - e.g. ask for FE Capabilities (0x36) or Command Status (0x47)
 
-The profile only builds the pages; the owner of the channel sends them with `ANTNative.send_acknowledged(channel, payload, timeout_ms)` on the trainer's dedicated channel (`ANTManager.channel_for(17, device_number)` after `ANTManager.open_device_channels(...)`). AntWorkout's `ClassAntDevices._service_trainer_target()` is the working example: it resends the target every couple of seconds and retries on failure.
-
-Not implemented yet: Wind Resistance (page 50), Track Resistance (page 51, grade simulation) and User Configuration (page 55).
-
-## Sources / verification
-
-ANT's BSC receiver documentation identifies combined BSC device type 121 and describes page-0 cadence/speed event and revolution data. See the official ANT+ receiver example.
+They're sent acknowledged on the trainer's dedicated channel: `ant_manager_send` in C, or in Python
+`ANTNative.send_acknowledged(channel, payload, timeout_ms)` with `ANTManager.channel_for(17, device_number)` after
+`ANTManager.open_device_channels(...)`. AntWorkout's `ClassAntDevices._service_trainer_target()` is the working
+Python example: it resends the target every couple of seconds and retries on failure.
 
 ## USB device enumeration and dual-stick test
-
-The native module now exposes:
-
-```python
-ant_native.list_devices()
-```
-
-It uses the ANT SDK's `USBDeviceHandle::GetAllDevices()` and returns copied metadata only. Device indexes are the same indexes accepted by `ANTNative.open(..., device_number=...)`.
-
-Example:
 
 ```python
 import ant_native
@@ -95,4 +115,5 @@ b.close()
 a.close()
 ```
 
-For two physical ANT USB sticks, this verifies that each stick can be selected and opened by a separate native instance. The sticks must not simultaneously be owned by another application such as SimulANT+.
+`list_devices()` uses the ANT SDK's `USBDeviceHandle::GetAllDevices()`; its indexes are the `device_number`s
+`ANTNative.open()` takes. The sticks must not be owned by another application such as SimulANT+ at the same time.

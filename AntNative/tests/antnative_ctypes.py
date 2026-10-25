@@ -5,7 +5,7 @@ import os
 
 from conftest import BUILD_DIR
 
-ANT_API_VERSION = 1
+ANT_API_VERSION = 2
 
 ANT_OK = 0
 ANT_FAILED = 1
@@ -30,8 +30,58 @@ FIELD_POWER = 1 << 10
 FIELD_POWER_CADENCE = 1 << 11
 FIELD_SPEED_CADENCE = 1 << 12
 FIELD_SPEED_OR_CADENCE = 1 << 13
+FIELD_PAGE_DATA = 1 << 14
+
+ANT_PAGE_FIELDS_MAX = 16
+VALUE_INT, VALUE_DOUBLE, VALUE_BOOL = 0, 1, 2
+
+READING_HEART_RATE = 1 << 0
+READING_RR_INTERVAL = 1 << 1
+READING_POWER = 1 << 2
+READING_CADENCE = 1 << 3
+READING_SPEED = 1 << 4
+READING_TRAINER = 1 << 5
+READING_CAPABILITIES = 1 << 6
+READING_BATTERY = 1 << 7
 
 u8, u16, u32, u64 = ctypes.c_uint8, ctypes.c_uint16, ctypes.c_uint32, ctypes.c_uint64
+
+
+class AntPageField(ctypes.Structure):
+    _fields_ = [("name", ctypes.c_char_p), ("type", ctypes.c_int), ("value", ctypes.c_double),
+                ("int_value", ctypes.c_int64)]
+
+
+class AntPage(ctypes.Structure):
+    _fields_ = [("page", ctypes.c_int), ("name", ctypes.c_char_p), ("field_count", ctypes.c_int),
+                ("fields", AntPageField * ANT_PAGE_FIELDS_MAX)]
+
+
+class AntSensorId(ctypes.Structure):
+    _fields_ = [("device_type", u8), ("device_number", u16), ("transmission_type", u8)]
+
+
+class AntSensor(ctypes.Structure):
+    _fields_ = [
+        ("device_number", u16), ("device_type", u8), ("transmission_type", u8),
+        ("channel", ctypes.c_int), ("state", ctypes.c_int), ("seconds_since_heard", ctypes.c_double),
+        ("packet_count", u64), ("data_stalled", ctypes.c_int), ("fields", u32),
+        ("heart_rate", ctypes.c_int), ("heart_beat_count", ctypes.c_int), ("rr_interval", ctypes.c_double),
+        ("power_watts", ctypes.c_int), ("cadence_rpm", ctypes.c_double), ("speed_mps", ctypes.c_double),
+        ("trainer_status", ctypes.c_int), ("supports_basic_resistance", ctypes.c_int),
+        ("supports_target_power", ctypes.c_int), ("supports_simulation", ctypes.c_int),
+        ("maximum_resistance_n", ctypes.c_int), ("battery_status", ctypes.c_int),
+        ("battery_level_percent", ctypes.c_int), ("battery_voltage", ctypes.c_double),
+    ]
+
+
+class AntRecoveryOptions(ctypes.Structure):
+    _fields_ = [("stale_timeout", ctypes.c_double), ("lost_timeout", ctypes.c_double),
+                ("interval", ctypes.c_double), ("channel_retry_limit", ctypes.c_int),
+                ("channel_retry_cooldown", ctypes.c_double), ("device_reset_timeout", ctypes.c_double),
+                ("device_reset_cooldown", ctypes.c_double), ("channel_reopen_wait", ctypes.c_double),
+                ("channel_stick_reset_cooldown", ctypes.c_double), ("channel_open_retry_interval", ctypes.c_double),
+                ("hr_frozen_timeout", ctypes.c_double), ("value_frozen_timeout", ctypes.c_double)]
 
 
 class AntUsbDevice(ctypes.Structure):
@@ -63,6 +113,7 @@ class AntMessage(ctypes.Structure):
         ("cadence_event_time", ctypes.c_double), ("cadence_event_ticks", u16), ("cadence_revolution_count", u16),
         ("speed_event_time", ctypes.c_double), ("speed_event_ticks", u16), ("speed_revolution_count", u16),
         ("event_time", ctypes.c_double), ("event_ticks", u16), ("revolution_count", u16),
+        ("page_data", AntPage),
     ]
 
 
@@ -90,7 +141,65 @@ def load():
     lib.ant_dropped_messages.argtypes = [ctypes.c_void_p]
     lib.ant_dropped_messages.restype = u64
     lib.ant_decode_message.argtypes = [u8, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int, ctypes.POINTER(AntMessage)]
+
+    lib.ant_decode_page.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.POINTER(AntPage)]
+    lib.ant_page_get_field.argtypes = [ctypes.POINTER(AntPage), ctypes.c_char_p, ctypes.POINTER(ctypes.c_double)]
+    out8 = ctypes.c_uint8 * 8
+    lib.ant_page_basic_resistance.argtypes = [ctypes.c_double, out8]
+    lib.ant_page_target_power.argtypes = [ctypes.c_double, out8]
+    lib.ant_page_wind_resistance.argtypes = [ctypes.c_double] * 3 + [out8]
+    lib.ant_page_track_resistance.argtypes = [ctypes.c_double] * 2 + [out8]
+    lib.ant_page_user_configuration.argtypes = [ctypes.c_double] * 4 + [out8]
+    lib.ant_page_request.argtypes = [u8, u8, ctypes.c_int, out8]
+    lib.ant_page_power_manual_zero.argtypes = [out8]
+    for name in ("ant_page_basic_resistance", "ant_page_target_power", "ant_page_wind_resistance",
+                 "ant_page_track_resistance", "ant_page_user_configuration", "ant_page_request",
+                 "ant_page_power_manual_zero"):
+        getattr(lib, name).restype = None
+
+    lib.ant_manager_create.restype = ctypes.c_void_p
+    lib.ant_manager_destroy.argtypes = [ctypes.c_void_p]
+    lib.ant_manager_open.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    lib.ant_manager_close.argtypes = [ctypes.c_void_p]
+    lib.ant_manager_configure_scan.argtypes = [ctypes.c_void_p, ctypes.c_char_p, u8, u8, u8]
+    lib.ant_manager_start.argtypes = [ctypes.c_void_p]
+    lib.ant_manager_stop.argtypes = [ctypes.c_void_p]
+    lib.ant_manager_open_device_channels.argtypes = [ctypes.c_void_p, ctypes.POINTER(AntSensorId), ctypes.c_int]
+    lib.ant_manager_return_to_scan.argtypes = [ctypes.c_void_p]
+    lib.ant_manager_channel_for.argtypes = [ctypes.c_void_p, u8, u16]
+    lib.ant_manager_send.argtypes = [ctypes.c_void_p, u8, u16, ctypes.c_char_p, u32, ctypes.POINTER(ctypes.c_int)]
+    lib.ant_manager_sensors.argtypes = [ctypes.c_void_p, ctypes.POINTER(AntSensor), ctypes.c_int]
+    lib.ant_manager_sensor_page.argtypes = [ctypes.c_void_p, u8, u16, ctypes.c_int, ctypes.POINTER(AntPage)]
+    lib.ant_manager_set_wheel_circumference.argtypes = [ctypes.c_void_p, u16, ctypes.c_double]
+    lib.ant_manager_poll.argtypes = [ctypes.c_void_p, ctypes.POINTER(AntMessage), ctypes.c_int]
+    lib.ant_recovery_default_options.argtypes = [ctypes.POINTER(AntRecoveryOptions)]
+    lib.ant_recovery_default_options.restype = None
+    lib.ant_manager_start_recovery.argtypes = [ctypes.c_void_p, ctypes.POINTER(AntRecoveryOptions)]
+    lib.ant_manager_stop_recovery.argtypes = [ctypes.c_void_p]
+    lib.ant_manager_watch.argtypes = [ctypes.c_void_p, ctypes.POINTER(AntSensorId), ctypes.c_int]
+    lib.ant_manager_next_log.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
     return lib
+
+
+def page_dict(page):
+    """An AntPage as the Python module's page dict ("page", "page_name" and the fields)"""
+    d = {"page": page.page, "page_name": page.name.decode()}
+    for field in page.fields[:page.field_count]:
+        name = field.name.decode()
+        if field.type == VALUE_INT:
+            d[name] = field.int_value
+        elif field.type == VALUE_BOOL:
+            d[name] = bool(field.int_value)
+        else:
+            d[name] = field.value
+    return d
+
+
+def build(lib, name, *args):
+    """A page builder's 8 bytes"""
+    out = (ctypes.c_uint8 * 8)()
+    getattr(lib, name)(*args, out)
+    return bytes(out)
 
 
 def as_dict(m):
@@ -139,4 +248,6 @@ def as_dict(m):
                  speed_event_ticks=m.speed_event_ticks, speed_revolution_count=m.speed_revolution_count)
     if m.fields & FIELD_SPEED_OR_CADENCE:
         d.update(event_time=m.event_time, event_ticks=m.event_ticks, revolution_count=m.revolution_count)
+    if m.fields & FIELD_PAGE_DATA:
+        d["page_data"] = page_dict(m.page_data)
     return d

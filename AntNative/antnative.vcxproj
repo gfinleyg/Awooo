@@ -74,10 +74,18 @@
 
   <ItemGroup>
     <ClCompile Include="src\core\ant_core.cpp" />
+    <ClCompile Include="src\core\ant_pages.cpp" />
+    <ClCompile Include="src\core\ant_profiles.cpp" />
+    <ClCompile Include="src\core\ant_manager.cpp" />
+    <ClCompile Include="src\core\ant_recovery.cpp" />
     <ClCompile Include="src\c_api\antnative_c.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\core\ant_core.hpp" />
+    <ClInclude Include="src\core\ant_pages.hpp" />
+    <ClInclude Include="src\core\ant_profiles.hpp" />
+    <ClInclude Include="src\core\ant_manager.hpp" />
+    <ClInclude Include="src\core\ant_recovery.hpp" />
     <ClInclude Include="include\antnative.h" />
     <ClInclude Include="include\antnative.hpp" />
   </ItemGroup>

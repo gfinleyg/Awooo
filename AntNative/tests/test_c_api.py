@@ -65,6 +65,59 @@ def test_null_device(lib):
     lib.ant_destroy(None)
 
 
+###The manager (ant_manager), never opening a stick
+
+@pytest.fixture
+def manager(lib):
+    handle = lib.ant_manager_create()
+    assert handle
+    yield handle
+    lib.ant_manager_destroy(handle)
+
+
+def test_manager_before_opening(lib, manager):
+    sensors = (c.AntSensor * 4)()
+    assert lib.ant_manager_sensors(manager, sensors, 4) == 0
+    assert lib.ant_manager_configure_scan(manager, bytes(8), 0, 0, 57) == c.ANT_ERROR_NOT_OPEN
+    assert lib.ant_manager_channel_for(manager, 11, 100) == -1
+    transfer = ctypes.c_int(-1)
+    assert lib.ant_manager_send(manager, 17, 300, bytes(8), 500, ctypes.byref(transfer)) == c.ANT_FAILED
+    assert b"dedicated channel" in lib.ant_last_error()
+    page = c.AntPage()
+    assert lib.ant_manager_sensor_page(manager, 11, 100, 0x10, ctypes.byref(page)) == c.ANT_FAILED
+    assert lib.ant_manager_set_wheel_circumference(manager, 5, 2.1) == c.ANT_FAILED
+    messages = (c.AntMessage * 2)()
+    assert lib.ant_manager_poll(manager, messages, 2) == 0
+    # nothing to switch back from
+    assert lib.ant_manager_return_to_scan(manager) == c.ANT_OK
+    ids = (c.AntSensorId * 1)(c.AntSensorId(11, 100, 0))
+    assert lib.ant_manager_open_device_channels(manager, ids, 1) == c.ANT_FAILED
+    assert b"configure_scan" in lib.ant_last_error()
+
+
+def test_manager_watchdog_and_log(lib, manager):
+    ids = (c.AntSensorId * 1)(c.AntSensorId(11, 100, 0))
+    assert lib.ant_manager_watch(manager, ids, 1) == c.ANT_ERROR
+    options = c.AntRecoveryOptions()
+    lib.ant_recovery_default_options(ctypes.byref(options))
+    assert (options.stale_timeout, options.lost_timeout, options.channel_retry_limit) == (1.5, 3.0, 2)
+    options.interval = 0.05
+    assert lib.ant_manager_start_recovery(manager, ctypes.byref(options)) == c.ANT_OK
+    assert lib.ant_manager_watch(manager, ids, 1) == c.ANT_OK
+    assert lib.ant_manager_watch(manager, None, -1) == c.ANT_OK
+    lib.ant_manager_stop_recovery(manager)
+    line = ctypes.create_string_buffer(256)
+    assert lib.ant_manager_next_log(manager, line, 256) == 0 and line.value == b""
+
+
+def test_manager_null(lib):
+    assert lib.ant_manager_open(None, -1) == c.ANT_ERROR_INVALID_ARGUMENT
+    assert lib.ant_manager_sensors(None, None, 0) == c.ANT_ERROR_INVALID_ARGUMENT
+    lib.ant_manager_close(None)
+    lib.ant_manager_stop_recovery(None)
+    lib.ant_manager_destroy(None)
+
+
 def test_python_module_closed_device():
     native = ant_native.ANTNative()
     assert native.is_open() is False
