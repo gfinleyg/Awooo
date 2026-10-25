@@ -14,6 +14,11 @@ The one settings file AntWorkout keeps between runs, savedSettingsANT.json:
     "themePartFiles": {               - colors/gradients files loaded on top of it from the settings menu
       "colors": "C:/.../colors.json", "ftpColors": "C:/.../gradients.json"
     },
+    "randomTheme": false,             - load a random colors and gradients file from themes/ at startup (not saved
+                                        into themePartFiles)
+    "randomThemeLast": {              - the last random picks, not picked again the next time
+      "colors": "C:/.../colors.json", "ftpColors": "C:/.../gradients.json"
+    },
     "powerCalibration": {             - per power meter, see PowerCalibration.py
       "11 12345": {"offset_watts": ..., "scale": ..., ...}
     }

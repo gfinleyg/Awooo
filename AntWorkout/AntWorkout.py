@@ -83,6 +83,10 @@ if __name__ == "__main__":
             AppTheme.load_file(_partFile)
         except (OSError, ValueError) as e:
             ClassAntLogger.log_event("ERROR", f"Failed to load {_partFile}: {e}")
+    #or, with Randomize Theme at Startup on (settings menu), random ones from themes/ (not saved: the picks above
+    #come back once it's turned off)
+    if SavedSettings.load().get("randomTheme"):
+        AppTheme.load_random_parts()
 
     w = MainWindow()
     w.show()

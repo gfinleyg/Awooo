@@ -92,6 +92,11 @@ class CustomTitleBar(QWidget):
             pick_theme_action.triggered.connect(self.pick_theme)
             clear_theme_action = settings_menu.addAction("Clea&r Theme	R")
             clear_theme_action.triggered.connect(self.clear_theme)
+            import SavedSettings
+            random_theme_action = settings_menu.addAction("Ra&ndomize Theme at Startup	N")
+            random_theme_action.setCheckable(True)
+            random_theme_action.setChecked(bool(SavedSettings.load().get("randomTheme")))
+            random_theme_action.toggled.connect(self.random_theme)
             settings_menu.addSeparator()
             measurements_action = settings_menu.addAction("&Measurements...	M")
             measurements_action.triggered.connect(self.measurements)
@@ -179,6 +184,15 @@ class CustomTitleBar(QWidget):
         import SavedSettings
         AppTheme.clear()
         SavedSettings.update(themeFile=None, themePartFiles={})
+
+    def random_theme(self, on):
+        #a random colors file and gradients file from themes/ each time the app opens, and right away when turned on
+        #(see AppTheme.load_random_parts)
+        import AppTheme
+        import SavedSettings
+        SavedSettings.update(randomTheme=on)
+        if on:
+            AppTheme.load_random_parts()
 
     def measurements(self):
         #lbs/kg, W/kg or W/lb, miles/km (see Units.py); each choice applies as it's clicked

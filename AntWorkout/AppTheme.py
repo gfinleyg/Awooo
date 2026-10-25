@@ -29,6 +29,7 @@ import copy
 import json
 import math
 import os
+import random
 import re
 
 from PyQt6.QtCore import QTimer
@@ -606,6 +607,30 @@ def load_file(path):
         _partFiles[kind] = path
     refresh()
     return kind
+
+
+def load_random_parts():
+    """A colors file and a gradients file picked at random from PART_DIRS, each loaded on top of the theme (see
+    load_file; a part with no usable files is left as it is). Never the one in use or the one picked last time
+    (kept as "randomThemeLast" in the settings file), unless there's nothing else to pick"""
+    import SavedSettings
+    last = SavedSettings.load().get("randomThemeLast") or {}
+    picked = {}
+    for part, folder in PART_DIRS.items():
+        paths = [os.path.join(folder, name) for name in os.listdir(folder)
+                 if name.lower().endswith(".json")] if os.path.isdir(folder) else []
+        avoid = {os.path.normcase(os.path.abspath(p)) for p in (_partFiles.get(part), last.get(part)) if p}
+        random.shuffle(paths)
+        #the ones to avoid go last, then the next one if a file can't be used
+        paths.sort(key=lambda path: os.path.normcase(os.path.abspath(path)) in avoid)
+        for path in paths:
+            try:
+                if load_file(path) == part:
+                    picked[part] = path
+                    break
+            except (OSError, ValueError) as e:
+                ClassAntLogger.log_event("ERROR", f"Failed to load random {PARTS[part]} {path}: {e}")
+    SavedSettings.update(randomThemeLast={**last, **picked})
 
 
 def _reload_part_files():
