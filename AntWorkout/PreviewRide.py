@@ -160,6 +160,8 @@ def run_hud(hud, untilSeconds, rider, record=None):
     hud.timer.stop()
     if hasattr(hud, "smoothBarTimer"):
         hud.smoothBarTimer.stop()
+    #the power gauge's rings a second each, one per simulated tick (the app's are shorter, see PowerRings)
+    hud.powerRings.set_seconds(1)
     workoutMode = AppState.workoutMode
     if hud.cadenceMode:
         hud.music_start = lambda: setattr(hud, "musicPlayer", ViewerMusicPlayer())

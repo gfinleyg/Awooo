@@ -27,6 +27,7 @@ from ClassPowerSpiral import PowerSpiral
 from ClassSmoothProgressBar import SmoothProgressBar
 from ClassWorkoutGraph import *
 from ClassCustomTitleBar import *
+from ClassMaxStar import MaxBubble, MaxStar, STEP_MS
 
 from AppState import AppState
 import AppTheme
@@ -52,10 +53,15 @@ from ClassGradeWidgets import GradeList, GradeOverlay
 #beat (AppState.musicPulses) and fade back over this long
 BEAT_SECONDS = 0.2
 
+#the workout clock's tick (process_events)
+TICK_MS = 100
+
 #the nested circles in the power gauge's middle show the power over the last while: the outermost the power now,
-#each one in from it the average power over this many seconds, just before the time the one outside it covers
-#(see PowerRings)
-POWER_RING_SECONDS = 3
+#each one in from it the average power over this many ticks, just before the time the one outside it covers
+#(see PowerRings). Whole ticks, so every ring moves in after the same number of them. A simulated ride (see
+#PreviewRide.run_hud) has rings a second each instead, one per simulated tick
+POWER_RING_TICKS = 5
+POWER_RING_SECONDS = POWER_RING_TICKS*TICK_MS/1000
 #as many rings as fit in the gauge's middle at its size on screen (the screen's resolution and where the gauge sits
 #on it) with each at least this wide, so a bigger gauge shows further back; never fewer than POWER_RING_MIN
 POWER_RING_MIN_PX = 6
@@ -88,13 +94,26 @@ def new_power_gauge():
 
 class PowerRings:
     """The power gauge's nested circles, each the band's color at a power: the outermost the power now, then the
-    average over each POWER_RING_SECONDS block of the ride, newest to oldest. A block's average is worked out once,
-    when it ends, and kept: each ring holds its color until the next block ends and moves it in one"""
+    average over each block of the ride (POWER_RING_SECONDS long, or as set_seconds sets), newest to oldest. A
+    block's average is worked out once, when it ends, and kept: each ring holds its color until the next block ends
+    and moves it in one"""
 
-    def __init__(self):
+    def __init__(self, seconds=POWER_RING_SECONDS):
+        self.seconds = seconds #each block's length
         self.blocks = [] #(average power, its color), newest first
-        self.blockEnd = None #the newest block's end (AppState.secondsPassed)
+        #the blocks end at start + a whole number of blocks (worked out from start each time, not
+        #added up, so they don't drift), the newest at start + ended of them (AppState.secondsPassed)
+        self.start = None
+        self.ended = 0
         self.ranges = None #the power zones the colors are for
+
+    def set_seconds(self, seconds):
+        """Blocks this long from now on: every block again from the readings at the next update"""
+        self.seconds = seconds
+        self.start = None
+
+    def block_end(self, index):
+        return self.start + index*self.seconds
 
     def update(self, gauge):
         """Called every tick: finishes any blocks that have ended since the last, then sets the gauge's rings"""
@@ -102,16 +121,17 @@ class PowerRings:
         ranges = FtpColors.power_ranges() #(power zones, in Musical Cadence Mode too)
         if ranges != self.ranges:
             self.recolor()
-        if self.blockEnd is None or now < self.blockEnd or now - self.blockEnd > self.most_seconds():
+        newest = None if self.start is None else self.block_end(self.ended)
+        if newest is None or now < newest or now - newest > self.most_seconds():
             #the first tick, a new ride's clock or a long stall: every block again from the readings, the newest
-            #ending now
-            self.blockEnd = now
-            self.blocks = [self.block(now - POWER_RING_SECONDS*(i + 1), now - POWER_RING_SECONDS*i)
-                           for i in range(self.most_blocks())]
-        #(a block ends once the clock is past it: readings stamped right at its end are in it)
-        while now > self.blockEnd + POWER_RING_SECONDS:
-            self.blockEnd += POWER_RING_SECONDS
-            self.blocks.insert(0, self.block(self.blockEnd - POWER_RING_SECONDS, self.blockEnd))
+            #ending half a tick ago, so the ends fall between ticks (the timer's jitter never decides which tick
+            #a block ends on)
+            self.start = now - TICK_MS/2000
+            self.ended = 0
+            self.blocks = [self.block(self.block_end(-i - 1), self.block_end(-i)) for i in range(self.most_blocks())]
+        while now > self.block_end(self.ended + 1):
+            self.ended += 1
+            self.blocks.insert(0, self.block(self.block_end(self.ended - 1), self.block_end(self.ended)))
         del self.blocks[self.most_blocks():]
         widget = gauge.ui.widget
         widget.set_center_rings([FtpColors.zone_color(widget.reading, ranges)] +
@@ -126,14 +146,13 @@ class PowerRings:
         self.ranges = FtpColors.power_ranges()
         self.blocks = [(power, FtpColors.zone_color(power, self.ranges)) for power, _ in self.blocks]
 
-    @staticmethod
-    def most_blocks():
+    def most_blocks(self):
         """Blocks kept: as many as the readings kept go back (AntDevicesPoller), so a bigger gauge (resized, or
         on another screen) shows its rings' colors right away"""
-        return int((AppState.graphSecondsShown - AppState.graphBreakpoint)//POWER_RING_SECONDS)
+        return int((AppState.graphSecondsShown - AppState.graphBreakpoint)//self.seconds)
 
     def most_seconds(self):
-        return self.most_blocks()*POWER_RING_SECONDS
+        return self.most_blocks()*self.seconds
 
 
 def block_average(start, end):
@@ -163,6 +182,13 @@ def power_at(when):
 
 
 class HUDWindow(QWidget):
+
+    #the graph's current reading diamonds' size, and how far one reaches above its reading (its outline too)
+    CURRENT_MARKER_SIZE = 11
+    CURRENT_MARKER_REACH = CURRENT_MARKER_SIZE / 2 + 0.5
+    #the max bubble's text beside each sensor curve's star, by AppState saved values attribute name
+    MAX_BUBBLE_TEXTS = {"savedPowerVals": "Max Pwr: {:.0f} W", "savedHRVals": "Max HR: {:.0f} bpm",
+                        "savedCadenceVals": "Max Cad: {:.0f} rpm"}
 
     #QLabel signals
     speedChanged = pyqtSignal(str)
@@ -602,10 +628,26 @@ class HUDWindow(QWidget):
                                   FtpColors.SENSOR_COLORS["cadence"]))
         for vbox, savedName, color in markerSources:
             #(outlined in its line's halo color, to show over the bars like the line does)
-            marker = pg.ScatterPlotItem(symbol='d', size=11, brush=pg.mkBrush(color), pen=FtpColors.marker_outline(color))
+            marker = pg.ScatterPlotItem(symbol='d', size=self.CURRENT_MARKER_SIZE, brush=pg.mkBrush(color), pen=FtpColors.marker_outline(color))
             marker.setZValue(20)
             vbox.addItem(marker, ignoreBounds=True)
             self.currentMarkers.append((marker, savedName))
+        #a star over each sensor curve's highest reading on the graph, riding the curve to the next one (see
+        #update_max_stars), and a bubble beside it with that reading
+        curves = {"savedPowerVals": self.powerProducedPlot, "savedHRVals": getattr(self, "hrPlot", None),
+                  "savedCadenceVals": getattr(self, "cadencePlot", None)}
+        self.maxStars = [] #(star, AppState saved values attribute name)
+        self.maxBubbles = []
+        for vbox, savedName, _ in markerSources:
+            star = MaxStar(curves[savedName], vbox, lambda: self.progressGraph.plotScreen.vb.viewRange()[0])
+            self.progressGraph.scene().addItem(star)
+            self.maxStars.append((star, savedName))
+            bubble = MaxBubble(star, self.MAX_BUBBLE_TEXTS[savedName])
+            self.progressGraph.scene().addItem(bubble)
+            self.maxBubbles.append(bubble)
+        self.progressGraph.plotScreen.vb.sigResized.connect(self.fit_graph_tops)
+        #(LayoutViewer lists them with the colors a theme can change)
+        self._themeColors = (MaxStar.COLOR, MaxStar.EDGE_COLOR, AppTheme.PLOT_LABEL_BG)
         self.progressGraphLayout.addWidget(self.progressGraph)
         self.hudLayout.addLayout(self.progressGraphLayout,20,0,4,30)
 
@@ -826,7 +868,7 @@ class HUDWindow(QWidget):
         #when the workout is left)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.process_events)
-        self.timer.setInterval(100)
+        self.timer.setInterval(TICK_MS)
         self.timer.start()
 
         #~60fps redraw of just the two timer bars between the 100ms ticks so they glide rather than step
@@ -836,6 +878,11 @@ class HUDWindow(QWidget):
             self.smoothBarTimer.timeout.connect(self.update_smooth_bars)
             self.smoothBarTimer.setInterval(16)
             self.smoothBarTimer.start()
+        #the graph's max stars riding to a new max, or twinkling at rest
+        self.starTimer = QTimer(self)
+        self.starTimer.timeout.connect(self.step_max_stars)
+        self.starTimer.setInterval(STEP_MS)
+        self.starTimer.start()
 
         #redrawn when the power zone colors change; these show only those colors (LayoutViewer.py lists them
         #on its FTP Colors tab instead of with the other colors)
@@ -853,6 +900,7 @@ class HUDWindow(QWidget):
         self.timer.stop()
         if hasattr(self, "smoothBarTimer"):
             self.smoothBarTimer.stop()
+        self.starTimer.stop()
 
     ###HUD Layout functions
     def update_speed_label(self):
@@ -2186,6 +2234,9 @@ class HUDWindow(QWidget):
         self.progressGraph.setXRange(diff, diff+AppState.graphSecondsShown)
         self.nowLine.setValue(AppState.secondsPassed)
 
+        #each sensor curve's star over its highest reading in view (room is made for them at the top below)
+        self.update_max_stars(diff)
+
         #adjust y axes to account for max visible data
         #(the workout's targets are on the cadence axis in Musical Cadence Mode)
         maxTarget = GetMaxOrZero([GetMaxOrZero(self.powerGraphList),
@@ -2194,13 +2245,14 @@ class HUDWindow(QWidget):
         powerMax = GetMaxOrZero([maxP2] if self.cadenceMode else [maxTarget,maxP2])
         if powerMax == 0:
             powerMax = 150
-        self.progressGraph.powerVBox.setYRange(0,powerMax+100,padding=0)
+        self.graphTops = {self.progressGraph.powerVBox: powerMax+100}
         maxSavedHr = GetMaxOrZero(AppState.savedHRVals[1])
         maxCadence = GetMaxOrZero(AppState.savedCadenceVals[1])
         hrCadenceMax = GetMaxOrZero([maxSavedHr, maxCadence] + ([maxTarget] if self.cadenceMode else []))
         if hrCadenceMax == 0:
             hrCadenceMax = 190
-        self.progressGraph.hrCadenceVBox.setYRange(0,hrCadenceMax+20,padding=0)
+        self.graphTops[self.progressGraph.hrCadenceVBox] = hrCadenceMax+20
+        self.fit_graph_tops()
         if AppState.workoutMode:
             #add workout graph data bar graphs, until workout started these will shift to immediately after timePassed, grey nearly transparent
             if not self.workoutUnpausedBool: #pre workout start or while paused
@@ -2246,6 +2298,46 @@ class HUDWindow(QWidget):
                     marker.setData(x=[xs[-1]], y=[ys[-1]])
                 else:
                     marker.clear()
+
+    def update_max_stars(self, start):
+        """Each sensor's star to its highest reading on the graph (from start on): the latest of equal ones, unless
+        the one it's over still is one"""
+        for star, savedName in self.maxStars:
+            times, values = getattr(AppState, savedName)
+            first = bisect.bisect_left(times, start)
+            star.shown = first < len(times)
+            if not star.shown:
+                continue
+            top = max(values[first:])
+            stays = False
+            if star.x is not None and star.x >= start and star.y == top:
+                #(still a reading there: the saved values start over on a restart)
+                at = bisect.bisect_left(times, star.x)
+                stays = at < len(times) and times[at] == star.x and values[at] == top
+            if not stays:
+                index = max(range(first, len(times)), key=lambda i: (values[i], i))
+                star.go_to(times[index], values[index])
+            #clear of the current reading's diamond too while that's its max
+            star.markerReach = self.CURRENT_MARKER_REACH if star.x == times[-1] else 0.0
+
+    def fit_graph_tops(self, *_):
+        """Each graph y range up to its top (graphTops, from hud_graph_data_update), or higher where the stars and
+        their bubbles shown need room; again whenever the graph changes size"""
+        for vbox, top in getattr(self, "graphTops", {}).items():
+            bubbles = [(bubble, bubble.star.y) for bubble in self.maxBubbles
+                       if bubble.star.vbox is vbox and bubble.star.shown and bubble.star.y is not None]
+            vbox.setYRange(0, MaxStar.top_with_room(vbox, top, bubbles), padding=0)
+
+    def step_max_stars(self):
+        if not self.isVisible():
+            return
+        now = time.monotonic()
+        for phase, (star, _) in enumerate(self.maxStars):
+            star.step(now, phase)
+        #the bubbles beside them, each clear of the stars and the bubbles placed before it
+        avoid = [star.sceneBoundingRect() for star, _ in self.maxStars if star.isVisible()]
+        for bubble in self.maxBubbles:
+            bubble.step(now, avoid)
 
     def zero_gauges_on_dropout(self):
         #a sensor silent for longer than DROPOUT_ZERO_SECONDS reads 0 instead of freezing on its last value;
