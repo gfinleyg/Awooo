@@ -23,6 +23,8 @@ Needs both ANT sticks: AntWorkout uses one, SimulANT+ the other.
    | `sensors` | Bike Power Sensor (power only), Bike Speed & Cadence Sensor, Heart Rate Sensor |
    | `trainer` | Bike Trainer (controllable FE), Heart Rate Sensor                            |
 
+   Or let `simulant_automation\start_simulators.ps1 <scenario>` do all of step 3 (see that folder's README).
+
 4. Once all of them are heard, the harness connects, opens the workout screen and the timed test starts by
    itself (about 5 minutes; the scripts follow it however far apart they were started). At the end it prints
    the report; stop the scripts in SimulANT+ then.
