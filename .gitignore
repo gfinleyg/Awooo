@@ -15,6 +15,10 @@ AntNative/build.log
 AntWorkout/build/
 AntWorkout/dist/
 
+# AntWorkoutQt's CMake build folders and its dist\ (see AntWorkoutQt/build_windows.ps1)
+AntWorkoutQt/build/
+AntWorkoutQt/dist/
+
 # Written while the apps run: logs, settings and caches, SimulantTests results
 *_console.log
 antWorkoutLog.txt

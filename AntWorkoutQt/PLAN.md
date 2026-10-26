@@ -249,7 +249,11 @@ The C++ tests compare within tolerance. If they match, the C++ app reuses `music
 
 Each phase ends with a build, its tests passing, and a commit on a branch.
 
-### Phase 0: scaffolding
+### Phase 0: scaffolding (done)
+- Done: `build_windows.ps1` builds Release and Debug, and `dist\AntWorkout\` runs with no Qt on PATH and lists
+  both ANT sticks. Cause of the Python DLL crash found: PyQt6's bundled C++ runtime (14.26) is older than the 14.40
+  AntNative is built with. `dist\` ships the VS runtime, and `tst_ant_sticks` checks the version that gets loaded.
+  windeployqt runs with `--no-network --no-system-dxc-compiler` (52 MB deploy).
 - `AntWorkoutQt/CMakeLists.txt`: Qt 6.7.0 (Core, Gui, Widgets, Svg, Concurrent, Test), AntNative via
   `add_subdirectory` (Python module off), the library targets, an empty `AntWorkout.exe` window, and a Qt Test exe.
 - `build_windows.ps1`: builds ANT_LIB if needed, configures and builds with Ninja, runs `windeployqt`, copies
