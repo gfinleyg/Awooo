@@ -11,6 +11,8 @@
 #include "AppState.hpp"
 #include "CustomTitleBar.hpp"
 #include "Dialogs.hpp"
+#include "Logger.hpp"
+#include "SetupScreen.hpp"
 #include "Theme.hpp"
 
 namespace awo {
@@ -38,6 +40,11 @@ MainWindow::MainWindow(std::unique_ptr<ant::AntBridge> bridge) : bridge_(std::mo
     layout_ = new QVBoxLayout(central);
     layout_->addWidget(titleBar_);
     setCentralWidget(central);
+    // the setup screen first, for the life of the app (the ride's screens come and go)
+    setup_ = new SetupScreen(bridge_.get());
+    connect(setup_, &SetupScreen::startRequested, this, &MainWindow::generateHud);
+    layout::markScreen(setup_, QStringLiteral("Init"));
+    layout_->addWidget(setup_);
 
     // Esc: the End Workout prompt during a ride (which pauses it), otherwise the same as the X (the exit prompt)
     auto* escape = new QShortcut(QKeySequence(Qt::Key_Escape), this);
@@ -48,6 +55,15 @@ MainWindow::MainWindow(std::unique_ptr<ant::AntBridge> bridge) : bridge_(std::mo
 }
 
 MainWindow::~MainWindow() = default;
+
+// (the workout screen comes in Phase 6 of PLAN.md: until then START comes straight back to the setup screen)
+void MainWindow::generateHud() {
+    setAppTitle(true);
+    log::event(QStringLiteral("SETUP"), QStringLiteral("START pressed: the workout screen isn't built yet"));
+    setup_->show();
+    setup_->resume();
+    setAppTitle();
+}
 
 void MainWindow::setAppTitle(bool showWorkoutName) {
     const AppState& state = appState();

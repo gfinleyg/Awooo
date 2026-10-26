@@ -7,6 +7,9 @@
 
 #include <QApplication>
 #include <QDir>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -18,7 +21,15 @@
 #include <numbers>
 
 #include "AnalogGauge.hpp"
+#include "AntBridge.hpp"
+#include "AppLayout.hpp"
 #include "AppState.hpp"
+#include "CalibratePowerWindow.hpp"
+#include "DeviceDialogs.hpp"
+#include "WorkoutSelectDialog.hpp"
+#include "FakeAnt.hpp"
+#include "SetupScreen.hpp"
+#include "WorkoutHelpers.hpp"
 #include "GradeWidgets.hpp"
 #include "LongVLabels.hpp"
 #include "PowerSpiral.hpp"
@@ -469,6 +480,143 @@ QWidget* sceneLongLabels() {
     return labels;
 }
 
+// ---- The screens ----
+
+// a bridge that has found two power meters and a heart rate monitor, and nothing more
+class StubBridge : public ant::AntBridge {
+public:
+    explicit StubBridge(awotest::FakeAnt& fake)
+        : AntBridge(
+              [transport = fake.stick](antnative::Stick::MessageHandler sink) {
+                  transport->sink = std::move(sink);
+                  return transport;
+              },
+              fake.clock, [](double) {}) {}
+    QStringList foundDevices() const override { return {"11 100", "11 101", "120 200"}; }
+    bool isInitialized() const override { return true; }
+    double scanSettleRemaining() const override { return 0; }
+    std::optional<QString> takeError() override { return std::nullopt; }
+    std::optional<QString> waitingForStick() const override { return std::nullopt; }
+    QSet<ant::Role> selectedRoles() const override { return {}; }
+    bool isConnectRequested() const override { return false; }
+    bool isReady() const override { return false; }
+    QStringList lowBatteryWarnings() const override { return {}; }
+    std::optional<ant::DeviceReading> selectedDevice(ant::Role) const override { return std::nullopt; }
+    void requestConnect(const ant::Selection&) override {}
+};
+
+QString firstShippedWorkout() {
+    QDir folder(QStringLiteral(AWO_PYTHON_APP_DIR "/awoWorkouts"));
+    QStringList names = folder.entryList(QDir::Files);
+    std::sort(names.begin(), names.end(), [](const QString& a, const QString& b) { return a.toLower() < b.toLower(); });
+    return folder.filePath(names.front());
+}
+
+// The setup screen with the saved settings, two power meters and a heart rate monitor found (the heart rate monitor
+// picked by itself), the first shipped workout loaded, laid out at 1920x1116
+QWidget* sceneSetupScreen() {
+    static awotest::FakeAnt fake;
+    static StubBridge bridge(fake);
+    QFile settingsFile(QStringLiteral("savedSettingsANT.json"));
+    settingsFile.open(QIODevice::WriteOnly);
+    settingsFile.write(QJsonDocument(QJsonObject{{"wheelCircumference", 2.1}, {"ftp", 250}, {"maxHr", 185}}).toJson());
+    settingsFile.close();
+    auto* setup = new SetupScreen(&bridge);
+    // (its timers stopped: the check is run once here)
+    for (QTimer* timer : setup->findChildren<QTimer*>()) {
+        timer->stop();
+    }
+    setup->pickWorkoutFile(firstShippedWorkout());
+    setup->initAntScanConnect();
+    auto* holder = new QWidget;
+    holder->setObjectName(QStringLiteral("holder"));
+    theme::setSheet(holder, QStringLiteral("#holder{background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 "
+                                           "#28275e stop:1 #9fc5d1);}"));
+    auto* layout = new QVBoxLayout(holder);
+    layout->addWidget(setup);
+    layout::applyLayout(holder, {{QStringLiteral("Init"), setup}}, 1.0);
+    shown(holder, 1920, 1116);
+    return holder;
+}
+
+// a popup at the size it gives itself
+QWidget* shownAsIs(QWidget* widget) {
+    theme::apply();
+    widget->setAttribute(Qt::WA_DontShowOnScreen);
+    widget->show();
+    settle();
+    return widget;
+}
+
+void writeSceneSettings() {
+    QFile file(QStringLiteral("savedSettingsANT.json"));
+    file.open(QIODevice::WriteOnly);
+    file.write(QJsonDocument(QJsonObject{{"wheelCircumference", 2.1}, {"ftp", 250}, {"maxHr", 185}}).toJson());
+}
+
+// Picking a speed/cadence source: a combined meter, a cadence meter and two speed meters found, the cadence meter
+// picked before
+QWidget* sceneSelectDevices() {
+    const QStringList found = {"121 400", "122 300", "123 301", "123 302"};
+    selectedDevices::write({"122 300"});
+    auto* window = new SelectDevicesWindow(found, SelectDevicesWindow::Kind::SpeedCadence, found);
+    for (QTimer* timer : window->findChildren<QTimer*>()) {
+        timer->stop();
+    }
+    shownAsIs(window);
+    selectedDevices::clear();
+    return window;
+}
+
+class ConnectBridge : public StubBridge {
+public:
+    using StubBridge::StubBridge;
+    QStringList foundDevices() const override { return {"11 100", "121 400"}; }
+};
+
+// The connect prompt: a power meter picked and found, a heart rate monitor picked and not, a speed/cadence meter
+// found and not picked
+QWidget* sceneConnectDevices() {
+    static awotest::FakeAnt fake;
+    static ConnectBridge bridge(fake);
+    selectedDevices::write({"11 100", "120 200"});
+    auto* window = new ConnectDevicesWindow(&bridge);
+    shownAsIs(window);
+    selectedDevices::clear();
+    return window;
+}
+
+// Calibrate Power with no power meter connected
+QWidget* sceneCalibratePower() {
+    static awotest::FakeAnt fake;
+    static StubBridge bridge(fake);
+    writeSceneSettings();
+    auto* window = new CalibratePowerWindow(&bridge);
+    for (QTimer* timer : window->findChildren<QTimer*>()) {
+        timer->stop();
+    }
+    return shownAsIs(window);
+}
+
+// The workout picker listing the first three shipped workouts, the second picked
+QWidget* sceneWorkoutPicker() {
+    writeSceneSettings();
+    QDir folder(QStringLiteral(AWO_PYTHON_APP_DIR "/awoWorkouts"));
+    QStringList names = folder.entryList(QDir::Files);
+    std::sort(names.begin(), names.end(), [](const QString& a, const QString& b) { return a.toLower() < b.toLower(); });
+    QJsonArray files;
+    for (const QString& name : names.mid(0, 3)) {
+        files.append(QDir::cleanPath(folder.filePath(name)));
+    }
+    QFile list(kWorkoutListFile);
+    list.open(QIODevice::WriteOnly);
+    list.write(QJsonDocument(QJsonObject{{"files", files}, {"last", files[1]}}).toJson(QJsonDocument::Compact));
+    list.close();
+    // (as the setup screen leaves it: no workout loaded yet)
+    appState().workoutFilename.clear();
+    return shownAsIs(new WorkoutSelectDialog);
+}
+
 const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("hud_graph"), sceneHudGraph},
     {QStringLiteral("power_gauge"), scenePowerGauge},
@@ -481,6 +629,11 @@ const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("grade_list_scrolled"), sceneGradeListScrolled},
     {QStringLiteral("smooth_bar"), sceneSmoothBar},
     {QStringLiteral("long_labels"), sceneLongLabels},
+    {QStringLiteral("setup_screen"), sceneSetupScreen},
+    {QStringLiteral("select_devices"), sceneSelectDevices},
+    {QStringLiteral("connect_devices"), sceneConnectDevices},
+    {QStringLiteral("calibrate_power"), sceneCalibratePower},
+    {QStringLiteral("workout_picker"), sceneWorkoutPicker},
 };
 
 }  // namespace

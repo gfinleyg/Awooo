@@ -45,6 +45,9 @@ struct SongHeard {
     double end = 0;
 };
 
+// the gauges' needles and the setup screen's warnings
+inline const QString kGaugeRed = QStringLiteral("#8B0000");
+
 struct AppState {
     // the rider (0: not set)
     int ftp = 0;

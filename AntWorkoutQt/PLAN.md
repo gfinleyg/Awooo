@@ -330,7 +330,17 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
 - **Done when:** each widget renders side by side with the Python version at the same size and values with no
   visible difference (see §6), and the gauge animates at the configured FPS without dropped frames.
 
-### Phase 5: setup screen and its dialogs
+### Phase 5: setup screen and its dialogs (done)
+- Done: `ui/screens/SetupScreen` and `ui/dialogs` (SelectDevicesWindow, ConnectDevicesWindow, WorkoutSelectDialog,
+  CalibratePowerWindow), the setup screen built by MainWindow. Workout files and FTP tests are read with
+  `core/AwoParser`. The whole screen and each popup render pixel identical to the Python app's from the same state
+  (tests/parity). tst_setup (24 cases, on a stand-in bridge) covers auto-select and auto-connect, the settle wait,
+  the status and blinking, the settings and their checks, the modes and FTP tests, workout files loaded and rejected,
+  picking devices by hand, the connect prompt, the workout picker and calibration. On SimulANT+ the app auto-picked
+  and connected the power meter, heart rate monitor and speed/cadence sensor ("Connected Succesfully"), and left the
+  power slot to the rider while a second power source (the FE-C trainer) was on the air.
+- Waiting on later phases: START comes straight back to the setup screen until the workout screen exists (Phase 6),
+  and Musical Cadence Mode's Select Music does nothing until the music work (Phase 8).
 - SetupScreen, SelectDevices, ConnectDevices, WorkoutSelect, CalibratePower.
 - **Done when:** with the fake and with SimulANT+, scanning, auto-select after the settle time, manual selection,
   connect, disconnect and rescan, FTP/HR/wheel/weight entry, all modes (workout, free, FTP tests), workout loading

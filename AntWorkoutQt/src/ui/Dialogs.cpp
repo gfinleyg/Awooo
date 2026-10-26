@@ -26,10 +26,9 @@
 
 namespace awo {
 
-namespace {
-
 // a popup window's frame: frameless, its own look, and its title bar
-CustomTitleBar* framed(QWidget* window, const QString& name, const QString& title, const QString& extraStyle = {}) {
+CustomTitleBar* framed(QWidget* window, const QString& name, const QString& title, const QString& extraStyle,
+                       bool fixedHeight) {
     window->setObjectName(name);
     window->setAttribute(Qt::WA_StyledBackground);
     window->setWindowTitle(title);
@@ -37,9 +36,13 @@ CustomTitleBar* framed(QWidget* window, const QString& name, const QString& titl
     theme::setSheet(window, QStringLiteral("#%1 {background-color:#9fc5d1;}").arg(name) + extraStyle);
     auto* titleBar = new CustomTitleBar(window, false);
     theme::setSheet(titleBar, QStringLiteral("background-color: #9fc5d1"));
-    titleBar->setFixedHeight(36);
+    if (fixedHeight) {
+        titleBar->setFixedHeight(36);
+    }
     return titleBar;
 }
+
+namespace {
 
 void key(QWidget* widget, int code, const QString& label) {
     keys::add(widget, code, label);
@@ -104,7 +107,7 @@ ConfirmClearSessionWindow::ConfirmClearSessionWindow(std::function<void()> clear
 // ---- The log ----
 
 ShowLogsWindow::ShowLogsWindow() {
-    auto* titleBar = framed(this, QStringLiteral("showLogsWindow"), QStringLiteral("   %1   ").arg(log::kLogFile));
+    auto* titleBar = framed(this, QStringLiteral("showLogsWindow"), QStringLiteral("   %1   ").arg(log::kLogFile), {}, false);
     setGeometry(500, 80, 1100, 900);
     // a plain text view rather than a label: selectable and copyable (drag, Ctrl+A, Ctrl+C), and it scrolls itself
     text_ = new QPlainTextEdit;

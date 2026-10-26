@@ -32,6 +32,9 @@ Python app's own results (`tests\golden\`).
   measured a label against Qt's size hint, which is never smaller than the label's own minimum size, so a fixed size
   label looked exactly full and its shrunk text stayed small until the next full refit (a resize or a theme change).
 
+- **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
+  title bars took the window's title before it was set, so both said "CustomTitleBar".
+
 ## Settings and log
 
 - **savedSettingsANT.json is written with its keys sorted and 4-space indents** (Qt's JSON writer). The values are the

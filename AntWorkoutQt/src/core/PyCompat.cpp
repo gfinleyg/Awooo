@@ -3,6 +3,7 @@
 #include <charconv>
 #include <cmath>
 #include <string>
+#include <tuple>
 
 namespace awo::py {
 
@@ -151,6 +152,33 @@ QString formatG(double value) {
         return QString::number(value, 'g', 6);
     }
     return QString::fromLatin1(buffer, end - buffer);
+}
+
+QString str(double value) {
+    if (std::isnan(value)) {
+        return QStringLiteral("nan");
+    }
+    if (std::isinf(value)) {
+        return value < 0 ? QStringLiteral("-inf") : QStringLiteral("inf");
+    }
+    if (value == 0) {
+        return std::signbit(value) ? QStringLiteral("-0.0") : QStringLiteral("0.0");
+    }
+    char buffer[64];
+    // (the exponent, from the shortest scientific form)
+    const std::to_chars_result shortest =
+        std::to_chars(buffer, buffer + sizeof buffer, value, std::chars_format::scientific);
+    const QString scientific = QString::fromLatin1(buffer, shortest.ptr - buffer);
+    const int exponent = scientific.mid(scientific.indexOf(u'e') + 1).toInt();
+    if (exponent < -4 || exponent >= 16) {
+        return scientific;
+    }
+    const std::to_chars_result fixedForm = std::to_chars(buffer, buffer + sizeof buffer, value, std::chars_format::fixed);
+    QString text = QString::fromLatin1(buffer, fixedForm.ptr - buffer);
+    if (!text.contains(u'.')) {
+        text += QStringLiteral(".0");
+    }
+    return text;
 }
 
 double mod(double a, double b) {

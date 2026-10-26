@@ -412,6 +412,168 @@ def scene_long_labels():
     return labels
 
 
+# ---- The screens ----
+
+#the rider's saved settings for the screens' scenes (written to a folder of their own, like render_widgets.exe's)
+SCENE_SETTINGS = {"wheelCircumference": 2.1, "ftp": 250, "maxHr": 185}
+
+
+def stub_classes():
+    from PyQt6.QtCore import QObject, pyqtSignal
+
+    class StubBridge(QObject):
+        deviceDiscovered = pyqtSignal(int, int)
+        devicesConnected = pyqtSignal()
+        devicesDisconnected = pyqtSignal()
+        statusMessage = pyqtSignal(str)
+        errorOccurred = pyqtSignal(str)
+        batteryChanged = pyqtSignal()
+        calibrationUpdate = pyqtSignal(int, str, object, int)
+        def found_devices(self): return ["11 100", "11 101", "120 200"]
+        def take_error(self): return None
+        def is_connect_requested(self): return False
+        def waiting_for_stick(self): return None
+        def is_ready(self): return False
+        def selected_roles(self): return set()
+        def selected_device(self, role): return None
+        def is_initialized(self): return True
+        def low_battery_warnings(self): return []
+        def scan_settle_remaining(self): return 0
+        def request_connect(self, selection): pass
+
+    class Parent:
+        startExe = StubBridge()
+    return StubBridge, Parent
+
+
+def in_work_folder(build, files=None):
+    """build() run in a folder of its own holding SCENE_SETTINGS (and files: {name: text}), as render_widgets.exe
+    runs"""
+    import json
+    import tempfile
+    workDir = tempfile.mkdtemp()
+    with open(os.path.join(workDir, "savedSettingsANT.json"), "w") as f:
+        json.dump(SCENE_SETTINGS, f)
+    for name, text in (files or {}).items():
+        with open(os.path.join(workDir, name), "w", encoding="utf-8") as f:
+            f.write(text)
+    here = os.getcwd()
+    os.chdir(workDir)
+    try:
+        return build()
+    finally:
+        os.chdir(here)
+
+
+def shown_as_is(widget):
+    """A popup at the size it gives itself"""
+    AppTheme.apply()
+    widget.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen)
+    widget.show()
+    for _ in range(3):
+        app.processEvents()
+    return widget
+
+
+def first_shipped_workout():
+    folder = os.path.join(APP_DIR, "awoWorkouts")
+    return os.path.join(folder, sorted(os.listdir(folder), key=str.lower)[0]).replace("\\", "/")
+
+
+def scene_setup_screen():
+    """The setup screen with the saved settings, two power meters and a heart rate monitor found (the heart rate
+    monitor picked by itself), the first shipped workout loaded, laid out at 1920x1116"""
+    from ClassWorkoutSetupWindow import WorkoutSetupWindow
+    import AppLayout
+    StubBridge, Parent = stub_classes()
+
+    def build():
+        setup = WorkoutSetupWindow(Parent())
+        setup.timer.stop()
+        setup.blinkTimer.stop()
+        path = first_shipped_workout()
+        if setup.process_workout_file(path):
+            setup.workoutDisplayLabel.show()
+            AppState.workoutFilename = path
+            AppState.workoutFilenameShort = path.split("/")[-1]
+            setup.workoutFileSelected.setText(" " + AppState.workout_display_name() + " ")
+        #(as the workout picker's pick ends, see open_workout_dialog)
+        setup.workoutSelectBlink = AppState.workoutFilenameShort == ""
+        setup.check_enable_start_button()
+        setup.setup_blink()
+        setup.init_ant_scan_connect()
+        holder = QWidget()
+        holder.setObjectName("holder")
+        holder.setStyleSheet("#holder{background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #28275e stop:1 #9fc5d1);}")
+        layout = QVBoxLayout(holder)
+        layout.addWidget(setup)
+        AppLayout.apply_layout(holder, {"Init": setup}, 1.0)
+        return shown(holder, 1920, 1116)
+    return in_work_folder(build)
+
+
+def scene_select_devices():
+    """Picking a speed/cadence source: a combined meter, a cadence meter and two speed meters found, the cadence
+    meter picked before"""
+    from ClassSelectDevicesWindow import SelectDevicesWindow
+    from WorkoutHelpers import WriteSelectedDeviceLines
+    found = ["121 400", "122 300", "123 301", "123 302"]
+    WriteSelectedDeviceLines(["122 300"])
+    try:
+        window = SelectDevicesWindow(None, found, "sc", foundDevices=found)
+        window.blinkTimer.stop()
+        #(the Python app's title bar says "CustomTitleBar": the C++ app's shows the window's title, see CHANGES.md)
+        window.title_bar.title.setText(window.windowTitle())
+        return shown_as_is(window)
+    finally:
+        WriteSelectedDeviceLines([])
+
+
+def scene_connect_devices():
+    """The connect prompt: a power meter picked and found, a heart rate monitor picked and not, a speed/cadence
+    meter found and not picked"""
+    from ClassConnectDevicesWindow import ConnectDevicesWindow
+    from WorkoutHelpers import WriteSelectedDeviceLines
+    StubBridge, _ = stub_classes()
+    class Bridge(StubBridge):
+        def found_devices(self): return ["11 100", "121 400"]
+    WriteSelectedDeviceLines(["11 100", "120 200"])
+    try:
+        window = ConnectDevicesWindow(bridge=Bridge())
+        #(as for the device selection's title, see scene_select_devices)
+        window.title_bar.title.setText("   Connect Devices   ")
+        return shown_as_is(window)
+    finally:
+        WriteSelectedDeviceLines([])
+
+
+def scene_calibrate_power():
+    """Calibrate Power with no power meter connected"""
+    from ClassCalibratePowerWindow import CalibratePowerWindow
+    StubBridge, _ = stub_classes()
+    def build():
+        window = CalibratePowerWindow(StubBridge())
+        window.timer.stop()
+        return shown_as_is(window)
+    return in_work_folder(build)
+
+
+def scene_workout_picker():
+    """The workout picker listing the first three shipped workouts, the second picked"""
+    import json
+    from ClassWorkoutSetupWindow import WorkoutSetupWindow
+    from ClassWorkoutSelectWindow import WorkoutSelectWindow
+    _, Parent = stub_classes()
+    folder = os.path.join(APP_DIR, "awoWorkouts")
+    files = [os.path.join(folder, name).replace("\\", "/") for name in sorted(os.listdir(folder), key=str.lower)[:3]]
+    def build():
+        setup = WorkoutSetupWindow(Parent())
+        setup.timer.stop()
+        setup.blinkTimer.stop()
+        return shown_as_is(WorkoutSelectWindow(setup))
+    return in_work_folder(build, {"workoutPickerANT.json": json.dumps({"files": files, "last": files[1]})})
+
+
 SCENES = {name[len("scene_"):]: fn for name, fn in globals().items() if name.startswith("scene_")}
 
 

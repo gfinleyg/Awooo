@@ -25,6 +25,11 @@ class AntBridge;
 
 class CustomTitleBar;
 
+// A popup window's frame: frameless, the popups' background (#name, plus extraStyle), and a title bar showing title,
+// for the window's layout to add at its top; the title bar 36 px tall (fixedHeight), or as tall as it needs
+CustomTitleBar* framed(QWidget* window, const QString& name, const QString& title, const QString& extraStyle = {},
+                       bool fixedHeight = true);
+
 // Exit the app? Yes closes the ANT stick cleanly before leaving
 class ConfirmExitWindow : public QWidget {
     Q_OBJECT

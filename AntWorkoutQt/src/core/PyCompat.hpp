@@ -33,6 +33,10 @@ QString fixed(double value, int digits);
 // f"{value:g}"
 QString formatG(double value);
 
+// str(value) for a float: the shortest digits that read back the same, "2.0" for a whole number, an exponent below
+// 1e-4 and from 1e16
+QString str(double value);
+
 // a % b for floats: the result takes b's sign
 double mod(double a, double b);
 

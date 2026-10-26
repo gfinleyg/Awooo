@@ -16,6 +16,7 @@ namespace awo {
 
 class ConfirmExitWindow;
 class CustomTitleBar;
+class SetupScreen;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -30,6 +31,9 @@ public:
 
     ant::AntBridge* bridge() const { return bridge_.get(); }
     CustomTitleBar* titleBar() const { return titleBar_; }
+    SetupScreen* setupScreen() const { return setup_; }
+    // START on the setup screen: the workout screen
+    void generateHud();
     // just the app's name, or (on the workout and synopsis screens, riding a workout file or an FTP test) with the
     // workout's name
     void setAppTitle(bool showWorkoutName = false);
@@ -46,6 +50,7 @@ protected:
 private:
     std::unique_ptr<ant::AntBridge> bridge_;
     CustomTitleBar* titleBar_;
+    SetupScreen* setup_;
     QVBoxLayout* layout_;
     QPointer<ConfirmExitWindow> exitPrompt_;
 };
