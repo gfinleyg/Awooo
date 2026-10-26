@@ -45,6 +45,7 @@ add_subdirectory(src/core)
 add_subdirectory(src/ant)
 add_subdirectory(src/app)
 add_subdirectory(src/tools)
+add_subdirectory(hwtests)
 
 # The app's files from AntWorkout/, beside the exes: fonts, sounds and images it loads, and the themes and workouts
 # to pick from (dist\ gets them from here, see build_windows.ps1)

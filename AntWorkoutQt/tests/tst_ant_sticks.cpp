@@ -1,11 +1,11 @@
-// antnative.dll in a Qt Widgets process, and the stick list over it (src/ant/AntSticks)
+// AntNative's core in a Qt Widgets process, and the stick list over it (src/ant/AntSticks)
 
 #include <QtTest>
 #include <QWidget>
 
 #include <windows.h>
 
-#include <antnative.hpp>
+#include "ant_core.hpp"
 
 #include "AntSticks.hpp"
 
@@ -47,11 +47,6 @@ class TestAntSticks : public QObject {
     Q_OBJECT
 
 private slots:
-    void dllMatchesHeader() {
-        // the antnative.dll loaded is the one antnative.h describes
-        QCOMPARE(ant_api_version(), ANT_API_VERSION);
-    }
-
     void runtimeNewEnoughForAntNative() {
         // What crashed the Python app: PyQt6's msvcp140.dll (14.26) loaded ahead of the newer one AntNative's
         // std::mutex needs. A runtime at least as new as this compiler (14.40 for _MSC_VER 1940) must be the one loaded.
@@ -69,7 +64,7 @@ private slots:
         QWidget widget;
         widget.show();
         const QList<awo::ant::Stick> sticks = awo::ant::attachedSticks();
-        QCOMPARE(sticks.size(), static_cast<qsizetype>(antnative::list_devices().size()));
+        QCOMPARE(sticks.size(), static_cast<qsizetype>(antnative::Stick::list_devices().size()));
         for (qsizetype i = 0; i < sticks.size(); ++i) {
             QCOMPARE(sticks[i].index, static_cast<std::uint32_t>(i));
         }

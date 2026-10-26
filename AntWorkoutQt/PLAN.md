@@ -14,7 +14,7 @@ Nothing here is built yet. Each phase below ends with something that builds, run
 | D1 | C or C++ | **C++20** for the app. The ANT layer is already C/C++ (AntNative). | Qt is a C++ framework, so there is no C option for the UI. MSVC 2022 supports C++20 fully. |
 | D2 | Qt version | **Qt 6.7.0, msvc2019_64 kit** (already in `C:\Qt\6.7.0`) | The layouts and fonts were tuned under Qt 6.7, whose default Windows font engine is GDI. Qt 6.8 switched to DirectWrite, which changes text metrics and would break the text fitting. Upgrade later as its own task, if ever. |
 | D3 | Where it lives | New folder `AntWorkoutQt/` beside `AntWorkout/`. **The Python app stays in the repo after switch-over** (decided). | Both apps keep working and read the same settings, workouts, themes and caches, so you can switch between them. The Python app stays the reference for behaviour. |
-| D4 | How it talks to ANT | **`antnative.hpp`** (the C++ wrapper over `antnative.dll`) | It's the public API, built for this. The app stays decoupled from the core's internals and runtime library. The bridge sits behind an interface so tests can use a fake (see §4.3). |
+| D4 | How it talks to ANT | **AntNative's core, linked statically** (changed in Phase 2 from `antnative.hpp` over `antnative.dll`) | The C API polls messages without saying which sensor each came from, or whether it brought a new reading, and doesn't expose the raw counters the reading pipeline works from. The core gives the Python bridge's exact callback (message, sensor, changed) and the profiles' readings. Its `Transport` interface lets the tests run the real Manager and Recovery on a fake stick, as the Python tests did. Both are built by the same compiler in one CMake tree, so there's no ABI to keep apart, and the app no longer ships `antnative.dll`. |
 | D5 | Build system | **CMake + Ninja** (both ship with Qt in `C:\Qt\Tools`), with a `build_windows.ps1` like AntNative's | AntNative already has a `CMakeLists.txt`. The app can `add_subdirectory(../AntNative)` and build one tree. |
 | D6 | Graphs (replaces pyqtgraph) | **A small in-house plot library on QGraphicsView** (decided: option A in §4.4) | pyqtgraph is itself built on QGraphicsView, so the app's own graph items port line for line. Qwt stays the fallback if the Phase 4 spike goes badly. |
 | D7 | Audio (decode, analysis input, playback, UI sounds) | **miniaudio** (one C header; the same library the Python app uses through pyminiaudio) | Qt Multimedia isn't installed, and the music player uses the audio device position as the workout clock, which miniaudio exposes directly. |
@@ -281,7 +281,13 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
 - `awo-verifier.exe` and `zwo2awo.exe` work like the scripts.
 - **Done when:** golden output matches for every bundled workout, and the tools give the same results as the scripts.
 
-### Phase 2: ANT layer (`awo_ant`)
+### Phase 2: ANT layer (`awo_ant`) (done)
+- Done: `AntBridge` (a QThread over the core's Manager and Recovery, with a transport factory) and `ReadingPipeline`
+  (the poller's logic, emitting what to show). `tests/FakeAnt.hpp` is a fake `Transport` that feeds real raw ANT
+  messages through the core's decoder. 39 bridge and 27 pipeline cases, ported from the Python tests.
+  `hwtests/ant_console.exe` against SimulANT+: the sensors scenario (power 180 W, cadence 80, speed 17.4 mph, heart
+  rate 110) and the trainer scenario (150 W target reached, heart rate 110) pass. It rescans 3 s after opening so
+  devices the stick replays from its last session aren't picked.
 - `IAntManager`, `NativeAntManager`, `FakeAntManager`, `AntBridge`, `ReadingPipeline`.
 - Port the bridge tests (34) and poller tests (18) onto the fake.
 - A small console harness (`hwtests/ant_console.exe`) that connects to SimulANT+ sensors and prints readings, for a

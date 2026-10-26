@@ -27,6 +27,17 @@ struct MusicTrack {
     double duration = 0;
 };
 
+// A sensor's readings for the workout screen's graph, (secondsPassed, value), the graph's window of them
+struct SavedValues {
+    QList<double> times;
+    QList<double> values;
+
+    void clear() {
+        times.clear();
+        values.clear();
+    }
+};
+
 // A song as it was heard: its track and when, in secondsPassed
 struct SongHeard {
     int track = 0;
@@ -70,6 +81,9 @@ struct AppState {
     grading::Grades blockGrades;
     QDateTime startTimestamp;  // when the workout screen was entered
     int totalRevolutions = 0;  // wheel revolutions, for the distance
+    SavedValues savedPowerVals;
+    SavedValues savedHRVals;
+    SavedValues savedCadenceVals;
 
     // the session's rides, what the ride being ridden kept from START, and whether it has joined the session
     QList<Ride> sessionRides;

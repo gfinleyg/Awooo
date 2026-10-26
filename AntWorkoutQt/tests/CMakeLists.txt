@@ -24,3 +24,9 @@ foreach(test core_text workout_files zwo ftp_test grading session settings logge
     awo_add_test(tst_${test} tst_${test}.cpp)
     target_link_libraries(tst_${test} PRIVATE awo_core)
 endforeach()
+
+# awo_ant on a fake stick (FakeAnt.hpp), with AntNative's real Manager and Recovery
+foreach(test ant_bridge reading_pipeline)
+    awo_add_test(tst_${test} tst_${test}.cpp FakeAnt.hpp)
+    target_link_libraries(tst_${test} PRIVATE awo_ant)
+endforeach()
