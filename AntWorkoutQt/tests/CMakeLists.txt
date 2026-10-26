@@ -32,7 +32,13 @@ foreach(test ant_bridge reading_pipeline)
 endforeach()
 
 # awo_ui, built offscreen
-foreach(test theme key_shortcuts layout)
+foreach(test theme key_shortcuts layout plot)
     awo_add_test(tst_${test} tst_${test}.cpp FakeAnt.hpp)
     target_link_libraries(tst_${test} PRIVATE awo_ui)
 endforeach()
+
+# the side by side check against the Python app's widgets (parity/render_python.py renders the Python side)
+add_executable(render_widgets parity/render_widgets.cpp)
+target_link_libraries(render_widgets PRIVATE awo_ui)
+target_compile_definitions(render_widgets PRIVATE AWO_PYTHON_APP_DIR="${AWO_PYTHON_APP}")
+awo_target_defaults(render_widgets)

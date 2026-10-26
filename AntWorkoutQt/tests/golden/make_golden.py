@@ -387,6 +387,47 @@ def units_golden():
     write("units.json", result)
 
 
+def plot_golden():
+    """pyqtgraph's ticks (spacing, values, numbers) and view ranges (padding, limits), which awo_plot copies"""
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    import pyqtgraph as pg
+    from ClassWorkoutGraph import TimeAxisItem
+    ranges = [(0, 720, 1800), (-16.98, 737.4, 1799), (0, 1000, 160), (0, 400, 300), (0, 3.3, 500), (-5, 5, 100),
+              (0, 7200, 1800), (100, 130, 800), (0, 0.004, 400), (0, 1e6, 600), (0, 25000, 900), (12.5, 12.75, 50),
+              (0, 220, 160), (-8.2, 408.2, 157)]
+    axis = pg.AxisItem("bottom")
+    timeAxis = TimeAxisItem(orientation="bottom")
+    ticks = []
+    for mn, mx, size in ranges:
+        levels = axis.tickValues(mn, mx, size)
+        ticks.append({"min": mn, "max": mx, "size": size,
+                      "spacing": [list(level) for level in axis.tickSpacing(mn, mx, size)],
+                      "values": [[spacing, list(values)] for spacing, values in levels],
+                      "strings": [axis.tickStrings(values, 1.0, spacing) for spacing, values in levels]})
+    times = [[spacing, values, timeAxis.tickStrings(values, 1.0, spacing)]
+             for spacing, values in ((60, [0, 60, 540, 3540, 3600, 3660, 7260]), (30, [0, 30, 90, 3570, 3630]),
+                                     (600, [0, 600, 4200]))]
+    views = []
+    for width, height in ((1798.5, 160.1), (300, 100), (50, 20), (0, 0), (10000, 5000)):
+        for (a, b), padding, limits in (((0, 720), None, None), ((0, 400), None, None), ((5, 5), None, None),
+                                        ((0, 720), 0, None), ((-100, 50), 0, {"xMin": 0, "xMax": 3600}),
+                                        ((3000, 4000), None, {"xMin": 0, "xMax": 3600, "minXRange": 60}),
+                                        ((10, 20), 0, {"xMin": 0, "xMax": 3600, "minXRange": 60}),
+                                        ((-50, 9000), None, {"xMin": 0, "xMax": 3600})):
+            view = pg.ViewBox()
+            view.resize(width, height)
+            if limits:
+                view.setLimits(**limits)
+            view.setXRange(a, b, padding=padding)
+            view.setYRange(a, b, padding=padding)
+            views.append({"size": [width, height], "range": [a, b], "padding": padding, "limits": limits,
+                          "x": view.viewRange()[0], "y": view.viewRange()[1],
+                          "suggested": [view.suggestPadding(0), view.suggestPadding(1)]})
+    write("plot.json", {"ticks": ticks, "times": times, "views": views})
+    del app
+
+
 if __name__ == "__main__":
     from PyQt6.QtGui import QColor
     QColorArgb = QColor.NameFormat.HexArgb
@@ -398,3 +439,4 @@ if __name__ == "__main__":
     session_golden()
     colors_golden()
     units_golden()
+    plot_golden()

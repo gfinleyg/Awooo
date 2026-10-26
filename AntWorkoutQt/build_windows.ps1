@@ -88,7 +88,7 @@ if (-not $SkipTests) {
 # dist\: the build's bin folder less the tests, then Qt and the C++ runtime beside the exes
 $distName = if ($Configuration -eq "Debug") { "AntWorkout-Debug" } else { "AntWorkout" }
 $dist = Join-Path $PSScriptRoot "dist\$distName"
-Copy-Tree (Join-Path $build "bin") $dist @("/E", "/XO", "/XF", "tst_*.exe", "*.ilk")
+Copy-Tree (Join-Path $build "bin") $dist @("/E", "/XO", "/XF", "tst_*.exe", "render_widgets.exe", "*.ilk")
 
 $deployMode = if ($Configuration -eq "Debug") { "--debug" } else { "--release" }
 # (no compiler runtime from windeployqt: Qt's would be older than AntNative needs, the right one is copied below;

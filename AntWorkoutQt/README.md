@@ -41,3 +41,19 @@ Most of them also compare against `tests\golden\*.json`: the Python app's own re
 shipped workout, every theme's colors, grading scenarios...). After a deliberate change to the Python app's results,
 write them again with `py -3.10 tests\golden\make_golden.py` (the Python that has AntWorkout's requirements and
 requirements-test installed). Deliberate differences of the C++ app are listed in `CHANGES.md`.
+
+### Widgets side by side with the Python app
+
+The custom painted widgets (gauges, spirals, graphs...) are checked by eye and by pixel against the Python app's:
+`tests\parity\render_python.py` renders the Python widgets, set up as the Python screens set them up and fed fixed
+made-up readings, and `render_widgets.exe` (built with the tests, in `build\Release\bin`) renders the C++ ones from the
+same setup. `tests\parity\compare.py` counts the differing pixels and writes each pair with its differences marked:
+
+```
+py -3.10 tests\parity\render_python.py %TEMP%\py
+build\Release\bin\render_widgets.exe %TEMP%\cpp
+py -3.10 tests\parity\compare.py %TEMP%\py %TEMP%\cpp %TEMP%\diff
+```
+
+Both run in `..\AntWorkout` (its `defaultTheme.json`) on the real Windows platform, not offscreen, so the fonts render
+as they do on screen. Run `render_widgets.exe` with Qt's bin folder on PATH.
