@@ -3,8 +3,11 @@
 set(AWO_QT_BIN "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}")
 
 function(awo_add_test name)
-    add_executable(${name} ${ARGN})
+    add_executable(${name} ${ARGN} TestSupport.hpp)
     target_link_libraries(${name} PRIVATE Qt6::Test)
+    target_compile_definitions(${name} PRIVATE
+        AWO_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden"
+        AWO_PYTHON_APP_DIR="${AWO_PYTHON_APP}")
     awo_target_defaults(${name})
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES
@@ -15,3 +18,9 @@ endfunction()
 awo_add_test(tst_ant_sticks tst_ant_sticks.cpp)
 # (version.lib: the loaded C++ runtime's file version)
 target_link_libraries(tst_ant_sticks PRIVATE Qt6::Widgets awo_ant version)
+
+# awo_core, each checked against the Python app's results in golden/ (make_golden.py)
+foreach(test core_text workout_files zwo ftp_test grading session settings logger ftp_colors)
+    awo_add_test(tst_${test} tst_${test}.cpp)
+    target_link_libraries(tst_${test} PRIVATE awo_core)
+endforeach()

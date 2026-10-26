@@ -41,8 +41,10 @@ function(awo_target_defaults target)
     target_compile_definitions(${target} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 endfunction()
 
+add_subdirectory(src/core)
 add_subdirectory(src/ant)
 add_subdirectory(src/app)
+add_subdirectory(src/tools)
 
 # The app's files from AntWorkout/, beside the exes: fonts, sounds and images it loads, and the themes and workouts
 # to pick from (dist\ gets them from here, see build_windows.ps1)

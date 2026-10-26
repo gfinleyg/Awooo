@@ -262,7 +262,16 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
 - **Done when:** the empty window opens from `dist\`, a test runs headless, and `antnative::list_devices()` works
   from the exe.
 
-### Phase 1: core logic (`awo_core`) + command-line tools
+### Phase 1: core logic (`awo_core`) + command-line tools (done)
+- Done: `src/core` (the parser, ZWO conversion, FTP tests, grading, session, AppState, WorkoutData, settings, units,
+  performance, calibration, logger and the FTP colour maths), `awo-verifier.exe` and `zwo2awo.exe`, and 9 test exes
+  (784 cases). `tests/golden/make_golden.py` writes the Python app's results for every shipped and scratchpad workout
+  at three FTPs, ZWO cases, grading scenarios, rings, units, and every theme's colours with every gradients file. The
+  C++ results match them exactly, apart from the changes in `CHANGES.md`.
+- Notes for later phases: `awo_core` links Qt Gui for `QColor` only, so colours round exactly as PyQt6's did. The
+  theme-dependent half of FtpColors (the current palette, pens, block text contrast, watchers) comes with the Theme in
+  Phase 3; the core functions take the ranges and palette explicitly, and `ZoneRanges.cadence` replaces the Python
+  app's "is this the cadence zones" guesswork.
 - Port §3.1. Extract the `.awo` parser out of the setup screen.
 - **Golden tests against Python:** a small Python script (kept in `tests/golden/`) runs the Python modules over every
   file in `awoWorkouts/` and the test `.awo`/`.zwo` files, plus grading, FTP test and colour inputs, and writes JSON.
