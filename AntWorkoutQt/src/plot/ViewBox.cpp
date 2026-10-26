@@ -206,6 +206,10 @@ void ViewBox::updateViewRange() {
     }
     updateMatrix();
     update();
+    // the view this one's linked to follows it
+    if (changed[XAxis] && xLink_ != nullptr) {
+        xLink_->linkedViewChanged(this);
+    }
     if (changed[XAxis]) {
         emit xRangeChanged(this, range_[XAxis]);
     }
@@ -289,13 +293,17 @@ void ViewBox::setXLink(ViewBox* view) {
     }
 }
 
-// the linked view's x range, lined up with it on screen where the two overlap (pyqtgraph's linkedViewChanged)
 void ViewBox::linkedXChanged() {
-    if (xLink_ == nullptr) {
+    linkedViewChanged(xLink_);
+}
+
+// the view's x range, lined up with it on screen where the two overlap
+void ViewBox::linkedViewChanged(ViewBox* view) {
+    if (linksBlocked_ || view == nullptr) {
         return;
     }
-    const Range vr = xLink_->xRange();
-    const QRectF vg = xLink_->screenGeometry();
+    const Range vr = view->xRange();
+    const QRectF vg = view->screenGeometry();
     const QRectF sg = screenGeometry();
     double x1 = vr.min;
     double x2 = vr.max;
@@ -305,7 +313,9 @@ void ViewBox::linkedXChanged() {
         x1 = vr.min + (sg.x() - vg.x()) * upp;
         x2 = x1 + sg.width() * upp;
     }
+    view->linksBlocked_ = true;
     setXRange(x1, x2, 0.0);
+    view->linksBlocked_ = false;
 }
 
 void ViewBox::setMouseEnabled(bool x, bool y) {
@@ -393,8 +403,25 @@ void ViewBox::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
 }
 
 void ViewBox::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
+    const bool dragged = dragging_;
     dragging_ = false;
     event->accept();
+    if (!dragged && scene() != nullptr) {
+        const QPointF at = event->scenePos();
+        emit clicked(at, event->button(), sendClick(scene(), at, event->button()));
+    }
+}
+
+bool sendClick(QGraphicsScene* scene, const QPointF& scenePos, Qt::MouseButton button) {
+    for (QGraphicsItem* item : scene->items(scenePos, Qt::IntersectsItemShape, Qt::DescendingOrder)) {
+        if (!item->isVisible()) {
+            continue;
+        }
+        if (auto* clickable = dynamic_cast<Clickable*>(item); clickable != nullptr && clickable->click(scenePos, button)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace awo::plot

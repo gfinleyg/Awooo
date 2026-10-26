@@ -18,7 +18,7 @@ namespace awo::plot {
 // a pyqtgraph pen made from a color: cosmetic (as wide on screen whatever the scale), 1 px unless given
 QPen mkPen(const QColor& color, double width = 1);
 
-class CurveItem : public QGraphicsObject, public ViewAware {
+class CurveItem : public QGraphicsObject, public ViewAware, public Clickable {
     Q_OBJECT
 
 public:
@@ -38,6 +38,7 @@ public:
 
     // clicks within tolerance pixels of the line emit clicked (the synopsis picks a curve that way)
     void setClickable(bool clickable, double tolerance = 10);
+    bool click(const QPointF& scenePos, Qt::MouseButton button) override;
     QPainterPath shape() const override;
 
     QRectF boundingRect() const override;
@@ -46,10 +47,6 @@ public:
 
 signals:
     void clicked(awo::plot::CurveItem* curve);
-
-protected:
-    void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
-    void mouseReleaseEvent(QGraphicsSceneMouseEvent* event) override;
 
 private:
     ViewBox* view() const;

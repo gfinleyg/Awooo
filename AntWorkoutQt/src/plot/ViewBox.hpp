@@ -20,6 +20,18 @@ public:
     virtual void viewTransformChanged() = 0;
 };
 
+// An item that takes clicks the way pyqtgraph's scene hands them out: a press and release in place, offered to each item
+// under the mouse in turn, topmost first, until one takes it (true). It doesn't take Qt's press itself, so the view
+// under it still gets drags; the view that got the press hands the click on (see ViewBox::clicked)
+class Clickable {
+public:
+    virtual ~Clickable() = default;
+    virtual bool click(const QPointF& scenePos, Qt::MouseButton button) = 0;
+};
+
+// offers a click at scenePos to the Clickable items there, topmost first; whether one took it
+bool sendClick(QGraphicsScene* scene, const QPointF& scenePos, Qt::MouseButton button);
+
 struct Range {
     double min = 0;
     double max = 1;
@@ -88,6 +100,9 @@ signals:
     // the range was changed by a drag or the wheel
     void rangeChangedManually();
     void resized(awo::plot::ViewBox* view);
+    // a click (press and release in place) on the view, after the items under it were offered it (taken: one took
+    // it), as pyqtgraph's scene's sigMouseClicked
+    void clicked(QPointF scenePos, Qt::MouseButton button, bool taken);
 
 protected:
     void resizeEvent(QGraphicsSceneResizeEvent* event) override;
@@ -101,6 +116,10 @@ private:
     void updateViewRange();
     void updateMatrix();
     void linkedXChanged();
+    // view's x range changed: this one's lined up with it on screen (pyqtgraph's linkedViewChanged). Both ways: a view
+    // follows the one it's linked to, and that one follows it back when the linked view is changed itself (dragged,
+    // zoomed)
+    void linkedViewChanged(ViewBox* view);
     void scaleBy(std::optional<double> x, std::optional<double> y, QPointF center);
     void translateBy(std::optional<double> x, std::optional<double> y);
 
@@ -112,6 +131,8 @@ private:
     double defaultPadding_ = 0.02;
     bool mouseEnabled_[2] = {true, true};
     QPointer<ViewBox> xLink_;
+    // (pyqtgraph's blockLink: no following back while this one is being lined up with it)
+    bool linksBlocked_ = false;
     bool dragging_ = false;
     QPointF lastDragPos_;
 };

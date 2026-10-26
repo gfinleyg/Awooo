@@ -370,7 +370,21 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
 - **Done when:** a full ride with the fake rider (the PreviewRide `Rider`) matches the Python HUD's recorded power
   requests and grades for the same workout and seed, and the SimulANT+ trainer scenario passes.
 
-### Phase 7: synopsis
+### Phase 7: synopsis (done)
+- Done: `ui/screens/SynopsisScreen` (and `ui/widgets/SynopsisItems`: the max labels, graded blocks and strips), built
+  by MainWindow on Exit to Synopsis, with Return to Setup and Exit. The synopsis of a whole simulated workout renders
+  the same as the Python one (tests/parity `synopsis_screen`: 134 pixels differ, along the 1 px curves). The plot
+  library gained what the synopsis' three overlapping views need from pyqtgraph: links that go both ways (the view
+  on top takes a drag, the others follow) and clicks handed down through the views to the curve, label, strip or
+  graded block under them (`plot::Clickable`). tst_synopsis (13 cases) covers the stats and grade, the max stars
+  riding to a selection's max, zooming and the time boxes, dragging, clicks, grade popups and Left/Right, Block
+  Grades, two rides' strip, an FTP test's result and Apply FTP, Set Max HR and best power over dropouts;
+  tst_app_flow ports the 5 app flow tests (the whole app on the fake stick: auto-connect, rides, grades, the
+  synopsis, back to setup, the exit, the trainer, a two-ride session and Clear Session).
+- Waiting on Phase 8: Musical Cadence Mode's song strip and the songs in the grades are built but only tested once
+  there are songs (test_cadence_synopsis_shows_the_songs_heard). Where two spots for a max label are exactly as near,
+  the C++ app tries them left to right, top to bottom; Python tried them in its set's order (no visible difference
+  seen).
 - SynopsisScreen with session rides, strips, grade regions and popups, block grades sheet, zoom and time edits, max
   markers and animated stars, FTP test result and Apply FTP, set max HR.
 - Port the screens tests (8) and app flow tests (5): setup, HUD, synopsis, back to setup, exit.

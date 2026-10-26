@@ -32,7 +32,9 @@
 #include "WorkoutHelpers.hpp"
 #include "GradeWidgets.hpp"
 #include "HudScreen.hpp"
+#include "Session.hpp"
 #include "SimulatedRider.hpp"
+#include "SynopsisScreen.hpp"
 #include "WorkoutData.hpp"
 #include "LongVLabels.hpp"
 #include "PowerSpiral.hpp"
@@ -701,6 +703,95 @@ QWidget* sceneHudScreen() {
     return holder;
 }
 
+// The synopsis of the first shipped workout ridden start to finish by the simulated rider (seed 11) a second a tick,
+// its readings recorded as LayoutViewer records them, laid out at 1920x1116
+QWidget* sceneSynopsisScreen() {
+    static awotest::FakeAnt fake;
+    static StubBridge bridge(fake);
+    writeSceneSettings();
+    auto* setup = new SetupScreen(&bridge);
+    for (QTimer* timer : setup->findChildren<QTimer*>()) {
+        timer->stop();
+    }
+    AppState& state = appState();
+    state.secondsPassed = 0;
+    state.workoutPowerRequestsSeconds.clear();
+    state.workoutPowerRequestsWatts.clear();
+    state.workoutPowerRequestsSysTime.clear();
+    state.savedPowerVals = {};
+    state.savedHRVals = {};
+    state.savedCadenceVals = {};
+    state.totalRevolutions = 0;
+    state.sessionRides.clear();
+    state.rideStart.reset();
+    state.rideRecorded = false;
+    workoutData().clear();
+    state.ftp = 250;
+    state.maxHr = 185;
+    state.wheelCircumference = 2.105;
+    state.workoutMode = true;
+    state.cadenceMode = false;
+    state.ftpTestMode.clear();
+    state.antHRM = true;
+    state.antSpeedCadence = true;
+    state.antCadence = false;
+    state.antSpeed = false;
+    state.ftpRanges = zones::powerRanges();
+    const QString path = firstShippedWorkout();
+    setup->loadWorkoutFile(path);
+    state.workoutFilename = path;
+    state.workoutFilenameShort = path.split(u'/').last();
+    const QDateTime startTimestamp(QDate(2026, 10, 26), QTime(8, 0, 0));
+    state.startTimestamp = startTimestamp;
+    const double startSeconds = startTimestamp.toMSecsSinceEpoch() / 1000.0;
+    double revolutions = 0;
+    const auto record = [&](double t, const RiderReading& reading) {
+        const double ts = startSeconds + t;
+        WorkoutData& data = workoutData();
+        data.power.appendAt(ts, {static_cast<double>(reading.power)});
+        data.heartRate.appendAt(ts, {static_cast<double>(reading.heartRate)});
+        data.fallbackCadence.appendAt(ts, {py::round(reading.cadence)});
+        // speed sensor counters: cumulative revolutions and the 1/1024 s time of the last one
+        const double revsPerSecond = reading.speedMph / 2.23694 / state.wheelCircumference;
+        revolutions += revsPerSecond;
+        const double lastRevTime = t - (revolutions - std::trunc(revolutions)) / std::max(revsPerSecond, 0.01);
+        data.speed.appendAt(ts, {static_cast<double>(static_cast<long long>(revolutions) & 0xFFFF),
+                                 static_cast<double>(static_cast<long long>(lastRevTime * 1024) & 0xFFFF)});
+    };
+    {
+        HudScreen hud(&bridge, nullptr, [] { return 1000.0; });
+        SimulatedRider rider(11);
+        hud.runSimulatedRide(state.workoutDurationSeconds + 1, rider, record);
+        hud.stopTimers();
+    }
+    state.startTimestamp = startTimestamp;
+    state.workoutPowerRequestsSysTime.clear();
+    for (const double seconds : state.workoutPowerRequestsSeconds) {
+        state.workoutPowerRequestsSysTime.append(startTimestamp.addMSecs(static_cast<qint64>(py::round(seconds * 1000))));
+    }
+    session::addCurrentRide();
+    auto* synopsis = new SynopsisScreen(&bridge, setup, [] { return 0.0; });
+    for (QTimer* timer : synopsis->findChildren<QTimer*>(Qt::FindDirectChildrenOnly)) {
+        timer->stop();
+    }
+    auto* holder = new QWidget;
+    setup->setParent(holder);
+    setup->hide();
+    holder->setObjectName(QStringLiteral("holder"));
+    theme::setSheet(holder, QStringLiteral("#holder{background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 "
+                                           "#28275e stop:1 #9fc5d1);}"));
+    auto* layout = new QVBoxLayout(holder);
+    layout->addWidget(synopsis);
+    layout::applyLayout(holder, {{QStringLiteral("Synopsis"), synopsis}}, 1.0);
+    shown(holder, 1920, 1116);
+    synopsis->layoutMaxLabels();
+    for (int phase = 0; phase < synopsis->maxMarkers().size(); ++phase) {
+        synopsis->maxMarkers()[phase].star->step(((3 + phase) * std::numbers::pi - phase * 2.1) / 3.6, phase);
+    }
+    settle();
+    return holder;
+}
+
 const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("hud_graph"), sceneHudGraph},
     {QStringLiteral("power_gauge"), scenePowerGauge},
@@ -719,6 +810,7 @@ const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("calibrate_power"), sceneCalibratePower},
     {QStringLiteral("workout_picker"), sceneWorkoutPicker},
     {QStringLiteral("hud_screen"), sceneHudScreen},
+    {QStringLiteral("synopsis_screen"), sceneSynopsisScreen},
 };
 
 }  // namespace

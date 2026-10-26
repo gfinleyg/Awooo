@@ -30,6 +30,8 @@ add_library(awo_ui STATIC
     screens/HudScreenRide.cpp
     screens/SetupScreen.cpp
     screens/SetupScreen.hpp
+    screens/SynopsisScreen.cpp
+    screens/SynopsisScreen.hpp
     widgets/AnalogGauge.cpp
     widgets/AnalogGauge.hpp
     widgets/GradeWidgets.cpp
@@ -42,6 +44,8 @@ add_library(awo_ui STATIC
     widgets/PowerSpiral.hpp
     widgets/SmoothProgressBar.cpp
     widgets/SmoothProgressBar.hpp
+    widgets/SynopsisItems.cpp
+    widgets/SynopsisItems.hpp
     widgets/WorkoutGraph.cpp
     widgets/WorkoutGraph.hpp
 )

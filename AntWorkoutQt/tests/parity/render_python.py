@@ -640,6 +640,91 @@ def scene_hud_screen():
     return in_work_folder(build)
 
 
+
+def scene_synopsis_screen():
+    """The synopsis of the first shipped workout ridden start to finish by PreviewRide's Rider(seed=11) a second a
+    tick, its readings recorded as LayoutViewer records them, laid out at 1920x1116"""
+    import datetime
+    import math
+    import time as timeModule
+    from types import SimpleNamespace
+    import AppLayout
+    import ClassHUDWindow
+    import ClassSynopsisWindow
+    import PreviewRide
+    import WorkoutData
+    from ClassWorkoutSetupWindow import WorkoutSetupWindow
+    _, Parent = stub_classes()
+
+    def build():
+        setup = WorkoutSetupWindow(Parent())
+        setup.timer.stop()
+        setup.blinkTimer.stop()
+        PreviewRide.reset_ride_state()
+        AppState.ftp, AppState.maxHr, AppState.wheelCircumference = "250", "185", "2.105"
+        AppState.workoutMode, AppState.cadenceMode, AppState.ftpTestMode = True, False, None
+        AppState.antHRM, AppState.antSpeedCadence, AppState.antCadence, AppState.antSpeed = True, True, False, False
+        AppState.ftpRanges = FtpColors.power_ranges()
+        FtpColors.update_graph_brushes()
+        path = first_shipped_workout()
+        assert setup.process_workout_file(path)
+        AppState.workoutFilename = path
+        AppState.workoutFilenameShort = path.split("/")[-1]
+        startTimestamp = datetime.datetime(2026, 10, 26, 8, 0, 0)
+        AppState.startTimestamp = startTimestamp
+        startSeconds = startTimestamp.timestamp()
+        speedState = {"revs": 0.0}
+
+        def record(t, power, hr, cadence, speed):
+            ts = startSeconds + t
+            WorkoutData.power.times.append(ts)
+            WorkoutData.power.columns[0].append(power)
+            WorkoutData.heartRate.times.append(ts)
+            WorkoutData.heartRate.columns[0].append(hr)
+            WorkoutData.fallbackCadence.times.append(ts)
+            WorkoutData.fallbackCadence.columns[0].append(int(round(cadence)))
+            revsPerSecond = speed/2.23694/float(AppState.wheelCircumference)
+            speedState["revs"] += revsPerSecond
+            revs = speedState["revs"]
+            lastRevTime = t - (revs - int(revs))/max(revsPerSecond, 0.01)
+            WorkoutData.speed.times.append(ts)
+            WorkoutData.speed.columns[0].append(int(revs) & 0xFFFF)
+            WorkoutData.speed.columns[1].append(int(lastRevTime*1024) & 0xFFFF)
+
+        bridge = PreviewRide.FakeBridge()
+        hud = ClassHUDWindow.HUDWindow(SimpleNamespace(startExe=bridge))
+        realMonotonic = timeModule.monotonic
+        timeModule.monotonic = lambda: 1000.0
+        try:
+            PreviewRide.run_hud(hud, AppState.workoutDurationSeconds + 1, PreviewRide.Rider(seed=11), record)
+        finally:
+            timeModule.monotonic = realMonotonic
+        hud.stop_timers()
+        hud.deleteLater()
+        AppState.startTimestamp = startTimestamp
+        AppState.workoutPowerRequestsSysTime[:] = [startTimestamp + datetime.timedelta(seconds=s)
+                                                   for s in AppState.workoutPowerRequestsSeconds]
+        parent = SimpleNamespace(startExe=bridge, workoutHudWidget=None, setupWidget=setup, showMaximized=lambda: None,
+                                 setFocus=lambda: None)
+        synopsis = ClassSynopsisWindow.SynopsisWindow(parent)
+        synopsis.starTimer.stop()
+        synopsis.selectionTimer.stop()
+        holder = QWidget()
+        holder.setObjectName("holder")
+        holder.setStyleSheet("#holder{background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #28275e stop:1 #9fc5d1);}")
+        layout = QVBoxLayout(holder)
+        layout.addWidget(synopsis)
+        AppLayout.apply_layout(holder, {"Synopsis": synopsis}, 1.0)
+        shown(holder, 1920, 1116)
+        synopsis.layout_max_labels()
+        for phase, marker in enumerate(synopsis.maxMarkers):
+            marker["star"].step(((3 + phase)*math.pi - phase*2.1)/3.6, phase)
+        for _ in range(3):
+            app.processEvents()
+        return holder
+    return in_work_folder(build)
+
+
 SCENES = {name[len("scene_"):]: fn for name, fn in globals().items() if name.startswith("scene_")}
 
 

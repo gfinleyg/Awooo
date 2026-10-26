@@ -158,6 +158,55 @@ private slots:
         QCOMPARE(graph.axis(plot::AxisItem::Bottom)->range(), graph.vb()->xRange());
     }
 
+    // pyqtgraph's links go both ways: a linked view changed itself (dragged, zoomed) takes the view it's linked to
+    // along, and that one the rest
+    void linksFollowBack() {
+        WorkoutGraph graph;
+        graph.resize(800, 300);
+        graph.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&graph));
+        graph.updateViews();
+        graph.setXRange(100, 400, 0.0);
+        graph.hrCadenceVBox()->setXRange(200, 260, 0.0);
+        QVERIFY(std::abs(graph.vb()->xRange().min - 200) < 1e-9);
+        QVERIFY(graph.vb()->xRange().max > 259 && graph.vb()->xRange().max <= 260);
+        QCOMPARE(graph.powerVBox()->xRange().min, graph.vb()->xRange().min);
+        // (not back again into the one changed)
+        QCOMPARE(graph.hrCadenceVBox()->xRange(), (plot::Range{200, 260}));
+    }
+
+    // a click is offered to the clickable items under it, through the views over them, topmost first
+    void clicksPassDownThroughViews() {
+        WorkoutGraph graph;
+        graph.resize(800, 300);
+        graph.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&graph));
+        graph.updateViews();
+        graph.setXRange(0, 100, 0.0);
+        graph.powerVBox()->setYRange(0, 100, 0.0);
+        auto* curve = new plot::CurveItem;
+        curve->setData({0, 100}, {50, 50}, plot::mkPen(Qt::red), std::nullopt);
+        curve->setClickable(true, 10);
+        // (in the power view, under the heart rate/cadence view)
+        graph.powerVBox()->addItem(curve);
+        QSignalSpy curveClicks(curve, &plot::CurveItem::clicked);
+        // (whichever view is on top under the mouse took the press)
+        QList<bool> viewClicks;
+        for (plot::ViewBox* view : {graph.vb(), graph.powerVBox(), graph.hrCadenceVBox()}) {
+            QObject::connect(view, &plot::ViewBox::clicked, &graph,
+                             [&viewClicks](QPointF, Qt::MouseButton, bool taken) { viewClicks.append(taken); });
+        }
+        const QPoint onLine = graph.mapFromScene(graph.powerVBox()->mapViewToScene(QPointF(50, 50)));
+        QTest::mouseClick(graph.viewport(), Qt::LeftButton, {}, onLine);
+        QCOMPARE(curveClicks.count(), 1);
+        QCOMPARE(viewClicks, QList<bool>{true});
+        // off it: the view's click, nothing took it
+        const QPoint offLine = graph.mapFromScene(graph.powerVBox()->mapViewToScene(QPointF(50, 90)));
+        QTest::mouseClick(graph.viewport(), Qt::LeftButton, {}, offLine);
+        QCOMPARE(curveClicks.count(), 1);
+        QCOMPARE(viewClicks, (QList<bool>{true, false}));
+    }
+
     void mouseZoomAndDragHoldToLimits() {
         plot::ViewBox view;
         view.resize(1000, 100);

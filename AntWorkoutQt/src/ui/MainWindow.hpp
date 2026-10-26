@@ -18,6 +18,7 @@ class ConfirmExitWindow;
 class CustomTitleBar;
 class HudScreen;
 class SetupScreen;
+class SynopsisScreen;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -34,12 +35,15 @@ public:
     CustomTitleBar* titleBar() const { return titleBar_; }
     SetupScreen* setupScreen() const { return setup_; }
     HudScreen* hudScreen() const { return hud_; }
+    SynopsisScreen* synopsisScreen() const { return synopsis_; }
     // START on the setup screen: the workout screen
     void generateHud();
     // the END prompt's Clear Data and Go Back to Setup
     void goBackToSetup();
-    // the END prompt's Exit to Synopsis
+    // the END prompt's Exit to Synopsis: the ride joins the session, and the session's synopsis
     void generateSynopsis();
+    // the synopsis' Return to Setup
+    void returnFromSynopsis();
     // just the app's name, or (on the workout and synopsis screens, riding a workout file or an FTP test) with the
     // workout's name
     void setAppTitle(bool showWorkoutName = false);
@@ -58,6 +62,7 @@ private:
     CustomTitleBar* titleBar_;
     SetupScreen* setup_;
     HudScreen* hud_ = nullptr;
+    SynopsisScreen* synopsis_ = nullptr;
     QVBoxLayout* layout_;
     QPointer<ConfirmExitWindow> exitPrompt_;
 };

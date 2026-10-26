@@ -17,6 +17,7 @@
 #include "Session.hpp"
 #include "SetupScreen.hpp"
 #include "SoundEffects.hpp"
+#include "SynopsisScreen.hpp"
 #include "WorkoutData.hpp"
 #include "Theme.hpp"
 
@@ -93,16 +94,38 @@ void MainWindow::goBackToSetup() {
     QTimer::singleShot(0, this, &QWidget::showMaximized);
 }
 
-// (the synopsis comes in Phase 7 of PLAN.md: until then the ride joins the session, and it's back to setup)
 void MainWindow::generateSynopsis() {
+    // the connecting/ready state dropped, ready for hardware or setup changes
     bridge_->clearConnectionFlags();
+    discardScreen(synopsis_);
+    synopsis_ = nullptr;
+    // (the ride joins the session here, see Session)
     std::optional<Ring> ring;
     if (hud_ && hud_->spiral()) {
         ring = hud_->spiral()->ridden();
     }
     session::addCurrentRide(ring);
-    log::event(QStringLiteral("SETUP"), QStringLiteral("Exit to Synopsis: the synopsis isn't built yet"));
+    synopsis_ = new SynopsisScreen(bridge_.get(), setup_);
+    connect(synopsis_, &SynopsisScreen::returnToSetupRequested, this, &MainWindow::returnFromSynopsis);
+    connect(synopsis_, &SynopsisScreen::exitRequested, this, &QWidget::close);
+    // the workout's name stays in the title bar while it's the session's only ride
+    setAppTitle(appState().sessionRides.size() == 1);
+    addScreen(synopsis_, QStringLiteral("Synopsis"));
+    if (hud_) {
+        hud_->hide();
+    }
+    sound::play(QStringLiteral("window"));
+    synopsis_->show();
+}
+
+void MainWindow::returnFromSynopsis() {
+    if (hud_) {
+        hud_->restartWorkout();
+    }
     goBackToSetup();
+    if (synopsis_) {
+        synopsis_->hide();
+    }
 }
 
 void MainWindow::setAppTitle(bool showWorkoutName) {

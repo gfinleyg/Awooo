@@ -107,7 +107,7 @@ void CurveItem::setShadowPen(const std::optional<QPen>& pen) {
 void CurveItem::setClickable(bool clickable, double tolerance) {
     clickable_ = clickable;
     tolerance_ = tolerance;
-    setAcceptedMouseButtons(clickable ? Qt::LeftButton : Qt::NoButton);
+    prepareGeometryChange();
 }
 
 double CurveItem::pixelPadding() const {
@@ -161,21 +161,12 @@ void CurveItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidge
     painter->drawPath(path_);
 }
 
-void CurveItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
-    if (clickable_ && event->button() == Qt::LeftButton) {
-        event->accept();
-        return;
+bool CurveItem::click(const QPointF& scenePos, Qt::MouseButton button) {
+    if (!clickable_ || button != Qt::LeftButton || !shape().contains(mapFromScene(scenePos))) {
+        return false;
     }
-    event->ignore();
-}
-
-void CurveItem::mouseReleaseEvent(QGraphicsSceneMouseEvent* event) {
-    if (clickable_ && event->button() == Qt::LeftButton) {
-        const QPointF moved = event->screenPos() - event->buttonDownScreenPos(Qt::LeftButton);
-        if (std::hypot(moved.x(), moved.y()) < 5) {
-            emit clicked(this);
-        }
-    }
+    emit clicked(this);
+    return true;
 }
 
 // ---- InfiniteLine ----
