@@ -114,7 +114,7 @@ QString scratchpad(const QString& name) {
 void tickSecond(HudScreen& hud, SimulatedRider& rider) {
     hud.processEvents(1.0);
     const double t = appState().secondsPassed;
-    saveSimulatedReading(t, rider.sample(t, hud.engine().currentPower(), appState().ftp));
+    saveSimulatedReading(t, rider.sample(t, hud.engine().currentPower(), appState().ftp, hud.cadenceMode()));
 }
 
 // app_flow's workout (test_app_flow.py WORKOUT): 150 W, a ramp from 100 to 200 W, 2x 240 W / free, 320 W at FTP 200
@@ -164,6 +164,10 @@ private slots:
         hud.stopTimers();
         SimulatedRider rider(ride[QStringLiteral("seed")].toInt());
         const auto events = awotest::rideEvents(ride);
+        // (Musical Cadence Mode: the music silent, a second a tick)
+        if (hud.cadenceMode()) {
+            hud.simulateMusic(0.0);
+        }
         hud.startWorkout();
         int ticks = 0;
         for (int tick = 0; tick < ride[QStringLiteral("seconds")].toInt(); ++tick) {
@@ -176,6 +180,9 @@ private slots:
                 } else {
                     hud.pauseRecording();
                 }
+            }
+            if (hud.simulatedMusic()) {
+                hud.simulateMusic(*hud.simulatedMusic() + 1);
             }
             tickSecond(hud, rider);
             ++ticks;

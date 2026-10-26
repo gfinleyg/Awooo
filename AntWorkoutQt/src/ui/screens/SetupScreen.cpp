@@ -17,10 +17,12 @@
 #include <algorithm>
 #include <cmath>
 
+#include "AnalysisCache.hpp"
 #include "AntBridge.hpp"
 #include "AppLayout.hpp"
 #include "AppState.hpp"
 #include "AwoParser.hpp"
+#include "CadenceWorkout.hpp"
 #include "CalibratePowerWindow.hpp"
 #include "DeviceDialogs.hpp"
 #include "Dialogs.hpp"
@@ -1278,22 +1280,88 @@ void SetupScreen::pickWorkoutFile(const QString& path) {
     setupBlink();
 }
 
-// Musical Cadence Mode's song picker and the workout built from the songs come with the music (Phase 8): until then
-// there's no music to pick
-void SetupScreen::openMusicDialog() {
-    log::event(QStringLiteral("SETUP"), QStringLiteral("Musical Cadence Mode's song picker isn't available yet"));
+// ---- Musical Cadence Mode (see music/) ----
+
+void SetupScreen::setMusicSelection(const std::optional<MusicSelection>& selection) {
+    musicSelection_ = selection;
+    buildMusicWorkout();
+    workoutSelectBlink_ = workoutNeedsChoosing();
+    checkEnableStartButton();
+    setupBlink();
 }
 
+void SetupScreen::openMusicDialog() {
+    MusicSelectDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        musicSelection_ = dialog.selection();
+        buildMusicWorkout();
+        workoutSelectBlink_ = workoutNeedsChoosing();
+        checkEnableStartButton();
+        setupBlink();
+    }
+}
+
+// last time's checked songs, if every one of them is still analyzed in the cache (the ride can be built right away,
+// without the song picker); none otherwise
+std::optional<MusicSelection> SetupScreen::savedMusicSelection() {
+    const music::Cache cache = music::loadCache();
+    MusicSelection selection;
+    bool complete = true;
+    for (const music::SelectedSong& song : music::loadSelection()) {
+        if (!song.checked) {
+            continue;
+        }
+        const std::optional<music::Analysis> analysis =
+            QFileInfo(song.path).isFile() ? music::cached(cache, song.path) : std::nullopt;
+        if (!analysis) {
+            complete = false;
+            break;
+        }
+        selection.songs.append({song.path, song.title});
+        selection.analyses.insert(song.path, *analysis);
+    }
+    // (a song looked up for the first time has its file read for its CRC: kept, so that's only ever once)
+    music::saveNewCrcs(cache);
+    if (!complete || selection.songs.isEmpty()) {
+        return std::nullopt;
+    }
+    const QJsonObject saved = settings::load();
+    selection.preferred = saved.value(QStringLiteral("musicPreferredRpm")).toInt(static_cast<int>(music::kDefaultPreferredRpm));
+    selection.minSegment = saved.value(QStringLiteral("musicMinSegment")).toInt(static_cast<int>(music::kDefaultMinSegmentSeconds));
+    return selection;
+}
+
+// The music's cadence profile as the workout: a steady block a cadence (the RPM where a workout file's blocks have
+// watts, the same at every difficulty), free ride where there's no clear beat, and each song's title as a timed
+// message as it starts
 void SetupScreen::buildMusicWorkout() {
     clearWorkout();
     AppState& state = appState();
     state.musicTracks.clear();
     state.musicSongStarts.clear();
     state.musicPulses.clear();
-    layout::setText(workoutFileSelected_, QStringLiteral("Music not picked"));
-    layout::setText(workoutInfo_, QString());
-    workoutDisplayLabel_->setFullText(QString());
-    workoutDisplayLabel_->hide();
+    if (!musicSelection_) {
+        musicSelection_ = savedMusicSelection();
+    }
+    if (!musicSelection_) {
+        layout::setText(workoutFileSelected_, QStringLiteral("Music not picked"));
+        layout::setText(workoutInfo_, QString());
+        workoutDisplayLabel_->setFullText(QString());
+        workoutDisplayLabel_->hide();
+        return;
+    }
+    const MusicSelection& selection = *musicSelection_;
+    const music::CadenceRide ride =
+        music::buildWorkout(selection.songs, selection.analyses, selection.preferred, selection.minSegment);
+    music::applyRide(ride);
+    const auto songCount = ride.tracks.size();
+    applyCadenceRanges();
+    layout::setText(workoutFileSelected_, QStringLiteral(" Musical Cadence: %1 song%2 ")
+                                              .arg(songCount)
+                                              .arg(songCount != 1 ? QStringLiteral("s") : QString()));
+    layout::setText(workoutInfo_, QStringLiteral("Ride Duration: ") + minimizedDuration(state.workoutDurationSeconds));
+    showWorkoutText();
+    workoutDisplayLabel_->show();
 }
 
 // the zone limits (which color the blocks, graph, gauge arc and band): zone "0" up to the cadence scale's bottom, red

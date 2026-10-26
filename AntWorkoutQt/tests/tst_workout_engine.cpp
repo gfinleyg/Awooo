@@ -51,6 +51,8 @@ private slots:
         const auto events = awotest::rideEvents(ride);
         engine.start();
         int ticks = 0;
+        // (Musical Cadence Mode: the music silent, a second a tick, the workout's clock)
+        double music = 0;
         for (int tick = 0; tick < ride[QStringLiteral("seconds")].toInt(); ++tick) {
             if (!engine.started()) {
                 break;
@@ -63,12 +65,13 @@ private slots:
                 }
             }
             engine.advanceClock(1.0);
-            engine.tick();
+            music += 1;
+            engine.tick(state.cadenceMode ? std::optional<double>(music) : std::nullopt);
             const double t = state.secondsPassed;
-            saveSimulatedReading(t, rider.sample(t, engine.currentPower(), state.ftp));
+            saveSimulatedReading(t, rider.sample(t, engine.currentPower(), state.ftp, state.cadenceMode));
             ++ticks;
         }
-        awotest::compareRide(golden, ticks, engine);
+        awotest::compareRide(golden, ticks, engine, false);
     }
 
     // ---- Smaller things ----

@@ -390,7 +390,25 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
 - Port the screens tests (8) and app flow tests (5): setup, HUD, synopsis, back to setup, exit.
 - **Done when:** the whole app flow works end to end on the fake, and multi-ride sessions show as in Python.
 
-### Phase 8: Musical Cadence Mode
+### Phase 8: Musical Cadence Mode (done)
+- Done: `music/` (awo_music: Playlist, TempoAnalysis with the decoder, AnalysisCache, CadenceWorkout, MusicPlayer),
+  `ui/dialogs/MusicSelectDialog`, the setup screen's music workout (from the picker, or last time's songs straight
+  from the cache), and the workout screen's music (the player as the clock, the song in the title bar, the beat on
+  the cadence gauge's rings, the volume, the songs heard for the synopsis' strip). Vendored: pocketfft as numpy 1.26.4
+  builds it, and miniaudio updated to 0.11.25 (the Python app's pyminiaudio's).
+- The analysis isn't just close to the Python app's, it's the same: `music/NumpyLike` does numpy's sums pairwise as
+  numpy does, np.convolve through numpy's small_correlate and OpenBLAS's Skylake-X ddot (fused multiply-adds), and the
+  FFTs are numpy's own pocketfft. golden/music.json (click tracks made from Python's random, so the C++ test rebuilds
+  the same wav files byte for byte) matches to the bit: every onset envelope value, the tempo tracks, beats, silences,
+  segments, rides and random picks. Real MP3s analyzed the same too (classical, surf rock, a 47 minute album), so the
+  two apps share musicCadenceCacheANT.json under the same cache_version. (The match depends on numpy using OpenBLAS's
+  AVX-512 kernel; on another CPU the Python app's own numbers could differ in the last bit.)
+- golden/hud.json gains a Musical Cadence Mode ride; the workout screen rides it as the Python one does (requests,
+  grades, the songs heard). Tests: tst_music (57, the 32 Python ones among them), the song picker and the setup
+  screen's music workout in tst_setup, the synopsis' song strip in tst_synopsis. The song picker and the cadence
+  workout screen render as the Python ones (tests/parity `music_picker`: identical; `cadence_screen`: 11 pixels along
+  the curves). The player plays on the real sound device and its clock keeps time (tst_music with AWO_SOUND set).
+- Not done here: an audible ride on real songs in the app (it plays out loud; for the rider to try).
 - Decoder, TempoAnalysis, cache, playlist and selection files, CadenceWorkout, MusicPlayer; MusicSelectDialog; HUD
   music integration (song title, beat pulses, volume, the music position as the clock); synopsis song strip.
 - Port the music cadence tests (32), plus the golden comparisons in §4.5.

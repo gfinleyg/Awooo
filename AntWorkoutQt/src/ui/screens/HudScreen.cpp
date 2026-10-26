@@ -24,6 +24,7 @@
 #include "GradeWidgets.hpp"
 #include "KeyShortcuts.hpp"
 #include "LongVLabels.hpp"
+#include "MusicPlayer.hpp"
 #include "MaxStar.hpp"
 #include "PlotItems.hpp"
 #include "PowerSpiral.hpp"

@@ -23,6 +23,9 @@
 #include "AnalogGauge.hpp"
 #include "AntBridge.hpp"
 #include "AppLayout.hpp"
+#include "CadenceWorkout.hpp"
+#include "FtpColors.hpp"
+#include "MusicSelectDialog.hpp"
 #include "AppState.hpp"
 #include "CalibratePowerWindow.hpp"
 #include "DeviceDialogs.hpp"
@@ -792,6 +795,127 @@ QWidget* sceneSynopsisScreen() {
     return holder;
 }
 
+// LayoutViewer's made up songs (VIEWER_SONGS, viewer_music_workout): each its blocks (seconds, rpm)
+const QList<std::pair<QString, QList<std::pair<int, int>>>> kViewerSongs = {
+    {QStringLiteral("Viewer Band - Warm Up Groove"), {{30, 0}, {90, 82}, {60, 88}}},
+    {QStringLiteral("The Layouts - Tempo Change"), {{70, 96}, {50, 72}, {60, 104}}},
+    {QStringLiteral("Sample Artist - Cool Down"), {{80, 90}, {20, 0}, {60, 78}}}};
+
+music::CadenceRide viewerRide() {
+    music::CadenceRide ride;
+    int start = 0;
+    for (int index = 0; index < kViewerSongs.size(); ++index) {
+        const auto& [title, blocks] = kViewerSongs[index];
+        int duration = 0;
+        for (const auto& [seconds, rpm] : blocks) {
+            duration += seconds;
+        }
+        ride.tracks.append({QStringLiteral("viewer-song-%1.mp3").arg(index + 1), title, double(start), double(duration)});
+        ride.songStarts.insert(static_cast<int>(ride.blocks.size()), index);
+        int blockStart = start;
+        for (const auto& [seconds, rpm] : blocks) {
+            ride.blocks.append({seconds, rpm});
+            for (int k = 0; rpm && k < seconds * rpm / 60; ++k) {
+                ride.pulses.append(blockStart + k * 60.0 / rpm);
+            }
+            blockStart += seconds;
+        }
+        start += duration;
+    }
+    return ride;
+}
+
+// The song picker with LayoutViewer's made up songs (ViewerMusicPicker): three checked, one not, one unreadable, a
+// playlist entry not found
+QWidget* sceneMusicPicker() {
+    writeSceneSettings();
+    auto* picker = new MusicSelectDialog;
+    picker->clearSongs();
+    QList<std::pair<QString, std::optional<QString>>> songs;
+    QSet<QString> checked;
+    for (const auto& [title, blocks] : kViewerSongs) {
+        songs.append({QStringLiteral("C:/Music/%1.mp3").arg(title), title});
+        checked.insert(QStringLiteral("C:/Music/%1.mp3").arg(title));
+    }
+    songs.append({QStringLiteral("C:/Music/Unchecked Song.mp3"), QStringLiteral("Some Artist - Unchecked Song")});
+    songs.append({QStringLiteral("C:/Music/Broken File.mp3"), QStringLiteral("Broken File")});
+    // (analyzed as the viewer makes them up: the lengths in the order added)
+    for (const auto& [path, title] : songs) {
+        music::Analysis analysis;
+        if (path.contains(QStringLiteral("Broken"))) {
+            analysis.error = QStringLiteral("can't be read");
+        } else {
+            analysis.duration = 180.0 + 37 * (picker->analyses.size() % 4);
+        }
+        picker->analyses.insert(path, analysis);
+    }
+    picker->addToList(songs, checked);
+    picker->missing = {QStringLiteral("C:/Music/Not There.mp3")};
+    picker->updateSummary();
+    return shownAsIs(picker);
+}
+
+// Musical Cadence Mode's workout screen 40% into LayoutViewer's made up songs, ridden by the simulated rider (seed 3)
+// a second a tick (silent music), laid out at 1920x1116
+QWidget* sceneCadenceScreen() {
+    static awotest::FakeAnt fake;
+    static StubBridge bridge(fake);
+    writeSceneSettings();
+    AppState& state = appState();
+    state.secondsPassed = 0;
+    state.workoutPowerRequestsSeconds.clear();
+    state.workoutPowerRequestsWatts.clear();
+    state.workoutPowerRequestsSysTime.clear();
+    state.savedPowerVals = {};
+    state.savedHRVals = {};
+    state.savedCadenceVals = {};
+    state.musicPlayed.clear();
+    state.sessionRides.clear();
+    state.rideStart.reset();
+    state.rideRecorded = false;
+    workoutData().clear();
+    state.ftp = 250;
+    state.maxHr = 185;
+    state.wheelCircumference = 2.105;
+    state.workoutMode = true;
+    state.cadenceMode = true;
+    state.ftpTestMode.clear();
+    state.antHRM = true;
+    state.antSpeedCadence = true;
+    state.antCadence = false;
+    state.antSpeed = false;
+    music::applyRide(viewerRide());
+    state.ftpRanges = ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm);
+    state.workoutFilename = state.workoutFilenameShort = QStringLiteral("music");
+    state.startTimestamp = QDateTime::currentDateTime();
+    auto* hud = new HudScreen(&bridge, nullptr, [] { return 1000.0; });
+    SimulatedRider rider(3);
+    hud->runSimulatedRide(state.workoutDurationSeconds * 0.4, rider);
+    hud->stopTimers();
+    for (QTimer* timer : hud->gradeOverlay()->findChildren<QTimer*>()) {
+        timer->stop();
+    }
+    for (Gauge* gauge : {hud->cadenceGauge(), hud->heartRateGauge()}) {
+        if (gauge && gauge->chainring()) {
+            gauge->chainring()->spinTimer()->stop();
+        }
+        if (gauge && gauge->heart()) {
+            gauge->heart()->beatTimer()->stop();
+        }
+    }
+    auto* holder = new QWidget;
+    holder->setObjectName(QStringLiteral("holder"));
+    theme::setSheet(holder, QStringLiteral("#holder{background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 "
+                                           "#28275e stop:1 #9fc5d1);}"));
+    auto* layout = new QVBoxLayout(holder);
+    layout->addWidget(hud);
+    layout::applyLayout(holder, {{QStringLiteral("Workout"), hud}}, 1.0);
+    shown(holder, 1920, 1116);
+    restStars(hud->maxStars(), hud->maxBubbles());
+    settle();
+    return holder;
+}
+
 const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("hud_graph"), sceneHudGraph},
     {QStringLiteral("power_gauge"), scenePowerGauge},
@@ -811,6 +935,8 @@ const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("workout_picker"), sceneWorkoutPicker},
     {QStringLiteral("hud_screen"), sceneHudScreen},
     {QStringLiteral("synopsis_screen"), sceneSynopsisScreen},
+    {QStringLiteral("music_picker"), sceneMusicPicker},
+    {QStringLiteral("cadence_screen"), sceneCadenceScreen},
 };
 
 }  // namespace

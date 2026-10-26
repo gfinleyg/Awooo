@@ -11,6 +11,8 @@
 
 #include "AppState.hpp"
 #include "AwoParser.hpp"
+#include "CadenceWorkout.hpp"
+#include "FtpColors.hpp"
 #include "FtpTest.hpp"
 #include "TestSupport.hpp"
 #include "WorkoutEngine.hpp"
@@ -24,6 +26,26 @@ inline bool buildRideWorkout(const QJsonObject& ride) {
     AwoOptions options;
     options.ftp = state.ftp;
     const QString test = ride.value(QStringLiteral("ftpTest")).toString();
+    if (ride.value(QStringLiteral("music")).isArray()) {
+        // Musical Cadence Mode: music.json's click tracks, as the setup screen builds the ride from them
+        QHash<QString, awo::music::Analysis> byName;
+        for (const QJsonValue& track : golden(QStringLiteral("music.json"))[QStringLiteral("tracks")].toArray()) {
+            byName.insert(track[QStringLiteral("name")].toString(),
+                          awo::music::Analysis::fromJson(track[QStringLiteral("analysis")].toObject()));
+        }
+        QList<std::pair<QString, std::optional<QString>>> songs;
+        QHash<QString, awo::music::Analysis> analyses;
+        for (const QJsonValue& song : ride.value(QStringLiteral("music")).toArray()) {
+            const QString name = song[0].toString();
+            const QString path = QStringLiteral("C:\\music\\") + name + QStringLiteral(".wav");
+            songs.append({path, song[1].isNull() ? std::nullopt : std::optional<QString>(song[1].toString())});
+            analyses.insert(path, byName.value(name));
+        }
+        awo::music::applyRide(awo::music::buildWorkout(songs, analyses, ride[QStringLiteral("preferred")].toDouble(),
+                                                       ride[QStringLiteral("minSegment")].toDouble()));
+        state.ftpRanges = ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm);
+        return true;
+    }
     AwoResult result;
     if (!test.isEmpty()) {
         const ftptest::Test* ftpTest = ftptest::find(test);
@@ -63,7 +85,7 @@ inline bool setUpRide(const QJsonObject& ride) {
     state.maxHr = 185;
     state.wheelCircumference = 2.105;
     state.workoutMode = true;
-    state.cadenceMode = false;
+    state.cadenceMode = ride.value(QStringLiteral("music")).isArray();
     state.ftpTestMode = ride[QStringLiteral("ftpTest")].toString();
     state.antHRM = state.antSpeedCadence = true;
     if (!buildRideWorkout(ride)) {
@@ -95,9 +117,9 @@ inline QString numberDiff(const QString& what, double ours, double python) {
     return QStringLiteral("%1: %2, Python %3").arg(what).arg(ours, 0, 'g', 17).arg(python, 0, 'g', 17);
 }
 
-// the ride's power requests, grades, FTP test result and where it ended up the same as the Python one's (a failure
-// returns early: the caller's test has failed)
-inline void compareRide(const QJsonObject& golden, int ticks, const awo::WorkoutEngine& engine) {
+// the ride's power requests, grades, FTP test result, where it ended up and (songs) the songs heard the same as the
+// Python one's (a failure returns early: the caller's test has failed)
+inline void compareRide(const QJsonObject& golden, int ticks, const awo::WorkoutEngine& engine, bool songs = true) {
     using namespace awo;
     const AppState& state = appState();
     QCOMPARE(ticks, golden[QStringLiteral("ticks")].toInt());
@@ -153,6 +175,18 @@ inline void compareRide(const QJsonObject& golden, int ticks, const awo::Workout
     QCOMPARE(engine.workoutSecondsPassed(), golden[QStringLiteral("workoutSecondsPassed")].toDouble());
     QCOMPARE(engine.activeWorkout(), golden[QStringLiteral("activeWorkout")].toInt());
     QCOMPARE(engine.completeShown(), golden[QStringLiteral("completed")].toBool());
+    // Musical Cadence Mode: the songs heard, and when (the workout screen's record, not the engine's)
+    if (!songs) {
+        return;
+    }
+    const QJsonArray played = golden[QStringLiteral("musicPlayed")].toArray();
+    QCOMPARE(state.musicPlayed.size(), played.size());
+    for (qsizetype i = 0; i < played.size(); ++i) {
+        const QJsonArray song = played[i].toArray();
+        QCOMPARE(state.musicPlayed[i].track, song[0].toInt());
+        QCOMPARE(state.musicPlayed[i].start, song[1].toDouble());
+        QCOMPARE(state.musicPlayed[i].end, song[2].toDouble());
+    }
 }
 
 }  // namespace awotest

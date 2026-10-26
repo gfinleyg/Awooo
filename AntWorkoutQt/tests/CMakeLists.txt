@@ -24,6 +24,13 @@ foreach(test core_text workout_files zwo ftp_test grading session settings logge
     awo_add_test(tst_${test} tst_${test}.cpp)
     target_link_libraries(tst_${test} PRIVATE awo_core)
 endforeach()
+# (its golden rides include a Musical Cadence Mode one, built from music.json's analyses)
+target_link_libraries(tst_workout_engine PRIVATE awo_music)
+
+# awo_music against the Python app's analysis
+awo_add_test(tst_music tst_music.cpp)
+target_link_libraries(tst_music PRIVATE awo_music)
+target_sources(tst_music PRIVATE ClickTrack.hpp)
 
 # awo_ant on a fake stick (FakeAnt.hpp), with AntNative's real Manager and Recovery
 foreach(test ant_bridge reading_pipeline)

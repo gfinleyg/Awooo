@@ -15,15 +15,18 @@
 #include <QSpinBox>
 #include <QtTest>
 
+#include "AnalysisCache.hpp"
 #include "AntBridge.hpp"
 #include "AppState.hpp"
 #include "CalibratePowerWindow.hpp"
+#include "ClickTrack.hpp"
 #include "DeviceDialogs.hpp"
 #include "Dialogs.hpp"
 #include "FakeAnt.hpp"
 #include "FtpTest.hpp"
 #include "KeyShortcuts.hpp"
 #include "LongVLabels.hpp"
+#include "MusicSelectDialog.hpp"
 #include "Performance.hpp"
 #include "SavedSettings.hpp"
 #include "Session.hpp"
@@ -378,7 +381,7 @@ private slots:
         QCOMPARE(appState().workoutList.front().block.power[10], 300);
     }
 
-    void musicCadenceModeHasNoMusicYet() {
+    void musicCadenceModeStartsWithNoMusic() {
         SetupScreen setup(bridge_.get());
         setup.chooseMode(QStringLiteral("cadence"));
         QVERIFY(appState().cadenceMode && appState().workoutMode);
@@ -388,6 +391,70 @@ private slots:
         QVERIFY(!setup.statusDisplay()->text().contains(QStringLiteral("FTP must be set!")));
         setup.chooseMode(QStringLiteral("workout"));
         QVERIFY(!appState().cadenceMode);
+    }
+
+    // ---- Musical Cadence Mode's music ----
+
+    // the song picker analyzes each song as it's added (off the UI thread), the checked ones make the ride; the
+    // setup screen builds the ride from them, and next time from the cache without the picker
+    void songPickerAnalyzesAndBuildsTheRide() {
+        const QString first = QDir::current().absoluteFilePath(QStringLiteral("a_100.wav"));
+        const QString second = QDir::current().absoluteFilePath(QStringLiteral("b_75.wav"));
+        awotest::writeClickTrack(first, 100, 40, 1);
+        awotest::writeClickTrack(second, 75, 40, 2);
+        const QString bad = QDir::current().absoluteFilePath(QStringLiteral("bad.mp3"));
+        writeText(bad, QStringLiteral("not audio"));
+        {
+            MusicSelectDialog dialog;
+            dialog.addToList({{first, std::nullopt}, {second, QStringLiteral("Slow One")}, {bad, std::nullopt}});
+            QVERIFY(dialog.analyzing() && !dialog.okButton()->isEnabled());
+            QVERIFY(dialog.list()->item(0)->text().endsWith(QStringLiteral("(analyzing...)")));
+            dialog.waitForAnalysis();
+            QCOMPARE(dialog.list()->item(0)->text(), QStringLiteral("a_100   40s"));
+            QCOMPARE(dialog.list()->item(1)->text(), QStringLiteral("Slow One   40s"));
+            QCOMPARE(dialog.list()->item(2)->text(), QStringLiteral("bad   (can't be read)"));
+            QCOMPARE(dialog.list()->item(2)->checkState(), Qt::Unchecked);
+            QCOMPARE(dialog.summary(), QStringLiteral("Ride: 2 songs, 1m 20s   ·   1 can't be read"));
+            QVERIFY(dialog.okButton()->isEnabled());
+            // a random ride of 5 minutes takes both
+            dialog.randomMinutes()->setValue(5);
+            dialog.checkAll(false);
+            QVERIFY(!dialog.okButton()->isEnabled());
+            dialog.pickRandom();
+            QCOMPARE(dialog.checkedSongs().size(), qsizetype(2));
+            dialog.preferredRpm()->setValue(90);
+            dialog.accept();
+            SetupScreen setup(bridge_.get());
+            setup.chooseMode(QStringLiteral("cadence"));
+            setup.setMusicSelection(dialog.selection());
+        }
+        // the ride: a block a cadence, the songs' titles as messages, the songs and their headers
+        const AppState& state = appState();
+        QCOMPARE(state.workoutTitle, QStringLiteral("Musical Cadence Mode"));
+        QCOMPARE(state.musicTracks.size(), qsizetype(2));
+        QCOMPARE(state.workoutDurationSeconds, 80);
+        QVERIFY(!state.workoutList.isEmpty() && !state.musicPulses.isEmpty());
+        QCOMPARE(state.workoutMessages.front().text.left(13), QStringLiteral("Now playing: "));
+        QVERIFY(state.musicSongStarts.value(0).endsWith(QStringLiteral(" : a_100")) ||
+                state.musicSongStarts.value(0).endsWith(QStringLiteral(" : Slow One")));
+        // the picker's list and settings kept
+        QCOMPARE(music::loadSelection().size(), qsizetype(3));
+        QCOMPARE(savedSettings().value(QStringLiteral("musicPreferredRpm")).toInt(), 90);
+        QCOMPARE(savedSettings().value(QStringLiteral("musicRandomMinutes")).toInt(), 5);
+        // next time: the songs are still analyzed in the cache, so the ride is built straight away
+        appState() = AppState();
+        SetupScreen again(bridge_.get());
+        again.chooseMode(QStringLiteral("cadence"));
+        QCOMPARE(again.workoutFileLabel()->text(), QStringLiteral(" Musical Cadence: 2 songs "));
+        QCOMPARE(appState().workoutDurationSeconds, 80);
+        QVERIFY(again.musicSelection().has_value());
+        QCOMPARE(again.musicSelection()->preferred, 90.0);
+        // a song gone: the picker's needed again
+        QFile::remove(second);
+        appState() = AppState();
+        SetupScreen gone(bridge_.get());
+        gone.chooseMode(QStringLiteral("cadence"));
+        QCOMPARE(gone.workoutFileLabel()->text(), QStringLiteral("Music not picked"));
     }
 
     void clearSessionNeedsRides() {

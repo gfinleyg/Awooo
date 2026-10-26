@@ -69,6 +69,11 @@ void MainWindow::generateHud() {
     hud_ = new HudScreen(bridge_.get());
     connect(hud_, &HudScreen::setupRequested, this, &MainWindow::goBackToSetup);
     connect(hud_, &HudScreen::synopsisRequested, this, &MainWindow::generateSynopsis);
+    // (Musical Cadence Mode: the song playing)
+    connect(hud_, &HudScreen::titleChanged, this, [this](const QString& title) {
+        setWindowTitle(title);
+        titleBar_->setTitle(title);
+    });
     addScreen(hud_, QStringLiteral("Workout"));
     sound::play(QStringLiteral("window"));
     hud_->show();

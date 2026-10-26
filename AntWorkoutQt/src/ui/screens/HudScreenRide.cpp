@@ -20,7 +20,9 @@
 #include "GradeWidgets.hpp"
 #include "HudScreen.hpp"
 #include "LongVLabels.hpp"
+#include "Logger.hpp"
 #include "MaxStar.hpp"
+#include "MusicPlayer.hpp"
 #include "PlotItems.hpp"
 #include "PowerSpiral.hpp"
 #include "PyCompat.hpp"
@@ -112,8 +114,13 @@ void HudScreen::processEvents(double timeDelta) {
         }
     }
     setStartButtonStyle();
-    showTickEvents(engine_->tick());
+    // (Musical Cadence Mode: the workout moves on as far as the music has)
+    showTickEvents(engine_->tick(cadenceMode_ ? musicSeconds() : std::nullopt));
     updateTrainerTarget();
+    if (cadenceMode_) {
+        updateSongTitle();
+        recordSong();
+    }
 }
 
 // (only restyled when the look changes: a stylesheet goes through the theme and re-polishes the button)
@@ -308,7 +315,11 @@ void HudScreen::updateSmoothBars() {
         return;
     }
     // since the last tick, capped at a tick and a half so a stalled tick can't run the bars ahead
-    const double sinceTick = std::min(steadySeconds(clock_) - lastTimestamp_, 0.15);
+    double sinceTick = std::min(steadySeconds(clock_) - lastTimestamp_, 0.15);
+    if (const std::optional<double> music = cadenceMode_ ? musicSeconds() : std::nullopt) {
+        // how far the music has got past the last tick
+        sinceTick = std::min(std::max(0.0, *music - engine_->workoutSecondsPassed()), 0.15);
+    }
     const AppState& state = appState();
     if (state.workoutDurationSeconds > 0) {
         timeProgressBar_->setFraction((engine_->workoutSecondsPassed() + sinceTick) / state.workoutDurationSeconds);
@@ -662,9 +673,12 @@ void HudScreen::startWorkout() {
     // the trainer follows the workout from here on
     trainerCommanded_ = true;
     engine_->start();
-    // Musical Cadence Mode: an FE-C trainer is left free (no target power); the music comes in Phase 8
-    if (cadenceMode_ && bridge_ && bridge_->trainerSelected()) {
-        bridge_->releaseTrainerPower();
+    // Musical Cadence Mode: an FE-C trainer is left free (no target power), and the music starts
+    if (cadenceMode_) {
+        if (bridge_ && bridge_->trainerSelected()) {
+            bridge_->releaseTrainerPower();
+        }
+        musicStart();
     }
 }
 
@@ -673,6 +687,7 @@ void HudScreen::pauseRecording() {
         return;
     }
     const bool restarted = engine_->pauseRecording();
+    musicPause(!engine_->unpaused());
     showPaused();
     if (engine_->unpaused() && restarted) {
         timeProgressBar_->setRange(0, 100 * appState().workoutDurationSeconds);
@@ -708,6 +723,7 @@ bool HudScreen::endAvailable() const {
 }
 
 void HudScreen::restartWorkout() {
+    musicStop();
     const AppState& state = appState();
     if (state.workoutMode) {
         layout::setText(startEndButton_, QStringLiteral("START"));
@@ -805,10 +821,13 @@ void HudScreen::difficultyChanged(int value) {
     engine_->setDifficulty(value);
 }
 
-// Musical Cadence Mode's volume, 0-100% (the music comes in Phase 8), saved for next time
+// Musical Cadence Mode's volume, 0-100% (squared, so each step sounds about as big as the next), saved for next time
 void HudScreen::volumeChanged(int value) {
     layout::setText(difficultyPercentage_, QStringLiteral("%1%").arg(value));
     musicVolume_ = std::pow(value / 100.0, 2);
+    if (musicPlayer_) {
+        musicPlayer_->volume = musicVolume_;
+    }
     musicVolumePercent_ = value;
     settings::update({{QStringLiteral("musicVolume"), value}});
 }
@@ -942,10 +961,23 @@ void HudScreen::refreshFtpColors() {
     }
 }
 
-// Musical Cadence Mode's rings: the band's color at the target cadence, brightened on the music's beat (Phase 8)
+// Musical Cadence Mode's rings: the band's color at the target cadence (so they match the band's tip when riding on
+// target; free ride's color with no target), brightened on the music's beat (or at level, given)
 void HudScreen::updateCenterRings(std::optional<double> level) {
     if (!cadenceGaugeDisplay_) {
         return;
+    }
+    if (!level) {
+        level = 0.0;
+        const std::optional<double> seconds =
+            engine_->started() && engine_->unpaused() ? musicSeconds() : std::nullopt;
+        const QList<double>& pulses = appState().musicPulses;
+        if (seconds) {
+            const qsizetype index = std::upper_bound(pulses.begin(), pulses.end(), *seconds) - pulses.begin() - 1;
+            if (index >= 0) {
+                level = std::max(0.0, 1 - (*seconds - pulses[index]) / kBeatSeconds);
+            }
+        }
     }
     const QColor color(QStringLiteral("#") + zones::gaugeRing(currentPower_));
     cadenceGaugeDisplay_->gauge()->setCenterRings(QList<QColor>{color.darker(130), color}, level.value_or(0.0));
@@ -1172,6 +1204,10 @@ void HudScreen::runSimulatedRide(double untilSeconds, SimulatedRider& rider,
     powerRings_.setSeconds(1);
     AppState& state = appState();
     const bool workoutMode = state.workoutMode;
+    // (Musical Cadence Mode: silent music, its clock a second a tick)
+    if (cadenceMode_) {
+        simulatedMusic_ = 0.0;
+    }
     if (workoutMode) {
         startWorkout();
     }
@@ -1185,6 +1221,9 @@ void HudScreen::runSimulatedRide(double untilSeconds, SimulatedRider& rider,
         }
         if (!workoutMode && state.secondsPassed >= untilSeconds) {
             break;
+        }
+        if (cadenceMode_ && simulatedMusic_) {
+            *simulatedMusic_ += 1;
         }
         processEvents(1.0);
         const double t = state.secondsPassed;
@@ -1201,6 +1240,10 @@ void HudScreen::runSimulatedRide(double untilSeconds, SimulatedRider& rider,
     simulatedRevolutions_ = revolutions;
     showSimulatedReading(reading);
     updatePowerRings();
+    if (cadenceMode_) {
+        // the beat caught at its brightest
+        updateCenterRings(1.0);
+    }
 }
 
 void HudScreen::showSimulatedReading(const RiderReading& reading) {
@@ -1213,6 +1256,134 @@ void HudScreen::showSimulatedReading(const RiderReading& reading) {
     }
     setSpeed(py::round(reading.speedMph, 1));
     setDistance(py::round(appState().wheelCircumference * simulatedRevolutions_ * 0.000621371, 2));
+}
+
+}  // namespace awo
+
+namespace awo {
+
+// ---- Musical Cadence Mode's music (AppState's musicTracks, see music::MusicPlayer): where it is is the workout's
+// clock
+
+void HudScreen::musicStart() {
+    musicStop();
+    if (simulatedMusic_) {
+        *simulatedMusic_ = 0.0;
+        return;
+    }
+    musicPlayer_ = std::make_unique<music::MusicPlayer>(appState().musicTracks);
+    musicPlayer_->volume = musicVolume_;
+    try {
+        musicPlayer_->start();
+    } catch (const std::exception& e) {
+        // no sound device: the ride goes on, timed by the clock instead
+        log::event(QStringLiteral("ERROR"), QStringLiteral("Music: can't play (RuntimeError: %1), timing the ride by the clock")
+                                                .arg(QString::fromLocal8Bit(e.what())));
+        musicPlayer_.reset();
+        // (as a timed message, which the next tick would otherwise clear)
+        const int now = static_cast<int>(engine_->workoutSecondsPassed());
+        appState().workoutMessages.append({now, now + 15, QStringLiteral("Music can't be played, see the log")});
+    }
+}
+
+std::optional<double> HudScreen::musicSeconds() {
+    if (simulatedMusic_) {
+        return *simulatedMusic_;
+    }
+    if (!musicPlayer_) {
+        return std::nullopt;
+    }
+    // songs that couldn't be played go to the log (the clock has moved on past them)
+    const QList<std::pair<QString, QString>> skipped = musicPlayer_->skipped();
+    while (musicSkipsLogged_ < skipped.size()) {
+        const auto& [path, reason] = skipped[musicSkipsLogged_++];
+        log::event(QStringLiteral("ERROR"), QStringLiteral("Music: skipped %1: %2").arg(path, reason));
+    }
+    return musicPlayer_->position();
+}
+
+void HudScreen::musicPause(bool paused) {
+    if (musicPlayer_) {
+        musicPlayer_->paused = paused;
+    }
+}
+
+void HudScreen::musicStop() {
+    if (musicPlayer_) {
+        musicPlayer_->stop();
+        musicPlayer_.reset();
+        musicSkipsLogged_ = 0;
+    }
+}
+
+int HudScreen::songAt(double seconds) {
+    const QList<MusicTrack>& tracks = appState().musicTracks;
+    int index = 0;
+    for (int i = 0; i < tracks.size(); ++i) {
+        if (tracks[i].start <= seconds) {
+            index = i;
+        }
+    }
+    return index;
+}
+
+QString HudScreen::songTime(double seconds) {
+    const int whole = static_cast<int>(seconds);
+    if (whole >= 3600) {
+        return QStringLiteral("%1:%2:%3")
+            .arg(whole / 3600)
+            .arg(whole / 60 % 60, 2, 10, QLatin1Char('0'))
+            .arg(whole % 60, 2, 10, QLatin1Char('0'));
+    }
+    return QStringLiteral("%1:%2").arg(whole / 60).arg(whole % 60, 2, 10, QLatin1Char('0'));
+}
+
+// the title bar: <app>: Musical Cadence Mode: <song> : <time into it>/<its length> while the music plays
+void HudScreen::updateSongTitle() {
+    const AppState& state = appState();
+    QString text = QStringLiteral("Awooo Workout: ") + state.workoutDisplayName();
+    const std::optional<double> seconds = musicSeconds();
+    if (seconds && !state.musicTracks.isEmpty()) {
+        const MusicTrack& track = state.musicTracks[songAt(*seconds)];
+        const double into = std::min(std::max(*seconds - track.start, 0.0), track.duration);
+        text += QStringLiteral(": %1 : %2/%3").arg(track.title, songTime(into), songTime(track.duration));
+    }
+    if (text != songTitle_) {
+        songTitle_ = text;
+        emit titleChanged(QStringLiteral("   ") + text);
+    }
+}
+
+// where in the ride each song was heard (AppState's musicPlayed), for the synopsis' song strip. A paused song's span
+// runs on through the pause; a skipped one is never heard, so it has none
+void HudScreen::recordSong() {
+    AppState& state = appState();
+    const std::optional<double> seconds = musicSeconds();
+    if (!seconds || state.musicTracks.isEmpty()) {
+        return;
+    }
+    const int index = songAt(*seconds);
+    const MusicTrack& track = state.musicTracks[index];
+    // (the music's over)
+    if (*seconds >= track.start + track.duration) {
+        return;
+    }
+    QList<SongHeard>& played = state.musicPlayed;
+    if (!played.isEmpty()) {
+        // (up to now: the song before ends where this one starts, with no gap of a tick between them)
+        played.back().end = state.secondsPassed;
+    }
+    if (played.isEmpty() || played.back().track != index) {
+        played.append({index, state.secondsPassed, state.secondsPassed});
+    }
+}
+
+void HudScreen::hideEvent(QHideEvent* event) {
+    // leaving the workout screen (END, back to setup) stops the music; minimizing the window doesn't
+    if (cadenceMode_ && !event->spontaneous()) {
+        musicStop();
+    }
+    QWidget::hideEvent(event);
 }
 
 }  // namespace awo

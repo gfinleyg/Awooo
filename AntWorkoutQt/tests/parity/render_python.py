@@ -725,6 +725,119 @@ def scene_synopsis_screen():
     return in_work_folder(build)
 
 
+#LayoutViewer's made up songs (VIEWER_SONGS): (title, [(seconds, rpm)])
+VIEWER_SONGS = (("Viewer Band - Warm Up Groove", [(30, 0), (90, 82), (60, 88)]),
+                ("The Layouts - Tempo Change", [(70, 96), (50, 72), (60, 104)]),
+                ("Sample Artist - Cool Down", [(80, 90), (20, 0), (60, 78)]))
+
+
+def viewer_music_workout(songs, analyses, preferred=None, minSegmentSeconds=None):
+    """LayoutViewer.viewer_music_workout: VIEWER_SONGS as MusicCadence.build_workout's (blocks, tracks, songStarts,
+    pulses)"""
+    blocks, tracks, songStarts, pulses = [], [], {}, []
+    start = 0
+    for index, (title, songBlocks) in enumerate(VIEWER_SONGS):
+        duration = sum(seconds for seconds, _ in songBlocks)
+        tracks.append((f"viewer-song-{index + 1}.mp3", title, float(start), float(duration)))
+        songStarts[len(blocks)] = index
+        blockStart = start
+        for seconds, rpm in songBlocks:
+            blocks.append((seconds, rpm))
+            if rpm:
+                pulses += [blockStart + k*60/rpm for k in range(int(seconds*rpm/60))]
+            blockStart += seconds
+        start += duration
+    return blocks, tracks, songStarts, pulses
+
+
+def scene_music_picker():
+    """The song picker with LayoutViewer's made up songs (LayoutViewer.ViewerMusicPicker): three checked, one not,
+    one unreadable, a playlist entry not found"""
+    from ClassWorkoutSetupWindow import WorkoutSetupWindow
+    from ClassMusicSelectWindow import MusicSelectWindow
+    _, Parent = stub_classes()
+
+    class Picker(MusicSelectWindow):
+        def analyze(self, paths):
+            for path in paths:
+                self.analyses[path] = ({"error": "can't be read"} if "Broken" in path else
+                                       {"duration": 180.0 + 37*(len(self.analyses) % 4)})
+            for item in self.items():
+                self.label_item(item)
+
+    def build():
+        setup = WorkoutSetupWindow(Parent())
+        setup.timer.stop()
+        setup.blinkTimer.stop()
+        picker = Picker(setup)
+        picker.clear_songs()
+        picker.add_to_list([(f"C:/Music/{title}.mp3", title) for title, _ in VIEWER_SONGS] +
+                           [("C:/Music/Unchecked Song.mp3", "Some Artist - Unchecked Song"),
+                            ("C:/Music/Broken File.mp3", "Broken File")],
+                           checked={f"C:/Music/{title}.mp3" for title, _ in VIEWER_SONGS})
+        picker.missing = ["C:/Music/Not There.mp3"]
+        picker.update_summary()
+        return shown_as_is(picker)
+    return in_work_folder(build)
+
+
+def scene_cadence_screen():
+    """Musical Cadence Mode's workout screen 40% into LayoutViewer's made up songs, ridden by PreviewRide's
+    Rider(seed=3) a second a tick (silent music), laid out at 1920x1116"""
+    import datetime
+    import time as timeModule
+    from types import SimpleNamespace
+    import AppLayout
+    import ClassHUDWindow
+    import MusicCadence
+    import PreviewRide
+    from ClassWorkoutSetupWindow import WorkoutSetupWindow
+    _, Parent = stub_classes()
+
+    def build():
+        setup = WorkoutSetupWindow(Parent())
+        setup.timer.stop()
+        setup.blinkTimer.stop()
+        PreviewRide.reset_ride_state()
+        AppState.ftp, AppState.maxHr, AppState.wheelCircumference = "250", "185", "2.105"
+        AppState.workoutMode, AppState.cadenceMode, AppState.ftpTestMode = True, True, None
+        AppState.antHRM, AppState.antSpeedCadence, AppState.antCadence, AppState.antSpeed = True, True, False, False
+        setup.musicSelection = {"songs": [], "analyses": {}, "preferred": 85, "minSegment": 8}
+        buildWorkout, MusicCadence.build_workout = MusicCadence.build_workout, viewer_music_workout
+        try:
+            setup.build_music_workout()
+        finally:
+            MusicCadence.build_workout = buildWorkout
+        AppState.workoutFilename = AppState.workoutFilenameShort = "music"
+        AppState.startTimestamp = datetime.datetime.now()
+        hud = ClassHUDWindow.HUDWindow(SimpleNamespace(startExe=PreviewRide.FakeBridge(), setWindowTitle=lambda t: None))
+        realMonotonic = timeModule.monotonic
+        timeModule.monotonic = lambda: 1000.0
+        try:
+            PreviewRide.run_hud(hud, AppState.workoutDurationSeconds*0.4, PreviewRide.Rider(seed=3))
+        finally:
+            timeModule.monotonic = realMonotonic
+        hud.stop_timers()
+        hud.gradeOverlay.timer.stop()
+        for gauge in ("cadenceGaugeDisplay", "hrGaugeDisplay"):
+            svg = getattr(getattr(getattr(hud, gauge, None), "ui", None), "svg", None)
+            for timer in ("spinTimer", "beatTimer"):
+                if hasattr(svg, timer):
+                    getattr(svg, timer).stop()
+        holder = QWidget()
+        holder.setObjectName("holder")
+        holder.setStyleSheet("#holder{background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #28275e stop:1 #9fc5d1);}")
+        layout = QVBoxLayout(holder)
+        layout.addWidget(hud)
+        AppLayout.apply_layout(holder, {"Workout": hud}, 1.0)
+        shown(holder, 1920, 1116)
+        rest_stars([star for star, _ in hud.maxStars], hud.maxBubbles)
+        for _ in range(3):
+            app.processEvents()
+        return holder
+    return in_work_folder(build)
+
+
 SCENES = {name[len("scene_"):]: fn for name, fn in globals().items() if name.startswith("scene_")}
 
 

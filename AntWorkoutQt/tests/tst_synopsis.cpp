@@ -14,6 +14,8 @@
 #include "AppLayout.hpp"
 #include "AppState.hpp"
 #include "AwoParser.hpp"
+#include "CadenceWorkout.hpp"
+#include "FtpColors.hpp"
 #include "FakeAnt.hpp"
 #include "GradeWidgets.hpp"
 #include "HudScreen.hpp"
@@ -61,16 +63,22 @@ void resetRide() {
 
 // The workout (or free ride: lines empty) ridden by the simulated rider a second a tick, its readings recorded as
 // LayoutViewer records them, joined to the session
-void rideIntoSession(const QStringList& lines, double seconds, ant::AntBridge* bridge, int seed = 11) {
+// (cadence: a Musical Cadence Mode ride of these songs instead)
+void rideIntoSession(const QStringList& lines, double seconds, ant::AntBridge* bridge, int seed = 11,
+                     const music::CadenceRide* cadence = nullptr) {
     resetRide();
     AppState& state = appState();
-    state.workoutMode = !lines.isEmpty();
-    state.cadenceMode = false;
+    state.workoutMode = !lines.isEmpty() || cadence;
+    state.cadenceMode = cadence != nullptr;
     state.ftpTestMode.clear();
     state.antHRM = true;
     state.antSpeedCadence = true;
     state.ftpRanges = zones::powerRanges();
-    if (state.workoutMode) {
+    if (cadence) {
+        music::applyRide(*cadence);
+        state.ftpRanges = ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm);
+        state.workoutFilename = state.workoutFilenameShort = QStringLiteral("music");
+    } else if (state.workoutMode) {
         AwoOptions options;
         options.ftp = state.ftp;
         const AwoResult result = parseAwoLines(lines, options);
@@ -118,6 +126,36 @@ void rideIntoSession(const QStringList& lines, double seconds, ant::AntBridge* b
 }
 
 // 260 s: ridden to its end, the ride is 262 s
+// LayoutViewer's made up songs (VIEWER_SONGS, viewer_music_workout): each its blocks (seconds, rpm), the pulses at rpm
+const QList<std::pair<QString, QList<std::pair<int, int>>>> kViewerSongs = {
+    {"Viewer Band - Warm Up Groove", {{30, 0}, {90, 82}, {60, 88}}},
+    {"The Layouts - Tempo Change", {{70, 96}, {50, 72}, {60, 104}}},
+    {"Sample Artist - Cool Down", {{80, 90}, {20, 0}, {60, 78}}}};
+
+music::CadenceRide viewerRide() {
+    music::CadenceRide ride;
+    int start = 0;
+    for (int index = 0; index < kViewerSongs.size(); ++index) {
+        const auto& [title, blocks] = kViewerSongs[index];
+        int duration = 0;
+        for (const auto& [seconds, rpm] : blocks) {
+            duration += seconds;
+        }
+        ride.tracks.append({QStringLiteral("viewer-song-%1.mp3").arg(index + 1), title, double(start), double(duration)});
+        ride.songStarts.insert(static_cast<int>(ride.blocks.size()), index);
+        int blockStart = start;
+        for (const auto& [seconds, rpm] : blocks) {
+            ride.blocks.append({seconds, rpm});
+            for (int k = 0; rpm && k < seconds * rpm / 60; ++k) {
+                ride.pulses.append(blockStart + k * 60.0 / rpm);
+            }
+            blockStart += seconds;
+        }
+        start += duration;
+    }
+    return ride;
+}
+
 const QStringList kWorkout = {"T:Synopsis Test", "1:60,0.6", "1:60,1.0", "3:2;1:20,1.2;0:20", "2:60,0.5,0.9"};
 
 // two ranges the same but for rounding (linked views are lined up through their screen geometry)
@@ -395,6 +433,60 @@ private slots:
         QVERIFY(screen->gradeText()->text().startsWith(QStringLiteral("Workout Grade")));
         // the best 2 minutes is the workout's, the 5 minutes spans neither ride (a stretch ends with its ride)
         QCOMPARE(screen->bestPowers().size(), qsizetype(4));
+    }
+
+    // (test_cadence_synopsis_shows_the_songs_heard) Musical Cadence Mode's synopsis: a band for each song along the top
+    // of the graph, where it was heard
+    void cadenceSynopsisShowsTheSongsHeard() {
+        const music::CadenceRide ride = viewerRide();
+        rideIntoSession({}, 520 + 1, bridge_.get(), 11, &ride);
+        SynopsisScreen* screen = synopsis();
+        BandStrip* strip = screen->songStrip();
+        QVERIFY(strip != nullptr);
+        QStringList titles;
+        for (const BandStrip::Band& band : strip->bands()) {
+            titles.append(band.title);
+        }
+        QStringList viewerTitles;
+        for (const auto& [title, blocks] : kViewerSongs) {
+            viewerTitles.append(title);
+        }
+        QCOMPARE(titles, viewerTitles);
+        // back to back, each as long as its song (the ride stops before the last one's over)
+        const QList<BandStrip::Band>& songs = strip->bands();
+        for (qsizetype i = 0; i + 1 < songs.size(); ++i) {
+            QCOMPARE(songs[i].end, songs[i + 1].start);
+            int length = 0;
+            for (const auto& [seconds, rpm] : kViewerSongs[i].second) {
+                length += seconds;
+            }
+            QVERIFY(std::abs((songs[i].end - songs[i].start) - length) <= 1);
+        }
+        // clicking a song zooms to it, clicking it again zooms back out
+        const BandStrip::Band second = songs[1];
+        const auto clickSong = [&](int index) {
+            for (const auto& [i, left, right] : strip->spans()) {
+                if (i == index) {
+                    clickAt(strip->mapToScene(QPointF((left + right) / 2, strip->height() / 2)));
+                    return;
+                }
+            }
+        };
+        clickSong(1);
+        QVERIFY(std::abs(screen->viewRange().min - second.start) < 0.5 && std::abs(screen->viewRange().max - second.end) < 0.5);
+        QCOMPARE(strip->spans().size(), qsizetype(1));
+        clickSong(1);
+        QVERIFY(screen->viewRange().min < 0.5 && std::abs(screen->viewRange().max - screen->totalSeconds()) < 0.5);
+        // a block's grade names its song
+        const Ride& cadenceRide = session::rides().front();
+        const grading::Grade* firstGrade = nullptr;
+        for (const auto& [key, grade] : cadenceRide.blockGrades.items()) {
+            if (!firstGrade || grade.start < firstGrade->start) {
+                firstGrade = &grade;
+            }
+        }
+        QVERIFY(firstGrade != nullptr);
+        QVERIFY(screen->gradeDetailsHtml(*firstGrade, cadenceRide).contains(kViewerSongs[0].first));
     }
 
     // a 20m FTP test's result heads the stats; Apply FTP sets it on the setup screen

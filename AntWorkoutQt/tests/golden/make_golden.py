@@ -438,6 +438,10 @@ HUD_RIDES = [
      "events": [[150, "difficulty", 3], [250, "pause"], [280, "pause"], [400, "difficulty", -2], [620, "difficulty", 0]]},
     {"name": "ftp20m", "ftp": 220, "seed": 5, "seconds": 2800, "ftpTest": "20m", "events": []},
     {"name": "ramp10", "ftp": 0, "seed": 7, "seconds": 1500, "ftpTest": "ramp10", "events": []},
+    #Musical Cadence Mode: music.json's click tracks (their analyses), the music silent and a second a tick
+    {"name": "cadence", "ftp": 250, "seed": 9, "seconds": 130, "preferred": 85, "minSegment": 8,
+     "music": [["a_100", None], ["b_75", "Slow One"], ["c_gap", None]],
+     "events": [[50, "pause"], [56, "pause"]]},
 ]
 
 
@@ -460,7 +464,7 @@ def hud_golden():
             PreviewRide.reset_ride_state()
             AppState.ftp = str(ride["ftp"])
             AppState.maxHr, AppState.wheelCircumference = "185", "2.105"
-            AppState.workoutMode, AppState.cadenceMode = True, False
+            AppState.workoutMode, AppState.cadenceMode = True, bool(ride.get("music"))
             AppState.ftpTestMode = ride.get("ftpTest")
             AppState.antHRM, AppState.antSpeedCadence, AppState.antCadence, AppState.antSpeed = True, True, False, False
             AppState.ftpRanges = FtpColors.power_ranges()
@@ -479,11 +483,34 @@ def hud_golden():
                 else:
                     effortStart = AppState.workoutDurationSeconds - test["effortSeconds"]
                 AppState.workoutMessages.extend(FtpTest.messages(AppState.ftpTestMode, effortStart, AppState.ftp))
+            elif ride.get("music"):
+                #as the setup screen's build_music_workout builds it
+                import MusicCadence
+                with open(os.path.join(HERE, "music.json"), encoding="utf-8") as f:
+                    musicTracks = {t["name"]: t["analysis"] for t in json.load(f)["tracks"]}
+                songs = [("C:\\music\\" + name + ".wav", title) for name, title in ride["music"]]
+                analyses = {path: musicTracks[name] for (path, _), (name, _) in zip(songs, ride["music"])}
+                blocks, tracks, songStarts, pulses = MusicCadence.build_workout(songs, analyses, ride["preferred"],
+                                                                                ride["minSegment"])
+                AppState.workoutList = [(0, d, 0) if rpm == 0 else (1, d, (rpm,)*21, 0) for d, rpm in blocks]
+                AppState.workoutDurationSeconds = sum(d for d, _ in blocks)
+                AppState.musicTracks = tracks
+                AppState.musicSongStarts = {i: MusicCadence.song_header(tracks[t]) for i, t in songStarts.items()}
+                AppState.musicPulses = pulses
+                for _, title, start, duration in tracks:
+                    messageStart = int(start)
+                    messageEnd = min(messageStart + 8, AppState.workoutDurationSeconds)
+                    if messageEnd > messageStart:
+                        AppState.workoutMessages.append((messageStart, messageEnd, "Now playing: " + title))
+                AppState.workoutTitle = "Musical Cadence Mode"
+                AppState.ftpRanges[:] = FtpColors.cadence_ranges(FtpColors.CADENCE_SCALE_BOTTOM_RPM)
+                FtpColors.update_graph_brushes()
             else:
                 parser = WorkoutParser(ftp=ride["ftp"])
                 assert parser.parse(ride["workout"].split("\n")[:-1]), parser.rejections
             AppState.workoutFilename = AppState.workoutFilenameShort = "golden.awo"
-            hud = ClassHUDWindow.HUDWindow(SimpleNamespace(startExe=PreviewRide.FakeBridge()))
+            #(the title bar's song, in Musical Cadence Mode)
+            hud = ClassHUDWindow.HUDWindow(SimpleNamespace(startExe=PreviewRide.FakeBridge(), setWindowTitle=lambda t: None))
             hud.timer.stop()
             hud.smoothBarTimer.stop()
             hud.starTimer.stop()
@@ -492,6 +519,8 @@ def hud_golden():
             events = {}
             for event in ride["events"]:
                 events.setdefault(event[0], []).append(event[1:])
+            if hud.cadenceMode:
+                hud.music_start = lambda: setattr(hud, "musicPlayer", PreviewRide.ViewerMusicPlayer())
             hud.start_workout()
             ticks = 0
             for tick in range(int(ride["seconds"])):
@@ -503,9 +532,11 @@ def hud_golden():
                     else:
                         hud.pause_recording()
                 hud.lastTimestamp = clock - 1
+                if hud.cadenceMode and hud.musicPlayer is not None:
+                    hud.musicPlayer.seconds += 1
                 hud.process_events()
                 t = AppState.secondsPassed
-                reading = rider.sample(t, hud.currentPower)
+                reading = rider.sample(t, hud.currentPower, hud.cadenceMode)
                 PreviewRide.save_reading(t, reading)
                 ticks += 1
             grades = {f"{k[0]},{k[1]},{k[2]}": plain(v) for k, v in AppState.blockGrades.items()}
@@ -514,6 +545,7 @@ def hud_golden():
                             "requestWatts": list(AppState.workoutPowerRequestsWatts),
                             "grades": grades, "gradeOrder": list(grades),
                             "ftpTestResult": plain(AppState.ftpTestResult),
+                            "musicPlayed": plain(AppState.musicPlayed),
                             "workoutSeconds": AppState.workoutDurationSeconds,
                             "workoutList": plain(AppState.workoutList),
                             "secondsPassed": AppState.secondsPassed,
@@ -528,6 +560,112 @@ def hud_golden():
     del app
 
 
+###Musical Cadence Mode (MusicCadence.py)
+#click tracks made from Python's random (gauss), so the C++ test (tst_music) makes the same wav files byte for byte:
+#(name, bpm, seconds, seed, silence (start, end) or None, change (from seconds, to bpm) or None)
+MUSIC_TRACKS = [
+    ("a_100", 100, 40, 1, None, None),
+    ("b_75", 75, 40, 2, None, None),
+    ("c_gap", 100, 40, 3, (15, 24), None),
+    ("d_change", 90, 60, 4, None, (30, 128)),
+    ("e_172", 172, 20, 5, None, None),
+]
+MUSIC_RATE = 22050
+
+
+def golden_click_track(path, bpm, seconds, seed, silence=None, change=None, rate=MUSIC_RATE):
+    """A 16 bit mono wav of a click every beat (a decaying noise burst) over a little noise"""
+    import math
+    import struct
+    import wave
+    rng = random.Random(seed)
+    n = int(seconds*rate)
+    samples = [0.0]*n
+    length = int(0.03*rate)
+    burst = [rng.gauss(0, 1)*math.exp(-8*i/(length - 1)) for i in range(length)]
+    t = 0.0
+    beat = 60.0/bpm
+    while t < seconds:
+        if change and t >= change[0]:
+            beat = 60.0/change[1]
+        start = int(t*rate)
+        for i in range(min(length, n - start)):
+            samples[start + i] += 0.6*burst[i]
+        t += beat
+    for i in range(n):
+        samples[i] += 0.002*rng.gauss(0, 1)
+    if silence:
+        for i in range(int(silence[0]*rate), int(silence[1]*rate)):
+            samples[i] = 0.0
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(struct.pack("<%dh" % n, *(int(max(-1.0, min(1.0, s))*32767) for s in samples)))
+    return path
+
+
+def music_golden():
+    import zlib
+    import numpy as np
+    import MusicCadence as M
+    folder = tempfile.mkdtemp()
+    tracks = []
+    paths = {}
+    for name, bpm, seconds, seed, silence, change in MUSIC_TRACKS:
+        path = golden_click_track(os.path.join(folder, name + ".wav"), bpm, seconds, seed, silence, change)
+        paths[name] = path
+        with open(path, "rb") as f:
+            crc = zlib.crc32(f.read())
+        samples = M.decode(path)
+        envelope = M.onset_envelope(samples)
+        classes, confidences = M.tempo_track(envelope)
+        beats = M.track_beats(envelope, classes)
+        analysis = M.analyze_file(path)
+        tracks.append({
+            "name": name, "bpm": bpm, "seconds": seconds, "seed": seed, "silence": silence, "change": change,
+            "crc": crc,
+            "samples": {"count": len(samples), "sum": float(np.sum(samples.astype(np.float64))),
+                        "first": [float(x) for x in samples[:64]], "at": [float(samples[i]) for i in range(0, len(samples), 9973)]},
+            "envelope": [float(x) for x in envelope],
+            "classes": [float(c) for c in classes], "confidences": [float(c) for c in confidences],
+            "beats": [int(b) for b in beats],
+            "analysis": analysis,
+            "segments": [[s, e, b] for s, e, b in M.song_segments(analysis)],
+            "segments4": [[s, e, b] for s, e, b in M.song_segments(analysis, 4)],
+            "cadence": M.song_cadence(analysis),
+            "cadence100": M.song_cadence(analysis, preferred=100),
+        })
+    analyses = {paths[t["name"]]: t["analysis"] for t in tracks}
+    order = [(paths["a_100"], None), (paths["b_75"], "Slow One"), (paths["c_gap"], None), (paths["d_change"], None),
+             (paths["e_172"], "Fast")]
+    workouts = []
+    for preferred, minSegment in ((85, 8), (100, 4), (60, 16)):
+        blocks, rideTracks, songStarts, pulses = M.build_workout(order, analyses, preferred, minSegment)
+        workouts.append({"preferred": preferred, "minSegment": minSegment, "blocks": plain(blocks),
+                         "tracks": [[os.path.basename(p), title, start, duration] for p, title, start, duration in rideTracks],
+                         "songStarts": {str(k): v for k, v in songStarts.items()}, "pulses": [float(p) for p in pulses],
+                         "headers": [M.song_header(t) for t in rideTracks]})
+    #random picks (Python's random, seeded): (songs, target, durations, seed, cadences)
+    picks = []
+    songs = [f"s{i}" for i in range(14)]
+    durations = {song: 60 + 37*(i % 6) for i, song in enumerate(songs)}
+    durations["s13"] = 0
+    cadences = {song: (None if i % 5 == 0 else 55 + 7*i) for i, song in enumerate(songs)}
+    for seed in range(6):
+        for target in (300, 900, 2000):
+            picks.append({"seed": seed, "target": target, "cadences": False,
+                          "picked": M.random_selection(songs, target, durations, random.Random(seed))})
+            picks.append({"seed": seed, "target": target, "cadences": True,
+                          "picked": M.random_selection(songs, target, durations, random.Random(seed), cadences)})
+    folds = [[bpm, previous, preferred, M.fold_rpm(bpm, previous, preferred)]
+             for bpm in (33.3, 45, 59.9, 60, 77.7, 100, 119.9, 121, 160, 200, 250, 333)
+             for previous in (None, 50, 64, 110) for preferred in (60, 85, 110)]
+    write("music.json", {"rate": MUSIC_RATE, "cacheVersion": M.cache_version(), "tracks": tracks, "workouts": workouts,
+                         "picks": {"songs": songs, "durations": durations, "cadences": cadences, "cases": picks},
+                         "folds": folds})
+
+
 if __name__ == "__main__":
     from PyQt6.QtGui import QColor
     QColorArgb = QColor.NameFormat.HexArgb
@@ -540,4 +678,5 @@ if __name__ == "__main__":
     colors_golden()
     units_golden()
     plot_golden()
+    music_golden()
     hud_golden()

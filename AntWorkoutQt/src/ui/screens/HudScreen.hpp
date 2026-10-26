@@ -36,6 +36,10 @@ class AntBridge;
 class ReadingPipeline;
 }  // namespace ant
 
+namespace music {
+class MusicPlayer;
+}
+
 namespace plot {
 class CurveItem;
 class InfiniteLine;
@@ -169,6 +173,10 @@ public:
     // a reading on the gauges and speed/distance, as the simulated ride shows it (the distance from the revolutions
     // its speed made)
     void showSimulatedReading(const RiderReading& reading);
+    // a silent stand-in for Musical Cadence Mode's music, its clock moved on by hand (simulated rides, tests; none:
+    // the real music)
+    void simulateMusic(std::optional<double> seconds) { simulatedMusic_ = seconds; }
+    std::optional<double> simulatedMusic() const { return simulatedMusic_; }
     const QList<std::pair<MaxStar*, QString>>& maxStars() const { return maxStars_; }
     const QList<MaxBubble*>& maxBubbles() const { return maxBubbles_; }
 
@@ -216,12 +224,15 @@ signals:
     // the END prompt's choices: the synopsis, back to setup
     void synopsisRequested();
     void setupRequested();
+    // Musical Cadence Mode: the window's title, with the song playing and how far into it
+    void titleChanged(const QString& title);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
     void showEvent(QShowEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
 
 private:
     void buildUpNext();
@@ -279,6 +290,17 @@ private:
     void refreshFtpColors();
     void updateCenterRings(std::optional<double> level = std::nullopt);
     void updatePowerRingsTick();
+    // Musical Cadence Mode's music: made on START, playing until the ride is restarted or left
+    void musicStart();
+    // the workout's time from where the music is (none without music)
+    std::optional<double> musicSeconds();
+    void musicPause(bool paused);
+    void musicStop();
+    // the index in AppState's musicTracks of the song playing seconds into the music
+    static int songAt(double seconds);
+    static QString songTime(double seconds);
+    void updateSongTitle();
+    void recordSong();
     QString labelColor(const QString& text) const;
     QString labelColorCss(const QString& text) const;
     void setLabelColor(QLabel* label);
@@ -380,6 +402,11 @@ private:
     QTimer* smoothBarTimer_ = nullptr;
     QTimer* starTimer_;
     QElapsedTimer starClock_;
+    std::unique_ptr<music::MusicPlayer> musicPlayer_;
+    qsizetype musicSkipsLogged_ = 0;
+    QString songTitle_;
+    // a simulated ride's music: no sound, its clock moved on a second a tick (PreviewRide's ViewerMusicPlayer)
+    std::optional<double> simulatedMusic_;
     // (off while a simulated ride runs: it's drawn once, at the end)
     bool graphUpdates_ = true;
     double simulatedRevolutions_ = 0;

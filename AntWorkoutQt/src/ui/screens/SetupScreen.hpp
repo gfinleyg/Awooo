@@ -14,6 +14,7 @@
 
 #include <optional>
 
+#include "MusicSelectDialog.hpp"
 #include "WorkoutTypes.hpp"
 
 class QGridLayout;
@@ -60,6 +61,10 @@ public:
     // the workout picker's pick: loaded as the workout to ride, or the reason it can't be
     void pickWorkoutFile(const QString& path);
     void initAntScanConnect();
+    // Musical Cadence Mode's songs (as the song picker gives them; none: last time's, if they're still cached), and
+    // the ride built from them
+    void setMusicSelection(const std::optional<MusicSelection>& selection);
+    const std::optional<MusicSelection>& musicSelection() const { return musicSelection_; }
 
     // (tests, LayoutViewer)
     QPushButton* powerButton() const { return powerButton_; }
@@ -149,6 +154,7 @@ private:
     void openMusicDialog();
     void buildMusicWorkout();
     void applyCadenceRanges();
+    std::optional<MusicSelection> savedMusicSelection();
     void clearWorkout();
     bool useWorkout(const QString& filename, const AwoResult& result, bool more = false);
     void showWorkoutText(bool more = false);
@@ -231,6 +237,7 @@ private:
     QTimer* timer_;
     QTimer* blinkTimer_;
     QPointer<QWidget> popup_;
+    std::optional<MusicSelection> musicSelection_;
 };
 
 }  // namespace awo

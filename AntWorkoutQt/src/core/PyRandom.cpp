@@ -91,6 +91,25 @@ std::uint32_t Random::genrand() {
     return y;
 }
 
+std::uint32_t Random::getrandbits(int k) {
+    return genrand() >> (32 - k);
+}
+
+std::uint32_t Random::randbelow(std::uint32_t n) {
+    if (n == 0) {
+        return 0;
+    }
+    int k = 0;
+    for (std::uint32_t v = n; v; v >>= 1) {
+        ++k;
+    }
+    std::uint32_t r = getrandbits(k);
+    while (r >= n) {
+        r = getrandbits(k);
+    }
+    return r;
+}
+
 double Random::random() {
     const std::uint32_t a = genrand() >> 5;
     const std::uint32_t b = genrand() >> 6;
