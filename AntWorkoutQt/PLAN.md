@@ -295,7 +295,13 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
 - **Done when:** fake-based tests pass, and against SimulANT+ the console shows power, cadence, speed and heart rate,
   a trainer follows target power, and dropouts recover.
 
-### Phase 3: UI foundation
+### Phase 3: UI foundation (done)
+- Done: `src/ui`: Theme (setSheet/apply over the same theme files and regexes), ZoneColors (FtpColors' theme half),
+  AppLayout (scaling, gap grid, text fitting, symbol buttons, popup shrinking; screens registered by name),
+  KeyShortcuts, SoundEffects (miniaudio, vendored in `third_party/`), CustomTitleBar, the small dialogs and a
+  MainWindow with no screens yet. 3 more test exes (theme, key shortcuts, layout and windows). Pick Theme opens a file
+  picker until the theme picker is built (Phase 9). Stylesheets select the app's own widgets by object name, as Qt
+  type selectors don't work with namespaced classes.
 - Theme (§4.2), AppStyle, font registration (the `fonts/` and `fonts/variable/` folders), AppLayout, KeyShortcuts,
   SoundEffects, CustomTitleBar, MainWindow screen switching, and the small dialogs (confirm exit/end/clear session,
   logs, measurements, performance).

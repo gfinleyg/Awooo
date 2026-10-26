@@ -30,3 +30,9 @@ foreach(test ant_bridge reading_pipeline)
     awo_add_test(tst_${test} tst_${test}.cpp FakeAnt.hpp)
     target_link_libraries(tst_${test} PRIVATE awo_ant)
 endforeach()
+
+# awo_ui, built offscreen
+foreach(test theme key_shortcuts layout)
+    awo_add_test(tst_${test} tst_${test}.cpp FakeAnt.hpp)
+    target_link_libraries(tst_${test} PRIVATE awo_ui)
+endforeach()

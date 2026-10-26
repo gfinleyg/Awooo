@@ -26,6 +26,12 @@ Python app's own results (`tests\golden\`).
 
 - **Durations of a day or more keep counting hours** ("25h"). The Python app's went back to 0h after 24.
 
+## Screens
+
+- **Text that was shrunk to fit grows back when shorter text replaces it**, in fixed size labels too. The Python app
+  measured a label against Qt's size hint, which is never smaller than the label's own minimum size, so a fixed size
+  label looked exactly full and its shrunk text stayed small until the next full refit (a resize or a theme change).
+
 ## Settings and log
 
 - **savedSettingsANT.json is written with its keys sorted and 4-space indents** (Qt's JSON writer). The values are the
