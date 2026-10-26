@@ -15,7 +15,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 # Qt 6.7 exactly: its GDI font engine is what the layouts and fonts were made with (PLAN.md, D2)
-find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets Svg Concurrent Test)
+find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets Svg SvgWidgets Concurrent Test)
 
 # The Python app, where the fonts, sounds, images, themes and workouts still live while both apps are kept
 set(AWO_PYTHON_APP "${CMAKE_CURRENT_SOURCE_DIR}/../AntWorkout")

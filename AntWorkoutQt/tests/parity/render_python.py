@@ -285,7 +285,7 @@ def scene_cadence_mode_gauge():
     w.gauge_color_inner_radius_factor = 0.95
     w.setEnableBarGraph(False)
     gauge.ui.svg.scale = w.gauge_color_inner_radius_factor
-    cadenceRanges = [60, 75, 90, 105]
+    cadenceRanges = FtpColors.CadenceRanges([60, 75, 90, 105])
     w.set_value_colors(FtpColors.zone_stops(cadenceRanges))
     color = QColor("#" + FtpColors.gauge_ring(95, cadenceRanges))
     w.set_center_rings((color.darker(130), color), 0.5)
@@ -318,6 +318,98 @@ def scene_hr_gauge():
     w.scala_subdiv_count = 5
     w.setValue(132)
     return gauge
+
+
+def make_power_spiral():
+    """The HUD's spiral 200 s into a 10 minute workout after a 5 minute ride (at a higher FTP), 80 s into its second
+    2 minute block, with a stretch without cadence"""
+    from ClassPowerSpiral import PowerSpiral
+    now = FtpColors.power_ranges()
+    then = [limit*1.2 for limit in now]
+    spiral = PowerSpiral()
+    spiral.clear(600, [(300, [(t + 0.5, 250 + 50*math.sin(t/30), 90 + 10*math.sin(t/9)) for t in range(300)], then)])
+    spiral.set_block(120)
+    for i in range(401):
+        t = i*0.5
+        if t == 120:
+            spiral.set_block(120)
+        cadence = None if 100 <= t < 110 else 85 + 15*math.sin(t/11)
+        spiral.add_sample(t, t if t < 120 else t - 120, 150 + 80*math.sin(t/15), cadence)
+    spiral.set_progress(200, 600, 80, 120)
+    return spiral
+
+
+def scene_power_spiral():
+    """The HUD's spiral (make_power_spiral)"""
+    return shown(make_power_spiral(), 400, 400)
+
+
+def scene_grade_overlay():
+    """A block's grade over the spiral, before it fades"""
+    from ClassGradeWidgets import GradeOverlay
+    spiral = make_power_spiral()
+    overlay = GradeOverlay(spiral)
+    overlay.show_grade("A+")
+    overlay.timer.stop()
+    return shown(spiral, 400, 400)
+
+
+GRADE_ROWS = [
+    {"kind": "ride", "label": "Workout: Test Ride", "pct": 91.2, "grade": "A", "note": "45m", "graded": True},
+    {"kind": "block", "label": "5:00 @ 150 Watts", "pct": 95, "grade": "A+", "note": ""},
+    {"kind": "interval", "label": "3x", "pct": None, "grade": "", "note": ""},
+    {"kind": "sub", "label": "1:00 @ 300 Watts", "pct": 80, "grade": "B", "note": "S · A · B+"},
+    {"kind": "sub", "label": "2:00 @ 120 Watts", "pct": 99, "grade": "S", "note": ""},
+    {"kind": "song", "label": "Artist - Title", "pct": 70, "grade": "C+", "note": ""},
+    {"kind": "block", "label": "3:00 @ 200-250 Watts", "pct": 60, "grade": "D", "note": "ended early", "indent": True},
+    {"kind": "block", "label": "Free Ride", "pct": 88, "grade": "A-", "note": ""},
+]
+
+
+def scene_grade_list():
+    """The grade list's kinds of rows, and the average"""
+    from ClassGradeWidgets import GradeList
+    grades = GradeList()
+    grades.rows = [dict(row) for row in GRADE_ROWS]
+    grades.average = 85.3
+    return shown(grades, 600, 500)
+
+
+def scene_grade_list_scrolled():
+    """The grade list scrolled, with "more..." above and below"""
+    from ClassGradeWidgets import GradeList
+    grades = GradeList()
+    grades.rows = [dict(row) for row in GRADE_ROWS]*3
+    grades.average = 85.3
+    grades.scrollOffset = 4
+    return shown(grades, 600, 400)
+
+
+def scene_smooth_bar():
+    """The HUD's timer bar part of the way along, between pixels"""
+    from ClassSmoothProgressBar import SmoothProgressBar
+    bar = SmoothProgressBar()
+    bar.setRange(0, 100*600)
+    bar.setTextVisible(False)
+    bar.setFraction(0.4373)
+    bar.setBarColors("#1f15e1", "#bdd6de")
+    return shown(bar, 301, 34)
+
+
+BLOCK_LINES = ["5:00 @ 150 Watts", "1:00 @ 300 Watts", "2:00 @ 120 Watts", "3:00 @ 200-250 Watts", "Free Ride",
+               "4:00 @ 180 Watts", "0:30 @ 400 Watts", "6:00 @ 90 Watts", "2:00 @ 260 Watts", "1:00 @ 140 Watts"]
+
+
+def scene_long_labels():
+    """The coming up list, longer than fits: scrolled one down, "more..." above and below"""
+    from ClassLongVerticalLabelSeries import LongVLabels
+    labels = LongVLabels(True, AppState.ftp, AppState.ftpRanges)
+    labels.ui.widget.setFullText("\n".join(BLOCK_LINES) + "\n")
+    shown(labels, 500, 300)
+    labels.ui.widget.scroll_to(1)
+    for _ in range(3):
+        app.processEvents()
+    return labels
 
 
 SCENES = {name[len("scene_"):]: fn for name, fn in globals().items() if name.startswith("scene_")}

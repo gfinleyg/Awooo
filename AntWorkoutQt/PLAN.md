@@ -122,14 +122,14 @@ Line counts are the Python originals.
 | Python | C++ | Notes |
 |---|---|---|
 | `ClassAnalogGauge.py` (1954) | `ui/widgets/AnalogGauge` | The biggest widget: layered pixmap caching, needle animation, value colour gradients, center rings, fitted value font. Port paint code 1:1. |
-| `QSpiralProgressBar.py` (809), `ClassSpiralProgressBar.py` (51) | `ui/widgets/SpiralProgressBar` | |
+| `QSpiralProgressBar.py` (809), `ClassSpiralProgressBar.py` (51) | (not ported) | Never built by the app (Phase 4) |
 | `ClassPowerSpiral.py` (492) | `ui/widgets/PowerSpiral` | Timeline binning, ribbon paths, cached layers |
 | `ClassSmoothProgressBar.py` (50) | `ui/widgets/SmoothProgressBar` | |
 | `ClassLongVerticalLabelSeries.py` (175) | `ui/widgets/LongVLabels` | Drop the Designer-style `Ui_Form` |
 | `ClassGradeWidgets.py` (443) | `ui/widgets/GradeOverlay`, `GradeList` | |
 | `ClassWorkoutGraph.py` (91) | `ui/widgets/WorkoutGraph` on `awo_plot` | |
 | `ClassSolidColoredColumns.py` (252) | `plot/SolidColoredColumns` | |
-| `ClassMaxStar.py` (335) | `plot/MaxStar`, `MaxBubble` | |
+| `ClassMaxStar.py` (335) | `ui/widgets/MaxStar`, `MaxBubble` | In the theme's colors, so in awo_ui |
 
 ### 3.6 Screens and dialogs
 
@@ -309,7 +309,18 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
 - **Done when:** the window comes up maximized and frameless with the title bar menu, themes load and switch live,
   and the layout scales on 1080p, 1200p and 4K (and with 125%/150% Windows scaling).
 
-### Phase 4: custom widgets + plot library
+### Phase 4: custom widgets + plot library (done)
+- Done: `src/plot` (awo_plot: ViewBox, AxisItem, PlotItem/PlotWidget, curves, the now line, scatter markers and
+  SolidColoredColumns) and `src/ui/widgets` (AnalogGauge and its Gauge backgrounds, PowerSpiral, GradeOverlay/GradeList,
+  SmoothProgressBar, LongVLabels, WorkoutGraph, MaxStar/MaxBubble). The graph spike kept option A: the HUD graph
+  matches the Python one to 10 pixels of 360,000 (lone pixels on the aliased curves), and every other widget is pixel
+  identical. `tests/parity` renders each widget from the Python app and from `render_widgets.exe` with the same setup
+  and readings, and compares them (see README); it stands in for LayoutViewer's widget gallery until Phase 9. 2 more
+  test exes: tst_plot (ticks and view ranges against pyqtgraph's own, `golden/plot.json`) and tst_widgets (the power
+  spiral's tests, the gauge's easing rate and the other widgets).
+- Changed from the plan: QSpiralProgressBar (809 lines) isn't ported: nothing in the app builds one (GradeOverlay
+  only ever covers the PowerSpiral). MaxStar/MaxBubble live in `ui/widgets`, not `plot`, as they draw in the theme's
+  colors. The power spiral test of the HUD's sampling moves to Phase 6 with the HUD.
 - First, the graph spike (§4.4): the HUD progress graph on the in-house library, compared with the Python one. Keep
   option A or switch to Qwt here.
 - AnalogGauge, SpiralProgressBar, PowerSpiral, SmoothProgressBar, LongVLabels, GradeOverlay/GradeList, `awo_plot`,
@@ -401,6 +412,6 @@ Decided:
 - LayoutViewer, the FTP colours editor (also as its own exe) and ColorPicker are all ported.
 - Improvements are allowed as long as functionality is preserved (D10).
 - The Python app stays in the repo.
-- Graphs use the in-house library (§4.4, option A).
+- Graphs use the in-house library (§4.4, option A), confirmed by the Phase 4 spike.
 
-Nothing is open. Phase 0 is next.
+Nothing is open.

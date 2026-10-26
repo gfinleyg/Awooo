@@ -7,6 +7,9 @@
 
 #include <QApplication>
 #include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <cmath>
@@ -14,9 +17,15 @@
 #include <functional>
 #include <numbers>
 
+#include "AnalogGauge.hpp"
 #include "AppState.hpp"
+#include "GradeWidgets.hpp"
+#include "LongVLabels.hpp"
+#include "PowerSpiral.hpp"
+#include "SmoothProgressBar.hpp"
 #include "AppStyle.hpp"
 #include "MaxStar.hpp"
+#include "Performance.hpp"
 #include "PyCompat.hpp"
 #include "PlotItems.hpp"
 #include "SolidColoredColumns.hpp"
@@ -240,8 +249,238 @@ QWidget* sceneHudGraph() {
     return holder;
 }
 
+// ---- The gauges, as the HUD sets them up ----
+
+const QColor kGaugeRed(QStringLiteral("#8B0000"));
+
+QWidget* gaugeShown(Gauge* gauge) {
+    return shown(gauge, 400, 400);
+}
+
+QGradientStops arcColors(const std::pair<QString, QString>& colors) {
+    return {{0, QColor(QStringLiteral("#88") + colors.first)}, {.5, QColor(QStringLiteral("#88") + colors.second)}};
+}
+
+// The HUD's power gauge at 230 W, a 250 W target arc, rings for the last few blocks
+QWidget* scenePowerGauge() {
+    auto* gauge = new Gauge;
+    AnalogGauge* w = gauge->gauge();
+    w->setNeedleColor(kGaugeRed);
+    w->setGaugeTheme(3);
+    w->setOuterCircleBg({{0.25, QColor(0, 0, 0, 0)}, {0.18, QColor(255, 255, 255, 255)}});
+    w->setEnableBarGraph(false);
+    w->units = QStringLiteral("Watts");
+    w->bigNeedleCenterSize = 5;
+    w->altUnitsDisplay = true;
+    w->fitValueInCenter = true;
+    w->centerRingsPale = {0.1, 0.4};
+    w->centerRingCount = 3;
+    w->centerRingMinPx = 6;
+    w->setValueColors(zones::zoneStops(zones::powerRanges()));
+    w->setValue(230);
+    w->setOuterCircleBg({{0.25, QColor(0, 0, 0, 0)}, {0.18, QColor(QStringLiteral("#") + zones::gaugeRing(230))}});
+    QList<QColor> rings;
+    for (const double power : {230, 180, 140, 260, 90}) {
+        rings.append(zones::zoneColor(power));
+    }
+    w->setCenterRings(rings);
+    w->setArc(250, arcColors(zones::gaugeArc(250)));
+    return gaugeShown(gauge);
+}
+
+void cadenceGaugeLook(AnalogGauge* w) {
+    w->setNeedleColor(kGaugeRed);
+    w->setOuterCircleBg({{0, QColor(0, 0, 0, 0)}});
+    w->setScalePolygonColors(QGradientStops{{0, QColor(0, 0, 0, 0)}});
+    w->bigScaleMarker = QColor(0, 0, 0, 0);
+    w->needleCenterBg = {{0, QColor(QStringLiteral("#FFFFFF"))}};
+    w->bigNeedleCenterSize = 5;
+    w->units = QStringLiteral("RPM");
+    w->initialScaleFontsize = 18;
+    w->initialValueFontsize = 56;
+    w->setMaxValue(200);
+    w->setScalaCount(1);
+    w->scalaSubdivCount = 1;
+    w->setEnableBigScaleGrid(false);
+    w->altUnitsDisplay = true;
+    w->valueDecimals = 1;
+    w->fitValueInCenter = true;
+}
+
+// The HUD's cadence gauge (workout mode) at 87.4 RPM
+QWidget* sceneCadenceGauge() {
+    auto* gauge = new Gauge(QStringLiteral("Chainring.svg"), std::nullopt, true);
+    gauge->chainring()->spinTimer()->stop();
+    cadenceGaugeLook(gauge->gauge());
+    gauge->gauge()->rescale();
+    gauge->gauge()->setValue(87.4);
+    return gaugeShown(gauge);
+}
+
+// Musical Cadence Mode's big cadence gauge at 92.3 RPM, a 95 RPM target, rings on a half beat
+QWidget* sceneCadenceModeGauge() {
+    auto* gauge = new Gauge(QStringLiteral("Chainring.svg"), std::nullopt, true);
+    gauge->chainring()->spinTimer()->stop();
+    AnalogGauge* w = gauge->gauge();
+    cadenceGaugeLook(w);
+    w->setMaxValue(140);
+    w->setScalaCount(14);
+    w->initialScaleFontsize = 13;
+    w->gaugeColorInnerRadiusFactor = 0.95;
+    w->setEnableBarGraph(false);
+    gauge->chainring()->scale = w->gaugeColorInnerRadiusFactor;
+    const ftpcolors::ZoneRanges cadenceRanges{{60, 75, 90, 105}, true};
+    w->setValueColors(zones::zoneStops(cadenceRanges));
+    const QColor color(QStringLiteral("#") + zones::gaugeRing(95, cadenceRanges));
+    w->setCenterRings(QList<QColor>{color.darker(130), color}, 0.5);
+    w->setArc(95, arcColors(zones::gaugeArc(95, cadenceRanges)));
+    w->rescale();
+    w->setValue(92.3);
+    return gaugeShown(gauge);
+}
+
+// The HUD's heart rate gauge at 132 BPM, the heart at rest
+QWidget* sceneHrGauge() {
+    auto* gauge = new Gauge(QStringLiteral("HeartSmaller.svg"),
+                            Gauge::Beat{QStringLiteral("Heart.svg"), QColor(QStringLiteral("#FF8FAB")),
+                                        QColor(QStringLiteral("#E8102A"))});
+    gauge->heart()->beatTimer()->stop();
+    AnalogGauge* w = gauge->gauge();
+    w->setNeedleColor(kGaugeRed);
+    w->needleCenterBg = {{0, QColor(QStringLiteral("#FFFFFF"))}};
+    w->setScalePolygonColors(QGradientStops{{0, QColor(0, 0, 0, 0)}});
+    w->setOuterCircleBg({{0, QColor(0, 0, 0, 0)}});
+    w->bigNeedleCenterSize = 20;
+    w->units = QStringLiteral("BPM");
+    w->setMinValue(40);
+    w->setMaxValue(200);
+    w->setEnableBarGraph(false);
+    w->setScalaCount(2);
+    w->scalaSubdivCount = 5;
+    w->setValue(132);
+    return gaugeShown(gauge);
+}
+
+// ---- The workout screen's other widgets ----
+
+// The workout screen's spiral 200 s into a 10 minute workout after a 5 minute ride (at a higher FTP), 80 s into its
+// second 2 minute block, with a stretch without cadence
+PowerSpiral* makePowerSpiral() {
+    const ftpcolors::ZoneRanges now = zones::powerRanges();
+    ftpcolors::ZoneRanges then;
+    for (const double limit : now.limits) {
+        then.limits.append(limit * 1.2);
+    }
+    session::RingHistory ride{300, {}, then};
+    for (int t = 0; t < 300; ++t) {
+        ride.samples.append({t + 0.5, 250 + 50 * std::sin(t / 30.0), 90 + 10 * std::sin(t / 9.0)});
+    }
+    auto* spiral = new PowerSpiral;
+    spiral->clear(600, {ride});
+    spiral->setBlock(120);
+    for (int i = 0; i <= 400; ++i) {
+        const double t = i * 0.5;
+        if (t == 120) {
+            spiral->setBlock(120);
+        }
+        const std::optional<double> cadence =
+            100 <= t && t < 110 ? std::nullopt : std::optional(85 + 15 * std::sin(t / 11));
+        spiral->addSample(t, t < 120 ? t : t - 120, 150 + 80 * std::sin(t / 15), cadence);
+    }
+    spiral->setProgress(200, 600, 80, 120);
+    return spiral;
+}
+
+QWidget* scenePowerSpiral() {
+    return shown(makePowerSpiral(), 400, 400);
+}
+
+// A block's grade over the spiral, before it fades
+QWidget* sceneGradeOverlay() {
+    PowerSpiral* spiral = makePowerSpiral();
+    auto* overlay = new GradeOverlay(spiral);
+    overlay->showGrade(QStringLiteral("A+"));
+    for (QTimer* timer : overlay->findChildren<QTimer*>()) {
+        timer->stop();
+    }
+    return shown(spiral, 400, 400);
+}
+
+QList<GradeList::Row> gradeRows() {
+    using Kind = GradeList::Row::Kind;
+    auto row = [](Kind kind, const QString& label, std::optional<double> pct, const QString& grade,
+                  const QString& note = {}, bool indent = false) {
+        GradeList::Row r;
+        r.kind = kind;
+        r.label = label;
+        r.pct = pct;
+        r.grade = grade;
+        r.note = note;
+        r.indent = indent;
+        return r;
+    };
+    return {row(Kind::Ride, QStringLiteral("Workout: Test Ride"), 91.2, QStringLiteral("A"), QStringLiteral("45m")),
+            row(Kind::Block, QStringLiteral("5:00 @ 150 Watts"), 95, QStringLiteral("A+")),
+            row(Kind::Interval, QStringLiteral("3x"), std::nullopt, {}),
+            row(Kind::Sub, QStringLiteral("1:00 @ 300 Watts"), 80, QStringLiteral("B"),
+                QStringLiteral("S · A · B+")),
+            row(Kind::Sub, QStringLiteral("2:00 @ 120 Watts"), 99, QStringLiteral("S")),
+            row(Kind::Song, QStringLiteral("Artist - Title"), 70, QStringLiteral("C+")),
+            row(Kind::Block, QStringLiteral("3:00 @ 200-250 Watts"), 60, QStringLiteral("D"),
+                QStringLiteral("ended early"), true),
+            row(Kind::Block, QStringLiteral("Free Ride"), 88, QStringLiteral("A-"))};
+}
+
+// The grade list's kinds of rows, and the average
+QWidget* sceneGradeList() {
+    auto* grades = new GradeList;
+    grades->setRows(gradeRows(), 85.3);
+    return shown(grades, 600, 500);
+}
+
+// The grade list scrolled, with "more..." above and below
+QWidget* sceneGradeListScrolled() {
+    auto* grades = new GradeList;
+    grades->setRows(gradeRows() + gradeRows() + gradeRows(), 85.3);
+    grades->scrollTo(4);
+    return shown(grades, 600, 400);
+}
+
+// The workout screen's timer bar part of the way along, between pixels
+QWidget* sceneSmoothBar() {
+    auto* bar = new SmoothProgressBar;
+    bar->setRange(0, 100 * 600);
+    bar->setTextVisible(false);
+    bar->setFraction(0.4373);
+    bar->setBarColors(QColor(QStringLiteral("#1f15e1")), QColor(QStringLiteral("#bdd6de")));
+    return shown(bar, 301, 34);
+}
+
+// The coming up list, longer than fits: scrolled one down, "more..." above and below
+QWidget* sceneLongLabels() {
+    const QStringList lines = {"5:00 @ 150 Watts", "1:00 @ 300 Watts", "2:00 @ 120 Watts", "3:00 @ 200-250 Watts",
+                               "Free Ride",        "4:00 @ 180 Watts", "0:30 @ 400 Watts", "6:00 @ 90 Watts",
+                               "2:00 @ 260 Watts", "1:00 @ 140 Watts"};
+    auto* labels = new LongVLabels(appState().ftpRanges);
+    labels->setFullText(lines.join(u'\n') + u'\n');
+    shown(labels, 500, 300);
+    labels->scrollTo(1);
+    settle();
+    return labels;
+}
+
 const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("hud_graph"), sceneHudGraph},
+    {QStringLiteral("power_gauge"), scenePowerGauge},
+    {QStringLiteral("cadence_gauge"), sceneCadenceGauge},
+    {QStringLiteral("cadence_mode_gauge"), sceneCadenceModeGauge},
+    {QStringLiteral("hr_gauge"), sceneHrGauge},
+    {QStringLiteral("power_spiral"), scenePowerSpiral},
+    {QStringLiteral("grade_overlay"), sceneGradeOverlay},
+    {QStringLiteral("grade_list"), sceneGradeList},
+    {QStringLiteral("grade_list_scrolled"), sceneGradeListScrolled},
+    {QStringLiteral("smooth_bar"), sceneSmoothBar},
+    {QStringLiteral("long_labels"), sceneLongLabels},
 };
 
 }  // namespace
@@ -249,8 +488,13 @@ const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     const QString outDir = argc > 1 ? QDir::current().absoluteFilePath(QString::fromLocal8Bit(argv[1])) : QDir::currentPath();
-    // (in the Python app's folder, as render_python.py runs: its defaultTheme.json)
-    QDir::setCurrent(QStringLiteral(AWO_PYTHON_APP_DIR));
+    // in a folder of its own with the Python app's defaultTheme.json (render_python.py runs in the app's folder), so
+    // the settings it changes are its own
+    QTemporaryDir workDir;
+    QDir::setCurrent(workDir.path());
+    QFile::copy(QStringLiteral(AWO_PYTHON_APP_DIR "/defaultTheme.json"), QStringLiteral("defaultTheme.json"));
+    // (no needle easing: drawn right at the reading)
+    Performance::current().setGaugeFps(0);
     theme::setDefaultFont(QApplication::font());
     theme::setAppStyleSheet(style::kAppStyleSheet);
     theme::clear();
