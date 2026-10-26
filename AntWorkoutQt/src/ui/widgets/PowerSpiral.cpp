@@ -116,6 +116,8 @@ const QList<BinValue>& Timeline::values() const {
 PowerSpiral::PowerSpiral(QWidget* parent) : QWidget(parent) {
     setMinimumSize(QSize(60, 60));
     clear();
+    // (LayoutViewer lists them with the colors a theme can change)
+    theme::setPaintedColors(this, {kTrackColor, kLineColor});
     // (drawn in the theme's text color, and the zone colors)
     connect(&theme::notifier(), &theme::Notifier::changed, this, qOverload<>(&QWidget::update));
     connect(&zones::notifier(), &zones::Notifier::changed, this, qOverload<>(&QWidget::update));

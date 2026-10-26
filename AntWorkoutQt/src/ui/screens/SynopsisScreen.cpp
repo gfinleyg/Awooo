@@ -488,6 +488,8 @@ SynopsisScreen::SynopsisScreen(ant::AntBridge* bridge, SetupScreen* setup, Clock
     connect(selectionTimer_, &QTimer::timeout, this, &SynopsisScreen::updateSelection);
     // the max markers' stars: riding to a new max, or twinkling at rest
     starTimer_ = new QTimer(this);
+    // (LayoutViewer lists them with the colors a theme can change)
+    theme::setPaintedColors(this, {MaxStar::kColor, MaxStar::kEdgeColor});
     starTimer_->setInterval(MaxStar::kStepMs);
     connect(starTimer_, &QTimer::timeout, this, &SynopsisScreen::animateStars);
     starTimer_->start();
@@ -939,7 +941,9 @@ void SynopsisScreen::fixSize() {
     if (!isVisible()) {
         return;
     }
-    window()->showMaximized();
+    if (!keepWindowSize_) {
+        window()->showMaximized();
+    }
     QTimer::singleShot(0, this, &SynopsisScreen::layoutMaxLabels);
 }
 

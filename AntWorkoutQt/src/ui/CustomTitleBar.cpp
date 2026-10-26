@@ -18,6 +18,7 @@
 #include "Logger.hpp"
 #include "SavedSettings.hpp"
 #include "Theme.hpp"
+#include "ThemeSelectDialog.hpp"
 
 namespace awo {
 
@@ -41,25 +42,10 @@ const QString kMenuStyle = QStringLiteral(R"(
 }  // namespace
 
 std::function<void(QWidget*)>& CustomTitleBar::themePicker() {
-    // (until the theme picker is built: any theme, colors or gradients file)
+    // (see ThemeSelectDialog)
     static std::function<void(QWidget*)> picker = [](QWidget* parent) {
-        const QString path = QFileDialog::getOpenFileName(parent, QStringLiteral("Pick Theme"), theme::themesDir(),
-                                                          QStringLiteral("Theme files (*.json)"));
-        if (path.isEmpty()) {
-            return;
-        }
-        try {
-            const QString kind = theme::loadFile(path);
-            if (kind == u"theme") {
-                settings::update({{QStringLiteral("themeFile"), path}, {QStringLiteral("themePartFiles"), QJsonObject()}});
-            } else {
-                QJsonObject parts = settings::load().value(QStringLiteral("themePartFiles")).toObject();
-                parts.insert(kind, path);
-                settings::update({{QStringLiteral("themePartFiles"), parts}});
-            }
-        } catch (const theme::ThemeError& e) {
-            log::event(QStringLiteral("ERROR"), QStringLiteral("Failed to load theme %1: %2").arg(path, QString::fromUtf8(e.what())));
-        }
+        ThemeSelectDialog dialog(parent);
+        dialog.exec();
     };
     return picker;
 }

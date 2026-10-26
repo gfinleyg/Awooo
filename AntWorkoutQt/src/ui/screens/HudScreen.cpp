@@ -613,6 +613,8 @@ void HudScreen::buildGraph() {
         maxBubbles_.append(bubble);
     }
     connect(progressGraph_->vb(), &plot::ViewBox::resized, this, &HudScreen::fitGraphTops);
+    // (LayoutViewer lists them with the colors a theme can change)
+    theme::setPaintedColors(this, {MaxStar::kColor, MaxStar::kEdgeColor, theme::kPlotLabelBg});
     graphLayout->addWidget(progressGraph_);
     hudLayout_->addLayout(graphLayout, 20, 0, 4, 30);
 }
@@ -845,6 +847,10 @@ void HudScreen::stopReadings() {
     if (readings_) {
         readings_->stop();
     }
+}
+
+void HudScreen::detachFromColors() {
+    disconnect(&zones::notifier(), nullptr, this, nullptr);
 }
 
 void HudScreen::stopTimers() {

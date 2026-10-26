@@ -173,6 +173,17 @@ public:
     // a reading on the gauges and speed/distance, as the simulated ride shows it (the distance from the revolutions
     // its speed made)
     void showSimulatedReading(const RiderReading& reading);
+    // (LayoutViewer's Play) the workout going on live from where a simulated ride left it: its own timers, the silent
+    // music's clock in real time; off: frozen where it's got to
+    void playOn(bool on);
+    // while playing: a second's reading from the rider, as the readings pipeline would give it
+    void playReading(SimulatedRider& rider);
+    // a timed .awo message's line, as the workout shows it (empty: none)
+    void setWorkoutMessage(const QString& text);
+    // (the theme picker's preview, redrawn in a ride sandbox of its own: not along with the app's screens) the zone
+    // colors no longer followed by themselves, and followed now
+    void detachFromColors();
+    void refreshColors() { refreshFtpColors(); }
     // a silent stand-in for Musical Cadence Mode's music, its clock moved on by hand (simulated rides, tests; none:
     // the real music)
     void simulateMusic(std::optional<double> seconds) { simulatedMusic_ = seconds; }
@@ -265,7 +276,6 @@ private:
     void updateUpNextRemaining();
     void updateRequestedPowerDisplays();
     void updateWorkoutMessage();
-    void setWorkoutMessage(const QString& text);
     void fitBetweenGauges(QLabel* label, const QString& style, int points, int lines, const QString& text);
     void showWorkoutGrades(bool show);
     void showEffortAverage();
@@ -407,6 +417,11 @@ private:
     QString songTitle_;
     // a simulated ride's music: no sound, its clock moved on a second a tick (PreviewRide's ViewerMusicPlayer)
     std::optional<double> simulatedMusic_;
+    // (playing on live: the silent music's clock runs, from musicSince_ on the screen's clock)
+    bool simulatedMusicRunning_ = false;
+    bool simulatedMusicPaused_ = false;
+    double musicSince_ = 0;
+    void catchUpSimulatedMusic();
     // (off while a simulated ride runs: it's drawn once, at the end)
     bool graphUpdates_ = true;
     double simulatedRevolutions_ = 0;

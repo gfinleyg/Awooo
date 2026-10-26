@@ -52,7 +52,8 @@ class MusicSelectDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit MusicSelectDialog(QWidget* parent = nullptr);
+    // savedSongs: last time's songs listed (LayoutViewer lists its own)
+    explicit MusicSelectDialog(QWidget* parent = nullptr, bool savedSongs = true);
     ~MusicSelectDialog() override;
 
     // (path, title or none for the file's) songs not already listed, checked unless checked says otherwise
@@ -86,17 +87,20 @@ public slots:
     void accept() override;
     void reject() override;
 
+protected:
+    // the songs not analyzed yet, in the background; what's picked kept for next time (LayoutViewer: neither)
+    virtual void analyze(const QStringList& paths);
+    virtual void save();
+    QList<QListWidgetItem*> items() const;
+
 private:
     void addFolder();
     void addSongs();
     void addPlaylist();
-    void analyze(const QStringList& paths);
     void analysisProgress(int done, int total);
     void analysisDone(const QHash<QString, music::Analysis>& results);
     void stopAnalysis();
-    QList<QListWidgetItem*> items() const;
     bool usable(QListWidgetItem* item) const;
-    void save();
 
     AnalysisThread* thread_ = nullptr;
     QStringList pending_;

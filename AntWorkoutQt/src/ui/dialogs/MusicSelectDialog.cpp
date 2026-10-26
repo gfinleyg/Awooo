@@ -45,7 +45,7 @@ void AnalysisThread::run() {
     emit analyzed(results);
 }
 
-MusicSelectDialog::MusicSelectDialog(QWidget* parent) : QDialog(parent) {
+MusicSelectDialog::MusicSelectDialog(QWidget* parent, bool savedSongs) : QDialog(parent) {
     qRegisterMetaType<QHash<QString, music::Analysis>>();
     auto* titleBar =
         framed(this, QStringLiteral("musicSelectWindow"), QStringLiteral("   Musical Cadence: Pick Songs   "), {}, false);
@@ -184,7 +184,7 @@ MusicSelectDialog::MusicSelectDialog(QWidget* parent) : QDialog(parent) {
     minSegment_->setValue(saved.value(QStringLiteral("musicMinSegment")).toInt(static_cast<int>(music::kDefaultMinSegmentSeconds)));
     QList<std::pair<QString, std::optional<QString>>> songs;
     QSet<QString> checked;
-    for (const music::SelectedSong& song : music::loadSelection()) {
+    for (const music::SelectedSong& song : savedSongs ? music::loadSelection() : QList<music::SelectedSong>()) {
         if (QFileInfo(song.path).isFile()) {
             songs.append({song.path, song.title});
         }

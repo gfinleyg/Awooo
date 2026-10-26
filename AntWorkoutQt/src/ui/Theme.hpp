@@ -137,6 +137,9 @@ double layoutShrink(const QWidget* widget);
 // The layout scale for a widget: 1 for widgets marked exempt (LayoutViewer's controls), less in a shrunk popup
 double widgetScale(const QWidget* widget);
 void setExempt(QWidget* widget, bool exempt = true);
+// The colors a widget paints itself in through the theme (LayoutViewer lists them with the colors a theme can change)
+void setPaintedColors(QWidget* widget, const QStringList& colors);
+QStringList paintedColors(const QWidget* widget);
 
 void setAppStyleSheet(const QString& sheet);
 QString appStyleSheet();

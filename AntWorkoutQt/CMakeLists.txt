@@ -48,6 +48,7 @@ add_subdirectory(src/music)
 add_subdirectory(src/plot)
 add_subdirectory(src/ui)
 add_subdirectory(src/app)
+add_subdirectory(src/viewer)
 add_subdirectory(src/tools)
 add_subdirectory(hwtests)
 

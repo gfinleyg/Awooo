@@ -838,7 +838,119 @@ def scene_cadence_screen():
     return in_work_folder(build)
 
 
+
+def fusion(widget):
+    """The widget and everything in it in Qt's Fusion style, as ColorPicker.exe runs"""
+    from PyQt6.QtWidgets import QStyleFactory
+    style = QStyleFactory.create("Fusion")
+    widget._fusion = style
+    for child in [widget] + widget.findChildren(QWidget):
+        child.setStyle(style)
+
+
+def scene_color_picker():
+    """ColorPicker.py's window at QColor(200, 200, 200, 130)"""
+    import ColorPicker
+    def build():
+        picker = ColorPicker.ColorPicker(200, 200, 200, 130)
+        fusion(picker)
+        return shown(picker, 360, 460)
+    return in_work_folder(build)
+
+
+def scene_ftp_colors_tab():
+    """LayoutViewer's FTP Colors tab at 700x460"""
+    import FtpColorsEditor
+    def build():
+        AppState.ftp = "250"
+        return shown(FtpColorsEditor.FtpColorsTab(), 700, 460)
+    return in_work_folder(build)
+
+
+def scene_ftp_mockup():
+    """The FTP Colors mockup window at FTP 250, 230 W, at 1000x900"""
+    import FtpColorsEditor
+    def build():
+        AppState.ftp = "250"
+        window = shown(FtpColorsEditor.FtpMockupWindow(), 1000, 900)
+        #(the point at buttons each refresh replaced, gone)
+        from PyQt6.QtCore import QEvent
+        app.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+        app.processEvents()
+        return window
+    return in_work_folder(build)
+
+
+
+def scene_theme_picker():
+    """The theme picker over the shipped themes, the base theme picked, its workout screen preview drawn"""
+    import shutil
+    from ClassThemeSelectWindow import ThemeSelectWindow
+    from ClassWorkoutSetupWindow import WorkoutSetupWindow
+    _, Parent = stub_classes()
+
+    def build():
+        os.makedirs("awoWorkouts", exist_ok=True)
+        shutil.copy(os.path.join(APP_DIR, "awoWorkouts", "0_Little_bit_of_everything.awo"), "awoWorkouts")
+        setup = WorkoutSetupWindow(Parent())
+        setup.timer.stop()
+        setup.blinkTimer.stop()
+        owner = QWidget()
+        owner.setupWidget = setup
+        dialog = ThemeSelectWindow(owner)
+        dialog._owner = owner
+        AppTheme.apply()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen)
+        dialog.show()
+        for _ in range(3):
+            app.processEvents()
+        dialog.build_preview()
+        for _ in range(3):
+            app.processEvents()
+        return dialog
+    return in_work_folder(build)
+
+
+def viewer_scene(view):
+    """LayoutViewer's display window in Workout Mode with the preview workout, 40% of the way through, laid out for
+    1920x1152 (the design size less the taskbar) and showing view; what moves by itself stopped where it is"""
+    import AppLayout
+    import LayoutViewer
+
+    def build():
+        display = LayoutViewer.DisplayWindow(AppStyle.APP_STYLESHEET)
+        display.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen)
+        display.build("workout", os.path.join(APP_DIR, "awoWorkouts", "0_Little_bit_of_everything.awo"), 40)
+        available = (1920, 1152)
+        display.maximizedMode = False
+        display.resize(*available)
+        display.show()
+        AppLayout.apply_layout(display, display.views, AppLayout.scale_for(available), available)
+        display.show_view(view)
+        for _ in range(3):
+            app.processEvents()
+        hud = display.views["Workout"]
+        hud.stop_timers()
+        hud.gradeOverlay.timer.stop()
+        hud.cadenceGaugeDisplay.ui.svg.spinTimer.stop()
+        hud.hrGaugeDisplay.ui.svg.beatTimer.stop()
+        rest_stars([star for star, _ in hud.maxStars], hud.maxBubbles)
+        synopsis = display.views["Synopsis"]
+        synopsis.starTimer.stop()
+        synopsis.selectionTimer.stop()
+        if view == "Synopsis":
+            synopsis.layout_max_labels()
+            for phase, marker in enumerate(synopsis.maxMarkers):
+                marker["star"].step(((3 + phase)*math.pi - phase*2.1)/3.6, phase)
+        for _ in range(3):
+            app.processEvents()
+        return display
+    return in_work_folder(build)
+
+
 SCENES = {name[len("scene_"):]: fn for name, fn in globals().items() if name.startswith("scene_")}
+SCENES.update({f"viewer_{view.lower().replace(' ', '_')}": (lambda v=view: viewer_scene(v))
+               for view in ("Init", "Workout", "Synopsis", "Music Picker", "Workout Picker")})
 
 
 def main():

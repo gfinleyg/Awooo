@@ -35,6 +35,12 @@ Python app's own results (`tests\golden\`).
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".
 
+## LayoutViewer
+
+- **The app's picked devices are put back when LayoutViewer closes.** Its views are built with stand-in devices
+  picked, which the Python viewer left in the app's selected devices file, so the app looked for devices that weren't
+  there the next time it started.
+
 ## Settings and log
 
 - **savedSettingsANT.json is written with its keys sorted and 4-space indents** (Qt's JSON writer). The values are the

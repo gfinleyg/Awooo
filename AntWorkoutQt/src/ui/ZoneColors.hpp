@@ -11,6 +11,7 @@
 #include <QColor>
 #include <QObject>
 #include <QPen>
+#include <QSet>
 #include <QString>
 
 #include <optional>
@@ -38,6 +39,8 @@ void setFreeColor(const std::optional<QString>& color);
 bool isDefaultZone(int zone);
 bool isDefaultFree();
 bool isDefault();
+// every zone color and the free ride color in use, as "#rrggbb"
+QSet<QString> allColors();
 
 // ---- The palette fitted to the theme ----
 

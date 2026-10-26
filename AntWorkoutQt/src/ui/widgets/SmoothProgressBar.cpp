@@ -25,6 +25,13 @@ QColor SmoothProgressBar::chunkColor() const {
     return themed_ ? theme::current().mapColor(chunkColor_) : chunkColor_;
 }
 
+std::optional<std::pair<QColor, QColor>> SmoothProgressBar::originalBarColors() const {
+    if (!themed_) {
+        return std::nullopt;
+    }
+    return std::pair{chunkColor_, barColor_};
+}
+
 QColor SmoothProgressBar::barColor() const {
     return themed_ ? theme::current().mapColor(barColor_) : barColor_;
 }

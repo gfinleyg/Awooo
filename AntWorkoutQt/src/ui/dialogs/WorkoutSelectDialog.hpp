@@ -72,6 +72,10 @@ public slots:
     void accept() override;
     void reject() override;
 
+protected:
+    // the list and the pick kept for next time (LayoutViewer's doesn't)
+    virtual void save();
+
 private:
     void addFolder();
     void addFiles();
@@ -80,7 +84,6 @@ private:
     void showPreview(QListWidgetItem* item);
     void updateSummary();
     QString itemText(const QString& path) const;
-    void save();
 
     QHash<QString, WorkoutPreview> previews_;
     QListWidget* list_;

@@ -1258,6 +1258,40 @@ void HudScreen::showSimulatedReading(const RiderReading& reading) {
     setDistance(py::round(appState().wheelCircumference * simulatedRevolutions_ * 0.000621371, 2));
 }
 
+void HudScreen::playOn(bool on) {
+    if (on) {
+        if (cadenceMode_ && !simulatedMusic_) {
+            simulatedMusic_ = engine_->workoutSecondsPassed();
+        }
+        lastTimestamp_ = steadySeconds(clock_);
+        musicSince_ = lastTimestamp_;
+        simulatedMusicRunning_ = true;
+        timer_->start();
+        if (smoothBarTimer_) {
+            smoothBarTimer_->start();
+        }
+    } else {
+        catchUpSimulatedMusic();
+        simulatedMusicRunning_ = false;
+        timer_->stop();
+        if (smoothBarTimer_) {
+            smoothBarTimer_->stop();
+        }
+    }
+}
+
+void HudScreen::playReading(SimulatedRider& rider) {
+    AppState& state = appState();
+    const double asked = state.workoutMode ? engine_->currentPower() : currentPower_;
+    const RiderReading reading = rider.sample(state.secondsPassed, asked, state.ftp, cadenceMode_);
+    // (the workout's own pause holds the ride)
+    if (!state.workoutMode || engine_->unpaused()) {
+        simulatedRevolutions_ += reading.speedMph / 2.23694 / state.wheelCircumference;
+        saveSimulatedReading(state.secondsPassed, reading);
+    }
+    showSimulatedReading(reading);
+}
+
 }  // namespace awo
 
 namespace awo {
@@ -1286,8 +1320,20 @@ void HudScreen::musicStart() {
     }
 }
 
+void HudScreen::catchUpSimulatedMusic() {
+    if (!simulatedMusic_ || !simulatedMusicRunning_) {
+        return;
+    }
+    const double now = steadySeconds(clock_);
+    if (!simulatedMusicPaused_) {
+        *simulatedMusic_ += now - musicSince_;
+    }
+    musicSince_ = now;
+}
+
 std::optional<double> HudScreen::musicSeconds() {
     if (simulatedMusic_) {
+        catchUpSimulatedMusic();
         return *simulatedMusic_;
     }
     if (!musicPlayer_) {
@@ -1303,6 +1349,8 @@ std::optional<double> HudScreen::musicSeconds() {
 }
 
 void HudScreen::musicPause(bool paused) {
+    catchUpSimulatedMusic();
+    simulatedMusicPaused_ = paused;
     if (musicPlayer_) {
         musicPlayer_->paused = paused;
     }

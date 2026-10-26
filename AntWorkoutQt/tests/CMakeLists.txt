@@ -1,4 +1,4 @@
-# Qt Test exes, run headless by ctest (PLAN.md D9). Each test runs with Qt's bin folder on PATH, as the build folder
+﻿# Qt Test exes, run headless by ctest (PLAN.md D9). Each test runs with Qt's bin folder on PATH, as the build folder
 # has no Qt DLLs of its own (only dist\ does, see build_windows.ps1).
 set(AWO_QT_BIN "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}")
 
@@ -39,14 +39,18 @@ foreach(test ant_bridge reading_pipeline)
 endforeach()
 
 # awo_ui, built offscreen
-foreach(test theme key_shortcuts layout plot widgets setup hud synopsis app_flow)
+foreach(test theme key_shortcuts layout plot widgets setup hud synopsis app_flow theme_picker)
     awo_add_test(tst_${test} tst_${test}.cpp FakeAnt.hpp)
     target_link_libraries(tst_${test} PRIVATE awo_ui)
 endforeach()
 
+# LayoutViewer (awo_viewer), built offscreen
+awo_add_test(tst_layout_viewer tst_layout_viewer.cpp)
+target_link_libraries(tst_layout_viewer PRIVATE awo_viewer)
+
 # the side by side check against the Python app's widgets (parity/render_python.py renders the Python side)
 add_executable(render_widgets parity/render_widgets.cpp)
-target_link_libraries(render_widgets PRIVATE awo_ui)
+target_link_libraries(render_widgets PRIVATE awo_viewer)
 target_compile_definitions(render_widgets PRIVATE AWO_PYTHON_APP_DIR="${AWO_PYTHON_APP}")
 target_include_directories(render_widgets PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 awo_target_defaults(render_widgets)

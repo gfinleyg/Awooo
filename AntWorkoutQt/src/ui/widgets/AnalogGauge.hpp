@@ -48,6 +48,8 @@ public:
     double reading() const { return reading_; }
     // where the needle is drawn now, easing toward value()
     double displayValue() const { return displayValue_; }
+    // the needle straight to value(), not on its way there (a picture of the gauge)
+    void snapNeedle();
     void setMinValue(double min);
     void setMaxValue(double max);
     double minValue() const { return minValue_; }

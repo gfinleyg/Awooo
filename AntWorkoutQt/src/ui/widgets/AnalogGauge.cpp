@@ -95,6 +95,12 @@ void AnalogGauge::setValue(double value) {
     emit valueChanged(static_cast<int>(value));
 }
 
+void AnalogGauge::snapNeedle() {
+    needleTimer_->stop();
+    displayValue_ = value_;
+    redrawFrame();
+}
+
 void AnalogGauge::applyPerformance() {
     const int fps = Performance::current().gaugeFps();
     if (fps == 0) {

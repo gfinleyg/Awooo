@@ -11,6 +11,8 @@ add_library(awo_ui STATIC
     KeyShortcuts.hpp
     MainWindow.cpp
     MainWindow.hpp
+    PreviewRide.cpp
+    PreviewRide.hpp
     SoundEffects.cpp
     SoundEffects.hpp
     Theme.cpp
@@ -25,6 +27,8 @@ add_library(awo_ui STATIC
     dialogs/DeviceDialogs.hpp
     dialogs/MusicSelectDialog.cpp
     dialogs/MusicSelectDialog.hpp
+    dialogs/ThemeSelectDialog.cpp
+    dialogs/ThemeSelectDialog.hpp
     dialogs/WorkoutSelectDialog.cpp
     dialogs/WorkoutSelectDialog.hpp
     screens/HudScreen.cpp
@@ -36,6 +40,9 @@ add_library(awo_ui STATIC
     screens/SynopsisScreen.hpp
     widgets/AnalogGauge.cpp
     widgets/AnalogGauge.hpp
+    widgets/ColorPicker.hpp
+    widgets/FtpColorsEditor.cpp
+    widgets/FtpColorsEditor.hpp
     widgets/GradeWidgets.cpp
     widgets/GradeWidgets.hpp
     widgets/LongVLabels.cpp

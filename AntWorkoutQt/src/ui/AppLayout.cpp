@@ -672,4 +672,12 @@ QWidget* mainWindow() {
     return window_;
 }
 
+void scaleSizes(QWidget* root) {
+    applySizes(root);
+}
+
+void settle(QWidget* root) {
+    settleLayouts(root);
+}
+
 }  // namespace awo::layout

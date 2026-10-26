@@ -30,6 +30,9 @@ Built beside the app (`build\Release\bin`, and `dist\AntWorkout\`):
 |--------------------|--------------------------------------------------------------------------------------|
 | `awo-verifier.exe` | Checks `.awo` files with the app's own reader, every bad line reported (files or folders, the current folder by default) |
 | `zwo2awo.exe`      | Converts Zwift `.zwo` files to `.awo` files beside them (files or folders, the current folder by default) |
+| `LayoutViewer.exe` | Every screen in every mode without an ANT stick, at any screen size, with its fonts and colors edited live and saved as a theme (`--directwrite`: DirectWrite fonts) |
+| `FtpColorsEditor.exe` | LayoutViewer's FTP Colors tab and mockup on their own: the power zone and free ride colors, saved as a gradients file |
+| `ColorPicker.exe`  | An RGBA color picker (`ColorPicker.exe r g b a` to start from a color) |
 
 ## Tests
 
@@ -56,7 +59,10 @@ py -3.10 tests\parity\compare.py %TEMP%\py %TEMP%\cpp %TEMP%\diff
 ```
 
 Both run in `..\AntWorkout` (its `defaultTheme.json`) on the real Windows platform, not offscreen, so the fonts render
-as they do on screen. Run `render_widgets.exe` with Qt's bin folder on PATH.
+as they do on screen. Run `render_widgets.exe` with Qt's bin folder on PATH. The `viewer_*` scenes are LayoutViewer's
+views; its workout and synopsis ones also show what runs on the clock (the heart's beat, the synopsis' ride start of
+two hours before), so they only match when both sides are rendered within the same minute, and even then not the
+heart.
 
 ### Hardware tests with SimulANT+
 

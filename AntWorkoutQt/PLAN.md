@@ -414,7 +414,28 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
 - Port the music cadence tests (32), plus the golden comparisons in §4.5.
 - **Done when:** golden fixtures match within tolerance, and a cadence ride with real songs plays and stays in step.
 
-### Phase 9: themes picker, LayoutViewer, tools
+### Phase 9: themes picker, LayoutViewer, tools (done)
+- Done: `ui/dialogs/ThemeSelectDialog` (the colors and gradients lists tried on the app as they're picked, Cancel
+  back to the look from before, Use This Look saved) with its workout screen preview (`ui/PreviewRide`: the stand-in
+  bridge, a ride's own AppState and WorkoutData, the screen 40% through the preview workout drawn offscreen), on the
+  title bar's Pick Theme. `src/viewer` (awo_viewer, `LayoutViewer.exe`): the display window with every view built in
+  every mode on the stand-in bridge (Musical Cadence Mode on the made-up songs), Play, the simulated screen sizes and
+  fit report, screenshots and Capture all sizes, the Fonts, Colors (every color once, gradients kept together, a
+  click on the display identifying what's there) and Scenario tabs, the FTP Colors tab and its mockup window, and the
+  theme files. `ui/widgets/FtpColorsEditor` with `FtpColorsEditor.exe`, and `ui/widgets/ColorPicker.hpp` with
+  `ColorPicker.exe`.
+- The screens gained what the viewer needs and nothing the app shows: the colors a widget paints itself
+  (theme::setPaintedColors), the setup screen's settings shown unsaved and a made-up music ride, pickers that don't
+  save, a synopsis that leaves the window's size alone, the workout screen played on live.
+- Pixel checks (tests/parity): the theme picker with its preview, the color picker, the FTP Colors tab and the mockup
+  are identical to the Python app's; so are the viewer's setup, song picker and workout picker views
+  (`viewer_init`, `viewer_music_picker`, `viewer_workout_picker`). Its workout and synopsis views match but for what
+  runs on the clock (the heart's beat, the max bubbles fading in, and the synopsis' best sustained powers, which
+  shift with the ride's start time, two hours before it's built, in both apps) and the curves' usual pixels.
+- Tests: tst_theme_picker (5, the Python app's 4 among them), tst_layout_viewer (10). golden/theme.json holds the
+  files the Python app saves for a set of edits (fonts, colors, a zone and the free ride color): the viewer saves the
+  same files, whole and as colors and gradients files, and loads the Python app's as the same theme, so each app
+  loads the other's themes.
 - ThemeSelectDialog with the live preview (PreviewRide, fake bridge, ride sandbox).
 - LayoutViewer: every screen and mode without a stick, font/colour/theme editing, save as default, scenarios,
   screenshots.

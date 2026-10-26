@@ -1340,19 +1340,20 @@ void SetupScreen::buildMusicWorkout() {
     state.musicTracks.clear();
     state.musicSongStarts.clear();
     state.musicPulses.clear();
-    if (!musicSelection_) {
+    if (!musicSelection_ && !musicBuilder_) {
         musicSelection_ = savedMusicSelection();
     }
-    if (!musicSelection_) {
+    if (!musicSelection_ && !musicBuilder_) {
         layout::setText(workoutFileSelected_, QStringLiteral("Music not picked"));
         layout::setText(workoutInfo_, QString());
         workoutDisplayLabel_->setFullText(QString());
         workoutDisplayLabel_->hide();
         return;
     }
-    const MusicSelection& selection = *musicSelection_;
+    const MusicSelection selection = musicSelection_.value_or(MusicSelection{});
     const music::CadenceRide ride =
-        music::buildWorkout(selection.songs, selection.analyses, selection.preferred, selection.minSegment);
+        musicBuilder_ ? musicBuilder_(selection)
+                      : music::buildWorkout(selection.songs, selection.analyses, selection.preferred, selection.minSegment);
     music::applyRide(ride);
     const auto songCount = ride.tracks.size();
     applyCadenceRanges();
@@ -1436,6 +1437,40 @@ bool SetupScreen::eventFilter(QObject* watched, QEvent* event) {
         initializationWidget_->setFixedHeight(centerInitWidget_->height());
     }
     return QWidget::eventFilter(watched, event);
+}
+
+void SetupScreen::useSettings(double wheelCircumference, int ftp, int maxHr) {
+    AppState& state = appState();
+    if (state.wheelCircumference == 0) {
+        state.wheelCircumference = wheelCircumference;
+        wheelText_ = py::str(wheelCircumference);
+    }
+    if (state.ftp == 0) {
+        state.ftp = ftp;
+    }
+    if (state.maxHr == 0) {
+        state.maxHr = maxHr;
+    }
+    getFtpRanges();
+    // (none saved, and no saved FTP to default it from)
+    if (state.powerDriveCutoff == 0) {
+        defaultPowerDriveCutoff();
+    }
+    updateMaxWattsMode();
+    layout::setText(displayWheelC_, wheelText_ + u'm');
+    layout::setText(displayFtp_, QString::number(state.ftp) + QStringLiteral(" Watts"));
+    layout::setText(displayMaxHr_, QString::number(state.maxHr) + QStringLiteral(" BPM"));
+}
+
+void SetupScreen::settleBlink() {
+    for (bool* on : {&powerButtonBlinkOn_, &hrButtonBlinkOn_, &spdCadButtonBlinkOn_, &connectButtonBlinkOn_,
+                     &wheelCTextBlinkOn_, &wheelCButtonBlinkOn_, &maxHrTextBlinkOn_, &maxHrButtonBlinkOn_,
+                     &ftpTextBlinkOn_, &ftpButtonBlinkOn_, &workoutSelectBlinkOn_, &startButtonBlinkOn_,
+                     &disconnectButtonBlinkOn_}) {
+        *on = true;
+    }
+    // (setupBlink turns each over: off)
+    setupBlink();
 }
 
 void SetupScreen::checkEnableStartButton() {

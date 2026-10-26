@@ -448,6 +448,14 @@ void setExempt(QWidget* widget, bool exempt) {
     widget->setProperty(kExemptProperty, exempt);
 }
 
+void setPaintedColors(QWidget* widget, const QStringList& colors) {
+    widget->setProperty("awoPaintedColors", colors);
+}
+
+QStringList paintedColors(const QWidget* widget) {
+    return widget->property("awoPaintedColors").toStringList();
+}
+
 void setAppStyleSheet(const QString& sheet) {
     appSheet = sheet;
     appSheetSet = true;

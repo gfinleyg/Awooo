@@ -21,6 +21,8 @@ public:
     void setBarColors(const QColor& chunkColor, const QColor& barColor);
     QColor chunkColor() const;
     QColor barColor() const;
+    // the colors setBarColors was given, before the theme (none: it never was)
+    std::optional<std::pair<QColor, QColor>> originalBarColors() const;
     // the smooth position, 0 - 1
     void setFraction(double fraction);
     std::optional<double> fraction() const { return fraction_; }

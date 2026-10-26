@@ -12,8 +12,10 @@
 #include <QSizePolicy>
 #include <QWidget>
 
+#include <functional>
 #include <optional>
 
+#include "CadenceWorkout.hpp"
 #include "MusicSelectDialog.hpp"
 #include "WorkoutTypes.hpp"
 
@@ -65,6 +67,17 @@ public:
     // the ride built from them
     void setMusicSelection(const std::optional<MusicSelection>& selection);
     const std::optional<MusicSelection>& musicSelection() const { return musicSelection_; }
+
+    // ---- LayoutViewer ----
+
+    // the rider's settings still unset as these, shown (not saved)
+    void useSettings(double wheelCircumference, int ftp, int maxHr);
+    // every blinking control in its normal (not blinked) look
+    void settleBlink();
+    // Musical Cadence Mode's ride built by this instead of from the songs (none: from the songs; with one, no songs
+    // need picking)
+    using MusicBuilder = std::function<music::CadenceRide(const MusicSelection&)>;
+    void setMusicBuilder(MusicBuilder builder) { musicBuilder_ = std::move(builder); }
 
     // (tests, LayoutViewer)
     QPushButton* powerButton() const { return powerButton_; }
@@ -238,6 +251,7 @@ private:
     QTimer* blinkTimer_;
     QPointer<QWidget> popup_;
     std::optional<MusicSelection> musicSelection_;
+    MusicBuilder musicBuilder_;
 };
 
 }  // namespace awo

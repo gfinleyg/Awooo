@@ -6,6 +6,7 @@
 // Scenes are listed in kScenes below; all of them by default.
 
 #include <QApplication>
+#include <QStyleFactory>
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -25,9 +26,11 @@
 #include "AppLayout.hpp"
 #include "CadenceWorkout.hpp"
 #include "FtpColors.hpp"
+#include "FtpColorsEditor.hpp"
 #include "MusicSelectDialog.hpp"
 #include "AppState.hpp"
 #include "CalibratePowerWindow.hpp"
+#include "ColorPicker.hpp"
 #include "DeviceDialogs.hpp"
 #include "WorkoutSelectDialog.hpp"
 #include "FakeAnt.hpp"
@@ -48,7 +51,10 @@
 #include "PyCompat.hpp"
 #include "PlotItems.hpp"
 #include "SolidColoredColumns.hpp"
+#include "PreviewRide.hpp"
 #include "Theme.hpp"
+#include "ThemeSelectDialog.hpp"
+#include "ViewerDisplay.hpp"
 #include "WorkoutGraph.hpp"
 #include "WorkoutHelpers.hpp"
 #include "ZoneColors.hpp"
@@ -916,6 +922,115 @@ QWidget* sceneCadenceScreen() {
     return holder;
 }
 
+// the widget and everything in it in Qt's Fusion style, as ColorPicker.exe runs
+void fusion(QWidget* widget) {
+    static QStyle* style = QStyleFactory::create(QStringLiteral("Fusion"));
+    widget->setStyle(style);
+    for (QWidget* child : widget->findChildren<QWidget*>()) {
+        child->setStyle(style);
+    }
+}
+
+// ColorPicker.exe's window at QColor(200, 200, 200, 130)
+QWidget* sceneColorPicker() {
+    auto* picker = new colorpicker::ColorPicker(QColor(200, 200, 200, 130));
+    fusion(picker);
+    return shown(picker, 360, 460);
+}
+
+// LayoutViewer's FTP Colors tab at 700x460
+QWidget* sceneFtpColorsTab() {
+    appState().ftp = 250;
+    return shown(new FtpColorsTab, 700, 460);
+}
+
+// The FTP Colors mockup window at FTP 250, 230 W, at 1000x900
+QWidget* sceneFtpMockup() {
+    appState().ftp = 250;
+    QWidget* window = shown(new FtpMockupWindow, 1000, 900);
+    // (the point at buttons each refresh replaced, gone)
+    QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    settle();
+    return window;
+}
+
+// copies a folder and everything in it
+void copyTree(const QString& from, const QString& to) {
+    QDir().mkpath(to);
+    for (const QFileInfo& entry : QDir(from).entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (entry.isDir()) {
+            copyTree(entry.absoluteFilePath(), QDir(to).filePath(entry.fileName()));
+        } else {
+            QFile::copy(entry.absoluteFilePath(), QDir(to).filePath(entry.fileName()));
+        }
+    }
+}
+
+// The theme picker over the shipped themes, the base theme picked, its workout screen preview drawn
+QWidget* sceneThemePicker() {
+    writeSceneSettings();
+    copyTree(QStringLiteral(AWO_PYTHON_APP_DIR "/themes"), QStringLiteral("themes"));
+    QDir().mkpath(QStringLiteral("awoWorkouts"));
+    QFile::copy(QStringLiteral(AWO_PYTHON_APP_DIR "/") + kPreviewWorkout, kPreviewWorkout);
+    appState() = AppState();
+    appState().ftp = 250;
+    appState().ftpRanges = zones::powerRanges();
+    auto* dialog = new ThemeSelectDialog;
+    theme::apply();
+    dialog->setAttribute(Qt::WA_DontShowOnScreen);
+    dialog->show();
+    settle();
+    dialog->buildPreview();
+    settle();
+    return dialog;
+}
+
+// LayoutViewer's display window in Workout Mode with the preview workout, 40% of the way through, laid out for
+// 1920x1152 (the design size less the taskbar) and showing view; what moves by itself stopped where it is
+QWidget* viewerScene(const QString& view) {
+    // (in a folder of its own, as render_python.py builds each scene)
+    auto* folder = new QTemporaryDir;
+    const QString here = QDir::currentPath();
+    QDir::setCurrent(folder->path());
+    writeSceneSettings();
+    appState() = AppState();
+    auto* display = new viewer::DisplayWindow;
+    display->setAttribute(Qt::WA_DontShowOnScreen);
+    display->build(QStringLiteral("workout"), QStringLiteral(AWO_PYTHON_APP_DIR "/") + kPreviewWorkout, 40);
+    const QSize available(1920, 1152);
+    display->maximizedMode = false;
+    display->resize(available);
+    display->show();
+    QMap<QString, QWidget*> screens;
+    for (const auto& [name, screen] : display->views()) {
+        screens.insert(name, screen);
+    }
+    layout::applyLayout(display, screens, layout::scaleFor(available), available);
+    display->showView(view);
+    settle();
+    HudScreen* hud = display->workoutHud();
+    hud->stopTimers();
+    for (QTimer* timer : hud->gradeOverlay()->findChildren<QTimer*>()) {
+        timer->stop();
+    }
+    hud->cadenceGauge()->chainring()->spinTimer()->stop();
+    hud->heartRateGauge()->heart()->beatTimer()->stop();
+    restStars(hud->maxStars(), hud->maxBubbles());
+    auto* synopsis = qobject_cast<SynopsisScreen*>(display->view(QStringLiteral("Synopsis")));
+    for (QTimer* timer : synopsis->findChildren<QTimer*>(Qt::FindDirectChildrenOnly)) {
+        timer->stop();
+    }
+    if (view == u"Synopsis") {
+        synopsis->layoutMaxLabels();
+        for (int phase = 0; phase < synopsis->maxMarkers().size(); ++phase) {
+            synopsis->maxMarkers()[phase].star->step(((3 + phase) * std::numbers::pi - phase * 2.1) / 3.6, phase);
+        }
+    }
+    settle();
+    QDir::setCurrent(here);
+    return display;
+}
+
 const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("hud_graph"), sceneHudGraph},
     {QStringLiteral("power_gauge"), scenePowerGauge},
@@ -937,6 +1052,15 @@ const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("synopsis_screen"), sceneSynopsisScreen},
     {QStringLiteral("music_picker"), sceneMusicPicker},
     {QStringLiteral("cadence_screen"), sceneCadenceScreen},
+    {QStringLiteral("color_picker"), sceneColorPicker},
+    {QStringLiteral("ftp_colors_tab"), sceneFtpColorsTab},
+    {QStringLiteral("ftp_mockup"), sceneFtpMockup},
+    {QStringLiteral("theme_picker"), sceneThemePicker},
+    {QStringLiteral("viewer_init"), [] { return viewerScene(QStringLiteral("Init")); }},
+    {QStringLiteral("viewer_workout"), [] { return viewerScene(QStringLiteral("Workout")); }},
+    {QStringLiteral("viewer_synopsis"), [] { return viewerScene(QStringLiteral("Synopsis")); }},
+    {QStringLiteral("viewer_music_picker"), [] { return viewerScene(QStringLiteral("Music Picker")); }},
+    {QStringLiteral("viewer_workout_picker"), [] { return viewerScene(QStringLiteral("Workout Picker")); }},
 };
 
 }  // namespace

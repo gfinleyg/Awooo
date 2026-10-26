@@ -356,6 +356,27 @@ def colors_golden():
     })
 
 
+###Theme files
+def theme_golden():
+    """A theme as LayoutViewer edits one (fonts, colors, a zone's color and the free ride's), as saved whole and as
+    its colors and gradients files: the C++ app's files have to be these, so each app loads the other's"""
+    theme = AppTheme.THEME
+    theme.reset()
+    theme.fonts[AppTheme.ROLE_MAIN].update(family="Orbitron", scale=120)
+    theme.fonts[AppTheme.ROLE_BUTTON].update(scale=85, weight="700")
+    theme.colors.update({"#9fc5d1": "#123456", "#000000": "#f4f4f8"})
+    FtpColors.set_value("zones", "#00aa00", zone="2")
+    FtpColors.set_value("free", "#abcdef")
+    files = {}
+    for part in (None, "colors", "ftpColors"):
+        path = os.path.join(tempfile.mkdtemp(), "theme.json")
+        AppTheme.save_file(path, part)
+        with open(path) as f:
+            files[part or "theme"] = json.load(f)
+    theme.reset()
+    write("theme.json", files)
+
+
 def _stops(ranges, fitted):
     original = FtpColors.palette
     FtpColors.palette = lambda *a, **k: fitted
@@ -676,6 +697,7 @@ if __name__ == "__main__":
     ftptest_golden()
     session_golden()
     colors_golden()
+    theme_golden()
     units_golden()
     plot_golden()
     music_golden()

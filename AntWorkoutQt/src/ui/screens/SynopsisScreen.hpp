@@ -123,6 +123,8 @@ public:
     QString gradeDetailsHtml(const grading::Grade& record, const Ride& ride) const;
     // the max labels each in the free spot nearest its star
     void layoutMaxLabels();
+    // (LayoutViewer, showing a screen size of its own) the window isn't maximized again a second after it's built
+    void keepWindowSize() { keepWindowSize_ = true; }
     // the stars a step on
     void animateStars();
     // the ride a grade is from
@@ -189,6 +191,7 @@ private:
     void setMaxHr();
     void updateBatteryWarning();
     void fixSize();
+    bool keepWindowSize_ = false;
     bool cadenceRide(const Ride& ride) const { return ride.kind == RideKind::Cadence; }
     plot::ViewBox* targetVBox(const Ride& ride) const;
     static double graphOffset(const Ride& ride) { return ride.start + ride.rideOffset; }

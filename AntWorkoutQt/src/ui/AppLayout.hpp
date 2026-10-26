@@ -78,5 +78,9 @@ void applyLayout(QWidget* root, const QMap<QString, QWidget*>& screens, double s
 // Scales the window (the main window, remembered) and the screens it has built to its screen
 void layoutWindow(QWidget* window = nullptr);
 QWidget* mainWindow();
+// (an offscreen screen, such as the theme picker's preview: drawn without the window fitting it) every fixed, min and
+// max size scaled for the layout scale, and the layout changes queued run now
+void scaleSizes(QWidget* root);
+void settle(QWidget* root);
 
 }  // namespace awo::layout

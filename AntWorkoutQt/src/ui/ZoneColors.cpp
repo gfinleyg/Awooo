@@ -45,6 +45,14 @@ ZonePalette zoneColors() {
     return colors;
 }
 
+QSet<QString> allColors() {
+    QSet<QString> colors{freeColor().toLower()};
+    for (const QString& color : zoneColors()) {
+        colors.insert(color.toLower());
+    }
+    return colors;
+}
+
 QString freeColor() {
     const QJsonValue value = changes().value(QStringLiteral("free"));
     return value.isString() ? value.toString() : ftpcolors::kDefaultFree;
