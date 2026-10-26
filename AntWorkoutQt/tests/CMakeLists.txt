@@ -20,7 +20,7 @@ awo_add_test(tst_ant_sticks tst_ant_sticks.cpp)
 target_link_libraries(tst_ant_sticks PRIVATE Qt6::Widgets awo_ant version)
 
 # awo_core, each checked against the Python app's results in golden/ (make_golden.py)
-foreach(test core_text workout_files zwo ftp_test grading session settings logger ftp_colors)
+foreach(test core_text workout_files zwo ftp_test grading session settings logger ftp_colors workout_engine)
     awo_add_test(tst_${test} tst_${test}.cpp)
     target_link_libraries(tst_${test} PRIVATE awo_core)
 endforeach()

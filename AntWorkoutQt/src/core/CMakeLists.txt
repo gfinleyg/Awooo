@@ -16,14 +16,20 @@ add_library(awo_core STATIC
     PowerCalibration.hpp
     PyCompat.cpp
     PyCompat.hpp
+    PyRandom.cpp
+    PyRandom.hpp
     SavedSettings.cpp
     SavedSettings.hpp
     Session.cpp
     Session.hpp
+    SimulatedRider.cpp
+    SimulatedRider.hpp
     Units.cpp
     Units.hpp
     WorkoutData.cpp
     WorkoutData.hpp
+    WorkoutEngine.cpp
+    WorkoutEngine.hpp
     WorkoutGrading.cpp
     WorkoutGrading.hpp
     WorkoutHelpers.cpp

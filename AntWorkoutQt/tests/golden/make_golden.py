@@ -428,6 +428,106 @@ def plot_golden():
     del app
 
 
+#the rides hud_golden() drives the Python workout screen through: a workout (its .awo text) or an FTP test, at an FTP,
+#for so many seconds with PreviewRide's Rider(seed); events: [tick, "difficulty", value] (the slider) or
+#[tick, "pause"] (the pause button), each just before that tick
+HUD_RIDES = [
+    {"name": "mixed", "ftp": 250, "seed": 3, "seconds": 760,
+     "workout": "T:Golden Ride\n0:60|Warm up\n1:120,0.6\n2:120,0.5,0.9\n3:3;1:30,1.2;0:30\n"
+                "3:2;1:20,1.0;2:20,0.6,0.8;0:10|Spin\n1:60,250W\n3:2;1:30,1.1\n2:40,0.7,0.7\n",
+     "events": [[150, "difficulty", 3], [250, "pause"], [280, "pause"], [400, "difficulty", -2], [620, "difficulty", 0]]},
+    {"name": "ftp20m", "ftp": 220, "seed": 5, "seconds": 2800, "ftpTest": "20m", "events": []},
+    {"name": "ramp10", "ftp": 0, "seed": 7, "seconds": 1500, "ftpTest": "ramp10", "events": []},
+]
+
+
+def hud_golden():
+    """The Python workout screen ridden by PreviewRide's Rider a second a tick (its clock frozen, so every tick is
+    exactly a second): the power it asked for, each block's grade, and an FTP test's result"""
+    from types import SimpleNamespace
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    import time as timeModule
+    import ClassHUDWindow
+    import PreviewRide
+    AppTheme.install()
+    clock = 1000.0
+    realMonotonic = timeModule.monotonic
+    timeModule.monotonic = lambda: clock
+    results = []
+    try:
+        for ride in HUD_RIDES:
+            PreviewRide.reset_ride_state()
+            AppState.ftp = str(ride["ftp"])
+            AppState.maxHr, AppState.wheelCircumference = "185", "2.105"
+            AppState.workoutMode, AppState.cadenceMode = True, False
+            AppState.ftpTestMode = ride.get("ftpTest")
+            AppState.antHRM, AppState.antSpeedCadence, AppState.antCadence, AppState.antSpeed = True, True, False, False
+            AppState.ftpRanges = FtpColors.power_ranges()
+            FtpColors.update_graph_brushes()
+            AppState.workoutMessages = []
+            if AppState.ftpTestMode:
+                test = FtpTest.TESTS[AppState.ftpTestMode]
+                parser = WorkoutParser(ftp=ride["ftp"], maxBlockSeconds=max(1800, test.get("effortSeconds", 0)))
+                AppState.ftp = str(ride["ftp"])
+                assert parser.parse(FtpTest.workout_lines(AppState.ftpTestMode, AppState.ftp != "0"), test["name"])
+                if FtpTest.is_ramp(AppState.ftpTestMode):
+                    effortStart = AppState.workoutDurationSeconds
+                    first = FtpTest.ramp_block(AppState.ftpTestMode, 0)
+                    AppState.workoutList.append(first)
+                    AppState.workoutDurationSeconds += first[1]
+                else:
+                    effortStart = AppState.workoutDurationSeconds - test["effortSeconds"]
+                AppState.workoutMessages.extend(FtpTest.messages(AppState.ftpTestMode, effortStart, AppState.ftp))
+            else:
+                parser = WorkoutParser(ftp=ride["ftp"])
+                assert parser.parse(ride["workout"].split("\n")[:-1]), parser.rejections
+            AppState.workoutFilename = AppState.workoutFilenameShort = "golden.awo"
+            hud = ClassHUDWindow.HUDWindow(SimpleNamespace(startExe=PreviewRide.FakeBridge()))
+            hud.timer.stop()
+            hud.smoothBarTimer.stop()
+            hud.starTimer.stop()
+            hud.hud_graph_data_update = lambda: None
+            rider = PreviewRide.Rider(seed=ride["seed"])
+            events = {}
+            for event in ride["events"]:
+                events.setdefault(event[0], []).append(event[1:])
+            hud.start_workout()
+            ticks = 0
+            for tick in range(int(ride["seconds"])):
+                if not hud.startedBool:
+                    break
+                for event in events.get(tick, []):
+                    if event[0] == "difficulty":
+                        hud.difficultySlider.setValue(event[1])
+                    else:
+                        hud.pause_recording()
+                hud.lastTimestamp = clock - 1
+                hud.process_events()
+                t = AppState.secondsPassed
+                reading = rider.sample(t, hud.currentPower)
+                PreviewRide.save_reading(t, reading)
+                ticks += 1
+            grades = {f"{k[0]},{k[1]},{k[2]}": plain(v) for k, v in AppState.blockGrades.items()}
+            results.append({"ride": ride, "ticks": ticks,
+                            "requestSeconds": list(AppState.workoutPowerRequestsSeconds),
+                            "requestWatts": list(AppState.workoutPowerRequestsWatts),
+                            "grades": grades, "gradeOrder": list(grades),
+                            "ftpTestResult": plain(AppState.ftpTestResult),
+                            "workoutSeconds": AppState.workoutDurationSeconds,
+                            "workoutList": plain(AppState.workoutList),
+                            "secondsPassed": AppState.secondsPassed,
+                            "workoutSecondsPassed": hud.workoutSecondsPassed,
+                            "activeWorkout": hud.activeWorkout,
+                            "completed": hud.workoutCompleteShown})
+            hud.stop_timers()
+            hud.deleteLater()
+    finally:
+        timeModule.monotonic = realMonotonic
+    write("hud.json", results)
+    del app
+
+
 if __name__ == "__main__":
     from PyQt6.QtGui import QColor
     QColorArgb = QColor.NameFormat.HexArgb
@@ -440,3 +540,4 @@ if __name__ == "__main__":
     colors_golden()
     units_golden()
     plot_golden()
+    hud_golden()
