@@ -346,7 +346,23 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
   connect, disconnect and rescan, FTP/HR/wheel/weight entry, all modes (workout, free, FTP tests), workout loading
   and errors, and power calibration behave as in Python.
 
-### Phase 6: workout engine + HUD
+### Phase 6: workout engine + HUD (done)
+- Done: `core/WorkoutEngine` (the workout logic out of ClassHUDWindow.py) and `ui/screens/HudScreen` on it, with
+  the END prompt (`ui/dialogs/ConfirmEndWorkoutWindow`) and MainWindow's setup -> workout screen -> back to setup.
+  golden/hud.json's rides (a mixed workout with difficulty changes and a pause, the 20m test, a ramp test, ridden by
+  the same simulated rider and seed) match every power request and grade field, both on the engine
+  (tst_workout_engine) and through the whole screen (tst_hud, 24 cases: also the spiral's samples, START/PAUSE/END,
+  workouts ridden to the end, the trainer following the workout). The screen 600 s into a workout renders the same
+  as the Python one (tests/parity `hud_screen`: 31 pixels differ, all along the graph's 1 px curves); the plot now
+  lays itself out at the widget's size from the start, as pyqtgraph does, so a range set before it's shown is
+  padded the same.
+- The SimulANT+ trainer scenario passes on the C++ app: `hwtests/simulant_ride.exe` rides it (the real bridge,
+  readings pipeline and workout screen) and `hwtests/simulant_test.py` reuses the Python harness's timeline, scripts
+  and checks. 22/22 twice running at 85% reception, the same as the Python app's run beside them; three earlier
+  runs failed one timing check each (the first target late, or the trainer slow to come back), which the Python
+  app's runs show too now and then (3 of its 9 trainer runs).
+- Waiting on later phases: Exit to Synopsis adds the ride to the session and goes back to setup until the synopsis
+  exists (Phase 7); Musical Cadence Mode's music (Phase 8).
 - `core/WorkoutEngine` first, with tests: block timing, ramps, intervals, messages, ERG target and the power drive
   cutoff, difficulty, pause/resume/restart, completion, FTP test result, grading hooks.
 - Then `HudScreen` on top of it: gauges, graph, spiral, block labels, up next, remaining list, sliders, battery
@@ -376,7 +392,8 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
 - **Done when:** themes made in the C++ viewer load in the Python app and the other way round.
 
 ### Phase 10: hardware tests, packaging, switch-over
-- Port `run_simulant_test.py` and `run_app_test.py` to C++ harnesses in `hwtests/` that link the app libraries and
+- Port `run_simulant_test.py` (done in Phase 6: `hwtests/simulant_test.py` + `simulant_ride.exe`, also to run for
+  the sensors scenario here) and `run_app_test.py` to C++ harnesses in `hwtests/` that link the app libraries and
   drive the real screens, as the Python ones import the real modules. The SimulANT+ scripts and the PowerShell UI
   automation (`simulant_automation/`) are reused unchanged.
 - `dist\AntWorkout\` with `AntWorkout.exe`, `LayoutViewer.exe`, Qt DLLs, `antnative.dll`, fonts, sounds, svgs,

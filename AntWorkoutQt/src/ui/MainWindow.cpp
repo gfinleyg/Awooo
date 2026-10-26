@@ -12,7 +12,12 @@
 #include "CustomTitleBar.hpp"
 #include "Dialogs.hpp"
 #include "Logger.hpp"
+#include "HudScreen.hpp"
+#include "PowerSpiral.hpp"
+#include "Session.hpp"
 #include "SetupScreen.hpp"
+#include "SoundEffects.hpp"
+#include "WorkoutData.hpp"
 #include "Theme.hpp"
 
 namespace awo {
@@ -56,13 +61,48 @@ MainWindow::MainWindow(std::unique_ptr<ant::AntBridge> bridge) : bridge_(std::mo
 
 MainWindow::~MainWindow() = default;
 
-// (the workout screen comes in Phase 6 of PLAN.md: until then START comes straight back to the setup screen)
 void MainWindow::generateHud() {
     setAppTitle(true);
-    log::event(QStringLiteral("SETUP"), QStringLiteral("START pressed: the workout screen isn't built yet"));
-    setup_->show();
-    setup_->resume();
+    discardScreen(hud_);
+    hud_ = nullptr;
+    hud_ = new HudScreen(bridge_.get());
+    connect(hud_, &HudScreen::setupRequested, this, &MainWindow::goBackToSetup);
+    connect(hud_, &HudScreen::synopsisRequested, this, &MainWindow::generateSynopsis);
+    addScreen(hud_, QStringLiteral("Workout"));
+    sound::play(QStringLiteral("window"));
+    hud_->show();
+    hud_->startReadings();
+}
+
+void MainWindow::goBackToSetup() {
+    if (hud_) {
+        hud_->stopReadings();
+        hud_->hide();
+    }
+    bridge_->requestDisconnect();
+    workoutData().clear();
+    AppState& state = appState();
+    state.secondsPassed = 0.0;
+    state.workoutPowerRequestsSeconds.clear();
+    state.workoutPowerRequestsWatts.clear();
+    state.workoutPowerRequestsSysTime.clear();
     setAppTitle();
+    sound::play(QStringLiteral("window"));
+    setup_->show();
+    setup_->backFromRide();
+    QTimer::singleShot(0, this, &QWidget::showMaximized);
+}
+
+// (the synopsis comes in Phase 7 of PLAN.md: until then the ride joins the session, and it's back to setup)
+void MainWindow::generateSynopsis() {
+    bridge_->clearConnectionFlags();
+    std::optional<Ring> ring;
+    if (hud_ && hud_->spiral()) {
+        ring = hud_->spiral()->ridden();
+    }
+    session::addCurrentRide(ring);
+    log::event(QStringLiteral("SETUP"), QStringLiteral("Exit to Synopsis: the synopsis isn't built yet"));
+    goBackToSetup();
 }
 
 void MainWindow::setAppTitle(bool showWorkoutName) {

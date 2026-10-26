@@ -98,6 +98,8 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
+    void fitPlot(const QSize& size);
+
     PlotItem* plotItem_;
 };
 

@@ -574,6 +574,72 @@ def scene_workout_picker():
     return in_work_folder(build, {"workoutPickerANT.json": json.dumps({"files": files, "last": files[1]})})
 
 
+
+def rest_stars(stars, bubbles):
+    """The graph's stars at rest (a first go_to puts them straight there) at a time their twinkle is at its middle
+    size, and the bubbles beside them grown in"""
+    import math
+    from ClassMaxStar import MaxBubble
+    for phase, star in enumerate(stars):
+        star.step(((3 + phase)*math.pi - phase*2.1)/3.6, phase)
+    for when in (10.0, 10.0 + MaxBubble.APPEAR_SECONDS):
+        avoid = [star.sceneBoundingRect() for star in stars if star.isVisible()]
+        for bubble in bubbles:
+            bubble.step(when, avoid)
+
+
+def scene_hud_screen():
+    """The workout screen 600 s into the first shipped workout, ridden by PreviewRide's Rider(seed=3) a second a
+    tick, laid out at 1920x1116"""
+    import datetime
+    import time as timeModule
+    from types import SimpleNamespace
+    import AppLayout
+    import ClassHUDWindow
+    import PreviewRide
+    from ClassWorkoutSetupWindow import WorkoutSetupWindow
+    _, Parent = stub_classes()
+
+    def build():
+        setup = WorkoutSetupWindow(Parent())
+        setup.timer.stop()
+        setup.blinkTimer.stop()
+        PreviewRide.reset_ride_state()
+        AppState.ftp, AppState.maxHr, AppState.wheelCircumference = "250", "185", "2.105"
+        AppState.workoutMode, AppState.cadenceMode, AppState.ftpTestMode = True, False, None
+        AppState.antHRM, AppState.antSpeedCadence, AppState.antCadence, AppState.antSpeed = True, True, False, False
+        AppState.ftpRanges = FtpColors.power_ranges()
+        FtpColors.update_graph_brushes()
+        path = first_shipped_workout()
+        assert setup.process_workout_file(path)
+        AppState.workoutFilename = path
+        AppState.workoutFilenameShort = path.split("/")[-1]
+        AppState.startTimestamp = datetime.datetime.now()
+        hud = ClassHUDWindow.HUDWindow(SimpleNamespace(startExe=PreviewRide.FakeBridge()))
+        realMonotonic = timeModule.monotonic
+        timeModule.monotonic = lambda: 1000.0
+        try:
+            PreviewRide.run_hud(hud, 600, PreviewRide.Rider(seed=3))
+        finally:
+            timeModule.monotonic = realMonotonic
+        hud.stop_timers()
+        hud.gradeOverlay.timer.stop()
+        hud.cadenceGaugeDisplay.ui.svg.spinTimer.stop()
+        hud.hrGaugeDisplay.ui.svg.beatTimer.stop()
+        holder = QWidget()
+        holder.setObjectName("holder")
+        holder.setStyleSheet("#holder{background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #28275e stop:1 #9fc5d1);}")
+        layout = QVBoxLayout(holder)
+        layout.addWidget(hud)
+        AppLayout.apply_layout(holder, {"Workout": hud}, 1.0)
+        shown(holder, 1920, 1116)
+        rest_stars([star for star, _ in hud.maxStars], hud.maxBubbles)
+        for _ in range(3):
+            app.processEvents()
+        return holder
+    return in_work_folder(build)
+
+
 SCENES = {name[len("scene_"):]: fn for name, fn in globals().items() if name.startswith("scene_")}
 
 

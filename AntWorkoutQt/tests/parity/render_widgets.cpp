@@ -31,6 +31,9 @@
 #include "SetupScreen.hpp"
 #include "WorkoutHelpers.hpp"
 #include "GradeWidgets.hpp"
+#include "HudScreen.hpp"
+#include "SimulatedRider.hpp"
+#include "WorkoutData.hpp"
 #include "LongVLabels.hpp"
 #include "PowerSpiral.hpp"
 #include "SmoothProgressBar.hpp"
@@ -617,6 +620,87 @@ QWidget* sceneWorkoutPicker() {
     return shownAsIs(new WorkoutSelectDialog);
 }
 
+// The graph's stars at rest (a first goTo puts them straight there) at a time their twinkle is at its middle size,
+// and the bubbles beside them grown in
+void restStars(const QList<std::pair<MaxStar*, QString>>& stars, const QList<MaxBubble*>& bubbles) {
+    for (int phase = 0; phase < stars.size(); ++phase) {
+        stars[phase].first->step(((3 + phase) * std::numbers::pi - phase * 2.1) / 3.6, phase);
+    }
+    for (const double when : {10.0, 10.0 + MaxBubble::kAppearSeconds}) {
+        QList<QRectF> avoid;
+        for (const auto& [star, _] : stars) {
+            if (star->isVisible()) {
+                avoid.append(star->sceneBoundingRect());
+            }
+        }
+        for (MaxBubble* bubble : bubbles) {
+            bubble->step(when, avoid);
+        }
+    }
+}
+
+// The workout screen 600 s into the first shipped workout, ridden by the simulated rider (seed 3) a second a tick,
+// laid out at 1920x1116
+QWidget* sceneHudScreen() {
+    static awotest::FakeAnt fake;
+    static StubBridge bridge(fake);
+    writeSceneSettings();
+    auto* setup = new SetupScreen(&bridge);
+    for (QTimer* timer : setup->findChildren<QTimer*>()) {
+        timer->stop();
+    }
+    AppState& state = appState();
+    state.secondsPassed = 0;
+    state.workoutPowerRequestsSeconds.clear();
+    state.workoutPowerRequestsWatts.clear();
+    state.workoutPowerRequestsSysTime.clear();
+    state.savedPowerVals = {};
+    state.savedHRVals = {};
+    state.savedCadenceVals = {};
+    state.totalRevolutions = 0;
+    state.sessionRides.clear();
+    state.rideStart.reset();
+    state.rideRecorded = false;
+    workoutData().clear();
+    state.ftp = 250;
+    state.maxHr = 185;
+    state.wheelCircumference = 2.105;
+    state.workoutMode = true;
+    state.cadenceMode = false;
+    state.ftpTestMode.clear();
+    state.antHRM = true;
+    state.antSpeedCadence = true;
+    state.antCadence = false;
+    state.antSpeed = false;
+    state.ftpRanges = zones::powerRanges();
+    const QString path = firstShippedWorkout();
+    setup->loadWorkoutFile(path);
+    state.workoutFilename = path;
+    state.workoutFilenameShort = path.split(u'/').last();
+    state.startTimestamp = QDateTime::currentDateTime();
+    delete setup;
+    auto* hud = new HudScreen(&bridge);
+    SimulatedRider rider(3);
+    hud->runSimulatedRide(600, rider);
+    hud->stopTimers();
+    for (QTimer* timer : hud->gradeOverlay()->findChildren<QTimer*>()) {
+        timer->stop();
+    }
+    hud->cadenceGauge()->chainring()->spinTimer()->stop();
+    hud->heartRateGauge()->heart()->beatTimer()->stop();
+    auto* holder = new QWidget;
+    holder->setObjectName(QStringLiteral("holder"));
+    theme::setSheet(holder, QStringLiteral("#holder{background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 "
+                                           "#28275e stop:1 #9fc5d1);}"));
+    auto* layout = new QVBoxLayout(holder);
+    layout->addWidget(hud);
+    layout::applyLayout(holder, {{QStringLiteral("Workout"), hud}}, 1.0);
+    shown(holder, 1920, 1116);
+    restStars(hud->maxStars(), hud->maxBubbles());
+    settle();
+    return holder;
+}
+
 const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("hud_graph"), sceneHudGraph},
     {QStringLiteral("power_gauge"), scenePowerGauge},
@@ -634,6 +718,7 @@ const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("connect_devices"), sceneConnectDevices},
     {QStringLiteral("calibrate_power"), sceneCalibratePower},
     {QStringLiteral("workout_picker"), sceneWorkoutPicker},
+    {QStringLiteral("hud_screen"), sceneHudScreen},
 };
 
 }  // namespace

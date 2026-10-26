@@ -46,6 +46,9 @@ public:
     void stop();
     bool isActive() const { return active_; }
     void setActive(bool active) { active_ = active; }
+    // where the cadence and speed shown last came from: "sensor", "fallback", or empty before the first
+    const QString& cadenceSource() const { return cadenceSource_; }
+    const QString& speedSource() const { return speedSource_; }
 
     // Speed from power, by a piecewise linear lookup over recent real (power, speed) readings: on a trainer with fixed
     // resistance, power is a function of wheel speed alone (a gear only changes how the rider gets to that speed). An

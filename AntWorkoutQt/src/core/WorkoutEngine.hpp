@@ -29,7 +29,8 @@ public:
 
     // what a tick changed, for the screen to show
     struct TickEvents {
-        bool running = false;           // the workout clock moved (started and unpaused)
+        bool running = false;           // started and unpaused
+        bool timersMoved = false;       // the workout clock moved (not the tick that starts the first block)
         bool completed = false;         // the end of the workout was reached
         bool showGrades = false;        // (completed, graded: every block's grade takes over the left column)
         bool blockStarted = false;      // a new block (or interval) began: its labels, the spiral's block, up next
@@ -63,6 +64,8 @@ public:
     void restart();
     // ended part way (END, Exit to Synopsis): the block being ridden graded up to now
     void endGrading();
+    // Exit to Synopsis: stopped where it is
+    void stop() { started_ = unpaused_ = false; }
 
     // ---- What it's at ----
 

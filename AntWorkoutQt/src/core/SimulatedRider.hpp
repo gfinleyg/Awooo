@@ -30,4 +30,7 @@ private:
     double hr_ = 95.0;
 };
 
+// a reading into the graph's recent values as the readings pipeline keeps them (PreviewRide.save_reading)
+void saveSimulatedReading(double seconds, const RiderReading& reading);
+
 }  // namespace awo

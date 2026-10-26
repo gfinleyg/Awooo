@@ -1,5 +1,7 @@
 #include "SimulatedRider.hpp"
 
+#include "AppState.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -21,6 +23,23 @@ RiderReading SimulatedRider::sample(double seconds, double requested, int ftp, b
     reading.cadence = cadence;
     reading.speedMph = speed;
     return reading;
+}
+
+void saveSimulatedReading(double seconds, const RiderReading& reading) {
+    AppState& state = appState();
+    const double window = state.graphSecondsShown - state.graphBreakpoint;
+    const std::pair<SavedValues*, double> values[] = {
+        {&state.savedPowerVals, static_cast<double>(reading.power)},
+        {&state.savedHRVals, static_cast<double>(reading.heartRate)},
+        {&state.savedCadenceVals, static_cast<double>(static_cast<int>(reading.cadence))}};
+    for (const auto& [saved, value] : values) {
+        saved->times.append(seconds);
+        saved->values.append(value);
+        while (saved->times.back() - saved->times.front() > window) {
+            saved->times.removeFirst();
+            saved->values.removeFirst();
+        }
+    }
 }
 
 }  // namespace awo

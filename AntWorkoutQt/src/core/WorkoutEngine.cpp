@@ -108,6 +108,7 @@ WorkoutEngine::TickEvents WorkoutEngine::tick(std::optional<double> musicSeconds
         events.running = true;
         // the timers move (not on the first tick, which starts the first block)
         if (!newWorkoutStart_) {
+            events.timersMoved = true;
             // (the music's progress in Musical Cadence Mode, so the targets can't drift from it)
             workoutDelta_ = musicSeconds ? std::max(0.0, *musicSeconds - workoutSecondsPassed_) : timeDelta_;
             blockSecondsPassed_ += workoutDelta_;

@@ -19,10 +19,15 @@ add_library(awo_ui STATIC
     ZoneColors.hpp
     dialogs/CalibratePowerWindow.cpp
     dialogs/CalibratePowerWindow.hpp
+    dialogs/ConfirmEndWorkoutWindow.cpp
+    dialogs/ConfirmEndWorkoutWindow.hpp
     dialogs/DeviceDialogs.cpp
     dialogs/DeviceDialogs.hpp
     dialogs/WorkoutSelectDialog.cpp
     dialogs/WorkoutSelectDialog.hpp
+    screens/HudScreen.cpp
+    screens/HudScreen.hpp
+    screens/HudScreenRide.cpp
     screens/SetupScreen.cpp
     screens/SetupScreen.hpp
     widgets/AnalogGauge.cpp

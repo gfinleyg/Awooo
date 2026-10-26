@@ -192,6 +192,9 @@ PlotWidget::PlotWidget(QWidget* parent) : QGraphicsView(parent), plotItem_(new P
     auto* scene = new QGraphicsScene(this);
     setScene(scene);
     scene->addItem(plotItem_);
+    // (the plot laid out at the widget's size from the start, as pyqtgraph does, so a range set before it's shown is
+    // padded for that size)
+    fitPlot(size());
 }
 
 void PlotWidget::setBackground(const std::optional<QColor>& color) {
@@ -200,7 +203,11 @@ void PlotWidget::setBackground(const std::optional<QColor>& color) {
 
 // the plot fills the view, one scene unit a pixel
 void PlotWidget::resizeEvent(QResizeEvent* event) {
-    const QRectF range(QPointF(0, 0), QSizeF(event->size()));
+    fitPlot(event->size());
+}
+
+void PlotWidget::fitPlot(const QSize& size) {
+    const QRectF range(QPointF(0, 0), QSizeF(size));
     plotItem_->setGeometry(range);
     setSceneRect(range);
     resetTransform();
