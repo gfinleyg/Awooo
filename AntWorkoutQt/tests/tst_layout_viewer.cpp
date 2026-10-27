@@ -63,8 +63,8 @@ private slots:
         appState() = AppState();
         QDir().mkpath(QStringLiteral("awoWorkouts"));
         QFile::copy(awotest::pythonAppDir() + QStringLiteral("/") + kWorkoutFile, kWorkoutFile);
-        QFile::copy(awotest::pythonAppDir() + QStringLiteral("/awoWorkouts/1_Ramp.awo"),
-                    QStringLiteral("awoWorkouts/1_Ramp.awo"));
+        QFile::copy(awotest::pythonAppDir() + QStringLiteral("/awoWorkouts/04_Z2_3.awo"),
+                    QStringLiteral("awoWorkouts/04_Z2_3.awo"));
     }
 
     void cleanup() {

@@ -1,5 +1,8 @@
 # AntWorkout
 
+> The main app is now the C++/Qt one in `..\AntWorkoutQt` (see `..\README.md`). This Python app stays as the
+> reference it was rewritten from: the C++ app's tests check against its results, and it still runs as before.
+
 An indoor cycling workout app for Windows. It talks directly to ANT+ sensors and smart trainers through an ANT USB
 stick, and shows a live HUD with power, cadence, speed and heart rate while you ride.
 

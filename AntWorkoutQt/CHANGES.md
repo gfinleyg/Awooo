@@ -37,6 +37,9 @@ Python app's own results (`tests\golden\`).
 
 ## LayoutViewer
 
+- **The workout screen stops exactly where the Workout progress slider says.** The Python viewer's simulated ride
+  counted each second as a second plus however long the computer took over it, so it ended up a little past the
+  point picked (up to a second or so in a long workout), and a different amount each time.
 - **The app's picked devices are put back when LayoutViewer closes.** Its views are built with stand-in devices
   picked, which the Python viewer left in the app's selected devices file, so the app looked for devices that weren't
   there the next time it started.

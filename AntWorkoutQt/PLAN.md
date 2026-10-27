@@ -444,7 +444,21 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
 - Port the theme picker tests (4).
 - **Done when:** themes made in the C++ viewer load in the Python app and the other way round.
 
-### Phase 10: hardware tests, packaging, switch-over
+### Phase 10: hardware tests, packaging, switch-over (done)
+- Done: `hwtests/app_test.py` + `simulant_app.exe` (run_app_test.py on the C++ app: its steps and checks, driving the
+  real main window, setup, workout and synopsis screens on the real bridge; the SimulANT+ scripts, pairing values,
+  trainer workout and songs are the Python harness's). Trainer: 21/21 (ERG through the blocks, the ramp and
+  intervals, the difficulty change and pause, the release over the Power Drive Cutoff, the grades, the synopsis, the
+  exit). Sensors: 26/26 (songs analyzed and the ride timed by the real, silent, music; the short 20m FTP test and
+  Apply FTP saved; Free Mode's power and speed; the exit). The timeline harness on the sensors scenario
+  (`simulant_test.py sensors`): 41/45, its four failures "kept coming through" checks at 66-75% reception; the Python
+  app straight after, same simulators: 41/47, six of the same failures at 65-73% (earlier days at better reception
+  gave 41/41). The trainer timeline passed in Phase 6.
+- dist\AntWorkout\: AntWorkout.exe, LayoutViewer.exe, FtpColorsEditor.exe, ColorPicker.exe, awo-verifier.exe,
+  zwo2awo.exe, ant_console.exe and the hardware test exes, with Qt, antnative.dll, the C++ runtime, fonts, sounds,
+  images, themes and workouts (71 MB). No installer: the folder runs as it is, zipped or copied.
+- The parity checklist (§6), as run: see the results under each item there. The READMEs now make the C++ app the main
+  one (`..\README.md`, `README.md`, and a note at the top of `..\AntWorkout\README.md`).
 - Port `run_simulant_test.py` (done in Phase 6: `hwtests/simulant_test.py` + `simulant_ride.exe`, also to run for
   the sensors scenario here) and `run_app_test.py` to C++ harnesses in `hwtests/` that link the app libraries and
   drive the real screens, as the Python ones import the real modules. The SimulANT+ scripts and the PowerShell UI
@@ -460,15 +474,29 @@ Each phase ends with a build, its tests passing, and a commit on a branch.
 
 1. **Golden data:** Python writes JSON for parsing, conversion, grading, FTP tests, colours, music analysis and
    recorded rides. The C++ tests compare against it.
+   *Done:* 13 golden files (awo, zwo, text, grading, FTP tests, session, colors, theme, files, units, plot, music,
+   hud), all matched; the music analysis and the recorded rides to the bit.
 2. **Screenshots:** the Python LayoutViewer can save screenshots (`layoutScreenshots/`). Render the same screen,
    mode, theme and progress in both viewers at the same size and diff the images with a small tolerance (font
    antialiasing). Run it for every screen, a few themes and three screen sizes. Any difference is either a bug or an
    improvement listed in `CHANGES.md` (D10).
+   *Done:* tests/parity renders both apps' widgets, screens and popups (24 scenes) and LayoutViewer's five views in
+   five looks (1280x720, 1920x1200 and 2560x1440, two colors and gradients themes, a fonts theme). The setup screen,
+   the pickers and every popup are pixel identical in every look; the workout screen and the synopsis differ only by
+   the 1 px curves' antialiasing (10-185 pixels) and by what runs on the wall clock (the heart's beat, fades, the
+   synopsis' start time). One difference found was the Python viewer's: its simulated ride drifts past the progress
+   picked (CHANGES.md).
 3. **Ported unit tests:** about 330 of the 400 Python tests carry over. The 73 that test the Python `ant` package
    don't (see §3.2).
+   *Done:* 26 test exes, 1065 test cases passing (Qt counts each data row), the ported Python tests among them.
 4. **Hardware:** both SimulANT+ scenarios (sensors, trainer) pass with the C++ app.
+   *Done:* the full app test 21/21 (trainer) and 26/26 (sensors); the timeline test 22/22 (trainer), and on the
+   sensors scenario as good as the Python app under the same reception (see Phase 10).
 5. **Files:** settings, the music cache and selection, themes, the log and the workout lists are read and written by
    both apps without loss.
+   *Done:* tst_shared_files (golden/files.json: the settings, the song selection and a log line as the Python app
+   writes them; the workout picker's list), tst_layout_viewer (golden/theme.json: theme files) and tst_music (the
+   analysis cache, shared under the same cache_version).
 
 ---
 

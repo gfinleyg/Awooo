@@ -1,7 +1,8 @@
 # AntWorkoutQt
 
-AntWorkout rewritten in C++/Qt, alongside the Python app in `..\AntWorkout` (which stays as the reference). See
-`PLAN.md` for the plan and where it's up to.
+The AntWorkout app in C++/Qt: the main app (see `..\README.md` for what it does). `..\AntWorkout` is the Python app
+it was rewritten from, which stays as the reference. `PLAN.md` is the plan the rewrite followed, `CHANGES.md` what
+the C++ app does differently.
 
 ## Building
 
@@ -60,9 +61,10 @@ py -3.10 tests\parity\compare.py %TEMP%\py %TEMP%\cpp %TEMP%\diff
 
 Both run in `..\AntWorkout` (its `defaultTheme.json`) on the real Windows platform, not offscreen, so the fonts render
 as they do on screen. Run `render_widgets.exe` with Qt's bin folder on PATH. The `viewer_*` scenes are LayoutViewer's
-views; its workout and synopsis ones also show what runs on the clock (the heart's beat, the synopsis' ride start of
-two hours before), so they only match when both sides are rendered within the same minute, and even then not the
-heart.
+views, in five looks (three screen sizes, two colors and gradients themes, a fonts theme). Its workout and synopsis
+views also show what runs on the clock, which doesn't match: the heart's beat, the grade and the max value bubbles
+fading in and out on the workout screen, and on the synopsis the best sustained powers, which shift with the ride's
+start (two hours before it's built) unless both sides are rendered within the same few seconds.
 
 ### Hardware tests with SimulANT+
 
@@ -78,5 +80,18 @@ py -3.10 hwtests\simulant_test.py sensors
 ```
 
 Each run gets a folder in `..\AntWorkout\SimulantTests\run` (named `..._qt`) with `report.txt`, `app_samples.csv`,
-the scripts' logs and the app's own log. `ant_console.exe` (in `dist\AntWorkout`) prints the readings of whatever
+the scripts' logs and the app's own log.
+
+`hwtests\app_test.py` is `run_app_test.py` on the C++ app: `simulant_app.exe` drives the whole app the way a rider
+would (main window, setup screen, workout screen, synopsis, exit) against the scripts' steady pairing values, with
+the same steps and checks. Only the scenario's simulators may be on (a trainer heard beside a power meter makes the
+power device a choice to make):
+
+```
+py -3.10 hwtests\app_test.py trainer      Workout Mode on the trainer (ERG), the synopsis, back to setup, exit
+py -3.10 hwtests\app_test.py sensors      Musical Cadence Mode (the music silent), a short 20m FTP test and Apply
+                                          FTP, Free Mode, exit
+```
+
+`--offscreen` runs the build's `simulant_app.exe` on Qt's offscreen platform, so no windows come up. `ant_console.exe` (in `dist\AntWorkout`) prints the readings of whatever
 sensors it's told to wait for, for a quick look without the timeline.

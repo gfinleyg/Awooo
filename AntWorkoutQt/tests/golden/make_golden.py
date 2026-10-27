@@ -356,6 +356,35 @@ def colors_golden():
     })
 
 
+###The files both apps read and write
+def files_golden():
+    """The settings, the song picker's selection and a log line as the Python app writes them (in a folder of its
+    own): the C++ app has to read them, and write the same"""
+    import ClassAntLogger
+    import MusicCadence
+    import SavedSettings
+    here = os.getcwd()
+    os.chdir(tempfile.mkdtemp())
+    try:
+        SavedSettings.update(ftp=250, maxHr=185, wheelCircumference=2.105, weight=72.5, maxWatts=1200,
+                             powerDriveCutoff=300, musicVolume=40, randomTheme=False,
+                             themeFile="themes/mine.json",
+                             themePartFiles={"colors": "themes/colors/01-phosphor-terminal.json"})
+        with open(SavedSettings.SETTINGS_FILE) as f:
+            settings = json.load(f)
+        MusicCadence.save_selection([["C:/Music/Ünïcode Band - A.mp3", "Ünïcode Band - A", True],
+                                     ["C:/Music/b.flac", "B", False]])
+        with open(MusicCadence.SELECTION_FILE, encoding="utf-8") as f:
+            selection = json.load(f)
+        ClassAntLogger.log_event("TEST", "a line, with ünïcode")
+        with open(ClassAntLogger.LOG_FILE, "rb") as f:
+            log = f.read()
+    finally:
+        os.chdir(here)
+    #(the log line less its timestamp, "2026-10-26 15:34:00.123")
+    write("files.json", {"settings": settings, "selection": selection, "logTail": list(log[23:])})
+
+
 ###Theme files
 def theme_golden():
     """A theme as LayoutViewer edits one (fonts, colors, a zone's color and the free ride's), as saved whole and as
@@ -698,6 +727,7 @@ if __name__ == "__main__":
     session_golden()
     colors_golden()
     theme_golden()
+    files_golden()
     units_golden()
     plot_golden()
     music_golden()

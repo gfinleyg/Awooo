@@ -118,6 +118,14 @@ public:
     bool blinkingPower() const { return powerButtonBlink_; }
     bool blinkingWorkoutSelect() const { return workoutSelectBlink_; }
     void setupBlink();
+    // the power and heart rate slots have their devices picked
+    bool powerSelected() const { return pwrSelected_; }
+    bool hrmSelected() const { return hrmSelected_; }
+    // Connect Selected Devices: the connect prompt
+    void connectSelectedDevices();
+    // the 2 s check and the blinking
+    QTimer* checkTimer() const { return timer_; }
+    QTimer* blinkTimer() const { return blinkTimer_; }
 
 signals:
     // START: the workout screen next (Session::beginRide done)
@@ -141,7 +149,6 @@ private:
     void confirmClearSession();
     void clearSession();
     void selectDevices(int kind);
-    void connectSelectedDevices();
     void disconnectAndRescan();
     void getFtpRanges();
     void textWheelValidator();

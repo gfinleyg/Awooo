@@ -911,17 +911,48 @@ def scene_theme_picker():
     return in_work_folder(build)
 
 
-def viewer_scene(view):
-    """LayoutViewer's display window in Workout Mode with the preview workout, 40% of the way through, laid out for
-    1920x1152 (the design size less the taskbar) and showing view; what moves by itself stopped where it is"""
+#the viewer scenes' looks: (available size, the theme files loaded, in order; "fonts" is VIEWER_FONTS)
+VIEWER_LOOKS = {
+    "": ((1920, 1152), ()),
+    "_720": ((1280, 672), ()),
+    "_1440": ((2560, 1392), ()),
+    "_synthwave": ((1920, 1152), ("colors/11-synthwave.json", "gradients/02-inferno.json")),
+    "_arctic": ((1366, 720), ("fonts", "colors/28-arctic-white.json", "gradients/07-training-zones.json")),
+}
+#a whole theme of fonts only: the text in Orbitron, bigger and bolder, the buttons smaller
+VIEWER_FONTS = {"fonts": {"main": {"family": "Orbitron", "scale": 110, "weight": "700"},
+                          "button": {"family": "Roboto Flex", "scale": 90, "weight": "700"}}}
+
+
+def viewer_scene(view, look=""):
+    """LayoutViewer's display window in Workout Mode with the preview workout, 40% of the way through, in one of
+    VIEWER_LOOKS (by default laid out for 1920x1152, the design size less the taskbar, in the default theme) and
+    showing view; what moves by itself stopped where it is"""
+    import json
     import AppLayout
     import LayoutViewer
 
     def build():
+        available, files = VIEWER_LOOKS[look]
+        AppTheme.clear()
+        for name in files:
+            if name == "fonts":
+                with open("fonts.json", "w") as f:
+                    json.dump(VIEWER_FONTS, f)
+                AppTheme.load_file("fonts.json")
+            else:
+                AppTheme.load_file(os.path.join(APP_DIR, "themes", *name.split("/")))
         display = LayoutViewer.DisplayWindow(AppStyle.APP_STYLESHEET)
         display.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen)
-        display.build("workout", os.path.join(APP_DIR, "awoWorkouts", "0_Little_bit_of_everything.awo"), 40)
-        available = (1920, 1152)
+        #(the clock frozen while the rides are simulated: each simulated second is a second and the time the tick
+        #took, see PreviewRide.run_hud, so the ride would end up a little past 40%; render_widgets' are exact)
+        import time as timeModule
+        realMonotonic = timeModule.monotonic
+        timeModule.monotonic = lambda: 1000.0
+        try:
+            display.build("workout", os.path.join(APP_DIR, "awoWorkouts", "0_Little_bit_of_everything.awo"), 40)
+        finally:
+            timeModule.monotonic = realMonotonic
         display.maximizedMode = False
         display.resize(*available)
         display.show()
@@ -949,8 +980,8 @@ def viewer_scene(view):
 
 
 SCENES = {name[len("scene_"):]: fn for name, fn in globals().items() if name.startswith("scene_")}
-SCENES.update({f"viewer_{view.lower().replace(' ', '_')}": (lambda v=view: viewer_scene(v))
-               for view in ("Init", "Workout", "Synopsis", "Music Picker", "Workout Picker")})
+SCENES.update({f"viewer_{view.lower().replace(' ', '_')}{look}": (lambda v=view, k=look: viewer_scene(v, k))
+               for look in VIEWER_LOOKS for view in ("Init", "Workout", "Synopsis", "Music Picker", "Workout Picker")})
 
 
 def main():

@@ -1,86 +1,105 @@
-AntWorkout
+# AntWorkout
 
-An indoor cycling workout app for Windows. It talks directly to ANT+ sensors and smart trainers through an ANT USB stick, and shows a live HUD with power, cadence, speed and heart rate while you ride.
-Features
+An indoor cycling workout app for Windows. It talks directly to ANT+ sensors and smart trainers through an ANT USB
+stick, and shows a live HUD with power, cadence, speed and heart rate while you ride.
 
-    Workout Mode: ride structured workouts from .awo files (or Zwift .zwo files, which are converted on the fly). Smart trainers get their target power set automatically (ERG).
-    Free Mode: ride with no structure and just watch the numbers.
-    FTP tests: 20 minute, 1 hour, and ramp tests (10W or 20W steps). The result can be applied as your new FTP.
-    Musical Cadence Mode: pick songs (a folder, files, or an .m3u/.m3u8 playlist). Each song's tempo is analyzed and turned into target cadences (RPM), so you pedal to the beat. Analysis results are cached, so each song is only analyzed once.
-    Synopsis: a post-ride summary with graphs and grading.
-    Themes: the settings menu's Pick Theme opens a full screen picker: a theme's colors (themes/colors) and power/cadence gradients (themes/gradients), each tried on as it's picked, beside a preview of the workout screen in that look. Theme files (fonts too) can be made with LayoutViewer.py.
+The app is the C++/Qt one in `AntWorkoutQt\`. `AntWorkout\` is the original Python app, kept as the reference: the
+C++ app's tests check it against the Python app's own results, and it still runs (see its README).
+
+## Features
+
+- **Workout Mode**: ride structured workouts from `.awo` files (or Zwift `.zwo` files, which are converted on the
+  fly). Smart trainers get their target power set automatically (ERG).
+- **Free Mode**: ride with no structure and just watch the numbers.
+- **FTP tests**: 20 minute, 1 hour, and ramp tests (10W or 20W steps). The result can be applied as your new FTP.
+- **Musical Cadence Mode**: pick songs (a folder, files, or an `.m3u`/`.m3u8` playlist). Each song's tempo is
+  analyzed and turned into target cadences (RPM), so you pedal to the beat. Analysis results are cached, so each song
+  is only analyzed once.
+- **Synopsis**: a post-ride summary with graphs and grading.
+- **Sessions**: every ride since the app opened is kept (in memory only) and shown together on the synopsis, one
+  after the other with a heading and divider for each, and the workout spiral's outer ring carries on from them. Each
+  ride keeps the FTP zones it was ridden at. **Clear Session** on the setup screen starts a new session.
+- **Themes**: the settings menu's Pick Theme opens a full screen picker: a theme's colors (`themes\colors`) and
+  power/cadence gradients (`themes\gradients`), each tried on as it's picked, beside a preview of the workout screen
+  in that look. Theme files (fonts too) can be made with `LayoutViewer.exe`.
 
 Supported ANT+ devices: heart rate monitors, speed/cadence sensors, power meters, and FE-C smart trainers.
-Requirements
 
-    64-bit Windows
-    Python 3.10 to 3.14
-    An ANT USB stick (ANT+ dongle)
+## Requirements
 
-Install the Python dependencies:
+- 64-bit Windows
+- An ANT USB stick (ANT+ dongle)
 
-py -3.x -m pip install -r requirements.txt
+## Building and running
 
-The ANT stick module (ant_native.pyd) comes prebuilt for each supported Python version in AntNative\build\Release\. You only need requirements-build.txt if you want to rebuild it or the exe.
-Running
+`AntWorkoutQt\build_windows.ps1` builds everything into `AntWorkoutQt\dist\AntWorkout\` and runs the tests (it needs
+Visual Studio 2022, Qt 6.7.0 and the ANT SDK; see `AntWorkoutQt\README.md`). Run `AntWorkout.exe` from there. The
+folder runs on its own (Qt, the C++ runtime and the app's fonts, sounds, themes and workouts are all in it), so it can
+be zipped up and copied to another PC.
 
-python AntWorkout.py
+## Workout files (.awo)
 
-Or double-click AntWorkout.pyw to run it without a console window. Output and crash tracebacks then go to AntWorkout_console.log.
+Put workouts in `awoWorkouts\`. Each line of an `.awo` file is one block. Power is a multiple of FTP (0.05 to 3)
+or explicit watts like `250W`.
 
-To run it as an exe instead, build AntWorkout.exe into dist\AntWorkout\ (see Building the exe below).
-Workout files (.awo)
+| Line                                       | Block                                    |
+|--------------------------------------------|------------------------------------------|
+| `T:<title>`                                | Workout title (optional, only one)        |
+| `0:<seconds>,<position>`                   | Free ride                                |
+| `1:<seconds>,<power>,<position>`           | Steady state                             |
+| `2:<seconds>,<start power>,<end power>,<position>` | Ramp                             |
+| `3:<repeats>;<block>;<block>;<block>`      | Intervals (1 to 3 blocks, repeated)       |
 
-Put workouts in awoWorkouts\. Each line of an .awo file is one block. Power is a multiple of FTP (0.05 to 3) or explicit watts like 250W.
-Line 	Block
-T:<title> 	Workout title (optional, only one)
-0:<seconds>,<position> 	Free ride
-1:<seconds>,<power>,<position> 	Steady state
-2:<seconds>,<start power>,<end power>,<position> 	Ramp
-3:<repeats>;<block>;<block>;<block> 	Intervals (1 to 3 blocks, repeated)
+Position is optional: 0 seated (default), 1 seated high cadence, 2 seated low cadence, 3 standing, 4 single leg,
+5 switch single leg. Blocks can be at most 1800 seconds. Any block in an interval can be a free ride, steady or ramp.
 
-Position is optional: 0 seated (default), 1 seated high cadence, 2 seated low cadence, 3 standing, 4 single leg, 5 switch single leg. Blocks can be at most 1800 seconds. Any block in an interval can be a free ride, steady or ramp.
+A ramp with the same start and end power is ridden as a steady block. An interval of a single block is ridden as one
+longer block, so it has to be a free ride or steady block, and 1800 seconds or less in all.
 
-A ramp with the same start and end power is ridden as a steady block. An interval of a single block is ridden as one longer block, so it has to be a free ride or steady block, and 1800 seconds or less in all.
-
-A block can show a message by adding |<message>|<seconds shown>|<start second in block> to the end of it.
+A block can show a message by adding `|<message>|<seconds shown>|<start second in block>` to the end of it.
 
 Example:
 
+```
 T:Short Intervals
 2:300,0.5,0.75
 3:4;1:30,1.2,3;1:60,0.6
 1:300,0.5
+```
 
-awo-verifier.py checks every .awo file in the folder it is run from (for the workouts folder: cd awoWorkouts, then python ..\awo-verifier.py). zwo2awo.py converts the Zwift files there.
-Other tools
-Script 	What it does
-LayoutViewer.py 	Preview every screen without an ANT stick and edit fonts/colors/themes
-FtpColorsEditor.py 	Edit the power zone colors
-ColorPicker.py 	Color picking helper
-awo-verifier.py 	Validate the .awo files in the current folder
-zwo2awo.py 	Convert Zwift .zwo workouts in the current folder to .awo
-SimulantTests/ 	Hardware tests against SimulANT+ simulated sensors (see its README)
-tests/ 	Unit tests, no ANT stick needed (see Running the tests)
-Running the tests
+`awo-verifier.exe` checks `.awo` files (the ones named, or every one in a folder: by default the current one), and
+`zwo2awo.exe` converts Zwift files the same way.
 
-py -3.x -m pip install -r requirements.txt -r requirements-test.txt
-py -3.x -m pytest tests
+## Other tools
 
-Run from this folder. No ANT stick or SimulANT+ needed: the ANT layer runs on a fake stick (tests\fakes.py) and the screens are built offscreen. Each test runs in its own empty folder, so your settings, log and caches aren't touched. It takes about 35 seconds; -m "not whole_app" skips the slower tests that build the real screens.
+Beside `AntWorkout.exe`:
 
-The SimulANT+ tests in SimulantTests\ are still the ones that check the radio side (real channels, timing and dropouts over the air).
-Building the exe
+| Tool                  | What it does                                                                    |
+|-----------------------|---------------------------------------------------------------------------------|
+| `LayoutViewer.exe`    | Preview every screen without an ANT stick and edit fonts/colors/themes            |
+| `FtpColorsEditor.exe` | Edit the power zone colors                                                       |
+| `ColorPicker.exe`     | Color picking helper                                                             |
+| `awo-verifier.exe`    | Validate `.awo` files                                                            |
+| `zwo2awo.exe`         | Convert Zwift `.zwo` workouts to `.awo`                                          |
+| `ant_console.exe`     | Print the readings of the ANT+ sensors it's told to listen for                   |
 
-py -3.10 -m pip install -r requirements.txt -r requirements-build.txt
-py -3.10 -m PyInstaller --noconfirm AntWorkout.spec
+The tests (`AntWorkoutQt\tests`, no ANT stick needed) and the hardware tests against SimulANT+ simulated sensors
+(`AntWorkoutQt\hwtests`) are described in `AntWorkoutQt\README.md`.
 
-This builds AntWorkout.exe and LayoutViewer.exe into dist\AntWorkout\.
-Saved files
+## Saved files
 
-These are written next to the app:
+These are written next to the app, in the same form as the Python app's, so either app can use the other's:
 
-    savedSettingsANT.json: settings (FTP, max heart rate, wheel size, power calibration, theme, etc.)
-    musicCadenceCacheANT.json: cached song tempo analysis
-    musicSelectionANT.json: last music selection
-    antWorkoutLog.txt: event and error log
+- `savedSettingsANT.json`: settings (FTP, max heart rate, wheel size, power calibration, theme, etc.)
+- `musicCadenceCacheANT.json`: cached song tempo analysis
+- `musicSelectionANT.json`: last music selection
+- `workoutPickerANT.json`: the workout picker's list
+- `antWorkoutLog.txt`: event and error log
+
+## The repository
+
+| Folder           | What it is                                                                          |
+|------------------|-------------------------------------------------------------------------------------|
+| `AntWorkoutQt\`  | The app (C++/Qt 6.7), LayoutViewer and the tools, their tests and the hardware tests  |
+| `AntNative\`     | The ANT stick library (C++), used by both apps                                      |
+| `AntWorkout\`    | The Python app, kept as the reference (its fonts, sounds, themes and workouts are the ones both apps ship) |

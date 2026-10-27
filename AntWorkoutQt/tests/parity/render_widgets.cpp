@@ -985,19 +985,49 @@ QWidget* sceneThemePicker() {
     return dialog;
 }
 
-// LayoutViewer's display window in Workout Mode with the preview workout, 40% of the way through, laid out for
-// 1920x1152 (the design size less the taskbar) and showing view; what moves by itself stopped where it is
-QWidget* viewerScene(const QString& view) {
+// the viewer scenes' looks: (available size, the theme files loaded, in order; "fonts" is kViewerFonts)
+struct ViewerLook {
+    QString name;
+    QSize available;
+    QStringList files;
+};
+const QList<ViewerLook> kViewerLooks = {
+    {QString(), {1920, 1152}, {}},
+    {QStringLiteral("_720"), {1280, 672}, {}},
+    {QStringLiteral("_1440"), {2560, 1392}, {}},
+    {QStringLiteral("_synthwave"), {1920, 1152}, {"colors/11-synthwave.json", "gradients/02-inferno.json"}},
+    {QStringLiteral("_arctic"), {1366, 720}, {"fonts", "colors/28-arctic-white.json", "gradients/07-training-zones.json"}},
+};
+// a whole theme of fonts only: the text in Orbitron, bigger and bolder, the buttons smaller
+const char* const kViewerFonts = R"({"fonts": {"main": {"family": "Orbitron", "scale": 110, "weight": "700"},
+                                               "button": {"family": "Roboto Flex", "scale": 90, "weight": "700"}}})";
+
+// LayoutViewer's display window in Workout Mode with the preview workout, 40% of the way through, in one of
+// kViewerLooks (by default laid out for 1920x1152, the design size less the taskbar, in the default theme) and
+// showing view; what moves by itself stopped where it is
+QWidget* viewerScene(const QString& view, const ViewerLook& look = kViewerLooks.first()) {
     // (in a folder of its own, as render_python.py builds each scene)
     auto* folder = new QTemporaryDir;
     const QString here = QDir::currentPath();
     QDir::setCurrent(folder->path());
     writeSceneSettings();
     appState() = AppState();
+    theme::clear();
+    for (const QString& name : look.files) {
+        if (name == u"fonts") {
+            QFile fonts(QStringLiteral("fonts.json"));
+            fonts.open(QIODevice::WriteOnly);
+            fonts.write(kViewerFonts);
+            fonts.close();
+            theme::loadFile(QStringLiteral("fonts.json"));
+        } else {
+            theme::loadFile(QStringLiteral(AWO_PYTHON_APP_DIR "/themes/") + name);
+        }
+    }
     auto* display = new viewer::DisplayWindow;
     display->setAttribute(Qt::WA_DontShowOnScreen);
     display->build(QStringLiteral("workout"), QStringLiteral(AWO_PYTHON_APP_DIR "/") + kPreviewWorkout, 40);
-    const QSize available(1920, 1152);
+    const QSize available = look.available;
     display->maximizedMode = false;
     display->resize(available);
     display->show();
@@ -1056,12 +1086,20 @@ const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("ftp_colors_tab"), sceneFtpColorsTab},
     {QStringLiteral("ftp_mockup"), sceneFtpMockup},
     {QStringLiteral("theme_picker"), sceneThemePicker},
-    {QStringLiteral("viewer_init"), [] { return viewerScene(QStringLiteral("Init")); }},
-    {QStringLiteral("viewer_workout"), [] { return viewerScene(QStringLiteral("Workout")); }},
-    {QStringLiteral("viewer_synopsis"), [] { return viewerScene(QStringLiteral("Synopsis")); }},
-    {QStringLiteral("viewer_music_picker"), [] { return viewerScene(QStringLiteral("Music Picker")); }},
-    {QStringLiteral("viewer_workout_picker"), [] { return viewerScene(QStringLiteral("Workout Picker")); }},
 };
+
+// every view in every look: viewer_<view><look>
+QList<std::pair<QString, std::function<QWidget*()>>> scenes() {
+    QList<std::pair<QString, std::function<QWidget*()>>> all = kScenes;
+    for (const ViewerLook& look : kViewerLooks) {
+        for (const QString& view : {QStringLiteral("Init"), QStringLiteral("Workout"), QStringLiteral("Synopsis"),
+                                    QStringLiteral("Music Picker"), QStringLiteral("Workout Picker")}) {
+            QString name = QStringLiteral("viewer_") + view.toLower().replace(u' ', u'_') + look.name;
+            all.append({name, [view, look] { return viewerScene(view, look); }});
+        }
+    }
+    return all;
+}
 
 }  // namespace
 
@@ -1087,7 +1125,7 @@ int main(int argc, char* argv[]) {
         names.append(QString::fromLocal8Bit(argv[i]));
     }
     QDir().mkpath(outDir);
-    for (const auto& [name, make] : kScenes) {
+    for (const auto& [name, make] : scenes()) {
         if (!names.isEmpty() && !names.contains(name)) {
             continue;
         }

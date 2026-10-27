@@ -188,6 +188,8 @@ public:
     // the real music)
     void simulateMusic(std::optional<double> seconds) { simulatedMusic_ = seconds; }
     std::optional<double> simulatedMusic() const { return simulatedMusic_; }
+    // Musical Cadence Mode's music playing (none: not started, stopped, or simulated)
+    const music::MusicPlayer* musicPlayer() const { return musicPlayer_.get(); }
     const QList<std::pair<MaxStar*, QString>>& maxStars() const { return maxStars_; }
     const QList<MaxBubble*>& maxBubbles() const { return maxBubbles_; }
 

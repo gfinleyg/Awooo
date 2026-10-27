@@ -50,6 +50,8 @@ struct Test {
 };
 
 const QList<Test>& tests();
+// (hardware tests) a shorter test: this warmup (as .awo lines) before every test, and key's effort this long
+void shortenForTests(const QString& key, const QStringList& warmupLines, int effortSeconds);
 const Test* find(const QString& key);  // nullptr for "" (not an FTP test) or an unknown key
 bool isRamp(const QString& key);
 

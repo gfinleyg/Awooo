@@ -107,6 +107,10 @@ public:
     const std::pair<QList<double>, QList<double>>& powerValues() const { return processedPowerVals_; }
     const std::pair<QList<double>, QList<double>>& cadenceValues() const { return processedCadenceVals_; }
     const QList<double>& bestPowers() const { return bestPowerRange_; }
+    // the session's rides shown, oldest first
+    qsizetype rideCount() const { return rides_.size(); }
+    // (an FTP effort test among them) the best power keeps its average through dropouts
+    bool dropoutsKeepAverage() const { return !keepAverageSpans_.isEmpty(); }
 
     // the max markers, stats, time boxes and labels for what's in view (the graph's range settled)
     void updateSelection();

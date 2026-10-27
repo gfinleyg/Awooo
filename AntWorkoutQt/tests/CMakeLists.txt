@@ -39,7 +39,7 @@ foreach(test ant_bridge reading_pipeline)
 endforeach()
 
 # awo_ui, built offscreen
-foreach(test theme key_shortcuts layout plot widgets setup hud synopsis app_flow theme_picker)
+foreach(test theme key_shortcuts layout plot widgets setup hud synopsis app_flow theme_picker shared_files)
     awo_add_test(tst_${test} tst_${test}.cpp FakeAnt.hpp)
     target_link_libraries(tst_${test} PRIVATE awo_ui)
 endforeach()

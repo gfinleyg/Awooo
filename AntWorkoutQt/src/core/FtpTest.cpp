@@ -9,8 +9,10 @@ const QStringList kWarmupLines = {QStringLiteral("1:180,0.5"), QStringLiteral("1
 
 const QString kNotPedalingMessage = QStringLiteral("Done yet? Keep pedaling to continue...");
 
-const QList<Test>& tests() {
-    static const QList<Test> all = [] {
+namespace {
+
+QList<Test>& allTests() {
+    static QList<Test> all = [] {
         QList<Test> list;
         Test twenty{QStringLiteral("20m"), Test::Kind::Effort, QStringLiteral("20m FTP Test"), 0.95,
                     QStringLiteral("20m Avg:")};
@@ -38,6 +40,26 @@ const QList<Test>& tests() {
     return all;
 }
 
+std::optional<QStringList>& warmupOverride() {
+    static std::optional<QStringList> lines;
+    return lines;
+}
+
+}  // namespace
+
+const QList<Test>& tests() {
+    return allTests();
+}
+
+void shortenForTests(const QString& key, const QStringList& warmupLines, int effortSeconds) {
+    warmupOverride() = warmupLines;
+    for (Test& test : allTests()) {
+        if (test.key == key) {
+            test.effortSeconds = effortSeconds;
+        }
+    }
+}
+
 const Test* find(const QString& key) {
     for (const Test& test : tests()) {
         if (test.key == key) {
@@ -56,7 +78,7 @@ QStringList workoutLines(const QString& key, bool ftpSet) {
     const Test& test = *find(key);
     QStringList lines{QStringLiteral("T:") + test.name};
     if (ftpSet) {
-        lines += kWarmupLines;
+        lines += warmupOverride().value_or(kWarmupLines);
     } else {
         lines << QStringLiteral("0:%1").arg(kWarmupSeconds);
     }
