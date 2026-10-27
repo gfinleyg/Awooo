@@ -3,7 +3,7 @@
 
 # 3.26 for copy_directory_if_different (Qt's own CMake, C:\Qt\Tools\CMake_64, is 3.27)
 cmake_minimum_required(VERSION 3.26)
-project(AntWorkoutQt VERSION 0.1 LANGUAGES C CXX)
+project(AntWorkoutQt VERSION 1.4.0 LANGUAGES C CXX)
 
 if(NOT WIN32)
     message(FATAL_ERROR "AntWorkoutQt targets Windows (the ANT SDK supplied with AntNative).")
