@@ -9,6 +9,8 @@ can run without anyone clicking through SimulANT+. Windows PowerShell 5.1 or lat
   `TurnOff-Sim`, `Select-Sim`, `Get-Events` (SimulANT+'s event log), `Dump-Sim` (every control, for finding a new
   one's automation ID).
 
+They work the same for the C++ app's harness (`..\..\..\AntWorkoutQt\hwtests\simulant_test.py` and `app_test.py`).
+
 A run, from AntWorkout:
 
     python SimulantTests\run_simulant_test.py trainer        (leave it running; it waits for the simulators)

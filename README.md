@@ -3,8 +3,9 @@
 An indoor cycling workout app for Windows. It talks directly to ANT+ sensors and smart trainers through an ANT USB
 stick, and shows a live HUD with power, cadence, speed and heart rate while you ride.
 
-The app is the C++/Qt one in `AntWorkoutQt\`. `AntWorkout\` is the original Python app, kept as the reference: the
-C++ app's tests check it against the Python app's own results, and it still runs (see its README).
+The app is the C++/Qt one in `AntWorkoutQt\`, released from version 1.4.0 on. `AntWorkout\` is the original Python
+app (releases 1.0.0 to 1.3.0), kept as the reference: the C++ app's tests check it against the Python app's own
+results, and it still runs (see its README).
 
 ## Features
 
@@ -27,15 +28,22 @@ Supported ANT+ devices: heart rate monitors, speed/cadence sensors, power meters
 
 ## Requirements
 
-- 64-bit Windows
+- 64-bit Windows 10 or later
 - An ANT USB stick (ANT+ dongle)
 
-## Building and running
+## Installing
+
+Download `AntWorkout-vX.Y.Z.zip` from the [releases page](https://github.com/gfinleyg/Awooo/releases), decompress it
+into your Documents folder and run `AntWorkout\AntWorkout.exe`. Nothing else needs installing: Qt, the C++ runtime
+and the app's fonts, sounds, themes and workouts are all in the folder.
+
+Moving up from an earlier version: copy your settings and caches (see Saved files below), and any workouts or themes
+of your own, from the old `AntWorkout` folder into the new one. 1.4.0 reads 1.3.0's files as they are.
+
+## Building
 
 `AntWorkoutQt\build_windows.ps1` builds everything into `AntWorkoutQt\dist\AntWorkout\` and runs the tests (it needs
-Visual Studio 2022, Qt 6.7.0 and the ANT SDK; see `AntWorkoutQt\README.md`). Run `AntWorkout.exe` from there. The
-folder runs on its own (Qt, the C++ runtime and the app's fonts, sounds, themes and workouts are all in it), so it can
-be zipped up and copied to another PC.
+Visual Studio 2022, Qt 6.7.0 and the ANT SDK; see `AntWorkoutQt\README.md`, which also says how a release is made).
 
 ## Workout files (.awo)
 

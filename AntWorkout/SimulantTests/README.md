@@ -5,6 +5,10 @@ SimulANT+ over the air, then checks what the workout screen showed against what 
 
 Needs both ANT sticks: AntWorkout uses one, SimulANT+ the other.
 
+The C++ app (`..\..\AntWorkoutQt`) runs the same tests with the same scripts, timeline and checks:
+`AntWorkoutQt\hwtests\simulant_test.py` and `app_test.py` (see `AntWorkoutQt\README.md`). The set-up below is the same
+for both apps.
+
 ## Running a test
 
 1. Close AntWorkout and SimulANT+.
@@ -28,6 +32,11 @@ Needs both ANT sticks: AntWorkout uses one, SimulANT+ the other.
 4. Once all of them are heard, the harness connects, opens the workout screen and the timed test starts by
    itself (about 5 minutes; the scripts follow it however far apart they were started). At the end it prints
    the report; stop the scripts in SimulANT+ then.
+
+If SimulANT+ was closed with simulators on, the next run's stick can replay what it heard then, and the harness
+connects to simulators that aren't there (or, in the full app test, stops because it hears one it shouldn't). Start
+the run again: the second one is clean. Reception varies from day to day; the "kept coming through" checks fail
+below about 70%, in either app, so compare against the other app's run before suspecting a regression.
 
 ## What's tested
 

@@ -4,6 +4,10 @@ ANT+ sensors for Python, C and C++: the USB stick, every data page of six sensor
 dedicated channels for sending to a sensor, and a watchdog that recovers dropped sensors. It's all one native core;
 each language gets a thin layer over it.
 
+Both AntWorkout apps use it: the C++ app (`..\AntWorkoutQt`) builds this folder with CMake and links the core
+(`antnative_core`) straight into its ANT layer (`AntWorkoutQt\src\ant`), and the Python app (`..\AntWorkout`)
+loads the `ant_native` module through the `ant` package.
+
 ## Layout
 
 ```
@@ -102,7 +106,8 @@ Control pages, built in the core (`ant.profiles.fitness_equipment`, `ant.pages`,
 They're sent acknowledged on the trainer's dedicated channel: `ant_manager_send` in C, or in Python
 `ANTNative.send_acknowledged(channel, payload, timeout_ms)` with `ANTManager.channel_for(17, device_number)` after
 `ANTManager.open_device_channels(...)`. AntWorkout's `ClassAntDevices._service_trainer_target()` is the working
-Python example: it resends the target every couple of seconds and retries on failure.
+Python example: it resends the target every couple of seconds and retries on failure; the C++ app's
+`AntBridge::setTrainerTargetPower()` (`AntWorkoutQt\src\ant\AntBridge.cpp`) does the same on the core.
 
 ## USB device enumeration and dual-stick test
 

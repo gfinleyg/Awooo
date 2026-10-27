@@ -4,6 +4,30 @@ The AntWorkout app in C++/Qt: the main app (see `..\README.md` for what it does)
 it was rewritten from, which stays as the reference. `PLAN.md` is the plan the rewrite followed, `CHANGES.md` what
 the C++ app does differently.
 
+## Layout
+
+```
+src/core/      awo_core: AppState, workout files (.awo, .zwo), FTP tests, grading, sessions, the zone colors' math,
+               settings, the log, the workout engine, the simulated rider (no Qt Widgets)
+src/ant/       awo_ant: the ANT connection on AntNative's core (AntBridge), the sticks, the readings pipeline
+src/music/     awo_music: tempo analysis (numpy's sums, pocketfft), the analysis cache, playlists, the cadence
+               workout, the music player (miniaudio)
+src/plot/      awo_plot: the graphs (ViewBox, axes, curves, columns), what the app used pyqtgraph for
+src/ui/        awo_ui: the theme and layout scaling, key shortcuts, sounds, the main window; screens/ (setup,
+               workout, synopsis), dialogs/ (devices, calibration, pickers, theme picker), widgets/ (gauges,
+               spiral, grades, progress bars, the FTP colors editor, the color picker)
+src/viewer/    awo_viewer: LayoutViewer's display and controls windows
+src/app/       AntWorkout.exe's main; src/tools/ the other exes' (awo-verifier, zwo2awo, ColorPicker,
+               FtpColorsEditor); LayoutViewer's main is in src/viewer/
+third_party/   pocketfft (as numpy 1.26.4 builds it) and miniaudio 0.11.25
+tests/         the Qt Test exes (tst_*.cpp), golden/ (the Python app's results, make_golden.py), parity/ (the
+               pixel comparison with the Python app)
+hwtests/       the SimulANT+ hardware tests (simulant_test.py, app_test.py and their exes) and ant_console
+```
+
+The fonts, sounds, images, themes and workouts aren't copied into this folder: the build takes them from
+`..\AntWorkout`.
+
 ## Building
 
 Needs Visual Studio 2022 with the C++ workload, Qt 6.7.0 for MSVC (`C:\Qt\6.7.0\msvc2019_64`, with Qt's own CMake
@@ -34,6 +58,7 @@ Built beside the app (`build\Release\bin`, and `dist\AntWorkout\`):
 | `LayoutViewer.exe` | Every screen in every mode without an ANT stick, at any screen size, with its fonts and colors edited live and saved as a theme (`--directwrite`: DirectWrite fonts) |
 | `FtpColorsEditor.exe` | LayoutViewer's FTP Colors tab and mockup on their own: the power zone and free ride colors, saved as a gradients file |
 | `ColorPicker.exe`  | An RGBA color picker (`ColorPicker.exe r g b a` to start from a color) |
+| `ant_console.exe`  | Prints the readings of the sensors it's told to wait for (a quick look at a sensor, no app needed) |
 
 ## Tests
 
@@ -93,5 +118,16 @@ py -3.10 hwtests\app_test.py sensors      Musical Cadence Mode (the music silent
                                           FTP, Free Mode, exit
 ```
 
-`--offscreen` runs the build's `simulant_app.exe` on Qt's offscreen platform, so no windows come up. `ant_console.exe` (in `dist\AntWorkout`) prints the readings of whatever
-sensors it's told to wait for, for a quick look without the timeline.
+`--offscreen` runs the build's `simulant_app.exe` on Qt's offscreen platform, so no windows come up.
+
+## Making a release
+
+1. Set the version in `CMakeLists.txt` (`project(AntWorkoutQt VERSION X.Y.Z ...)`), build with the tests, and commit.
+2. Bring `main` up to the commit, tag it `vX.Y.Z` (an annotated tag, as the earlier ones) and push both.
+3. Zip `dist\AntWorkout\` as `AntWorkout-vX.Y.Z.zip` with the `AntWorkout` folder at its top, leaving out what runs
+   left behind in it (`savedSettingsANT.json`, `antWorkoutLog.txt`, `workoutPickerANT.json`, the music cache and
+   selection) and the hardware test exes (`simulant_ride.exe`, `simulant_app.exe`). Check the zip on its own: unzipped
+   somewhere new, with no Qt on PATH, `AntWorkout.exe` should start.
+4. Make a GitHub release for the tag with the zip attached, its notes in the earlier releases' form (the
+   requirements, "decompress the zip file into your Documents folder", then what's changed; `CHANGES.md` lists what
+   1.4.0 changed from the Python app).
