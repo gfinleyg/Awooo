@@ -218,6 +218,9 @@ class AnalogGaugeWidget(QWidget):
         self.big_needle_center_size = 8 #default value, smaller value = bigger center circle
         #nested circles in place of the center point (see set_center_rings): None, or ((outer, inner) colors, level)
         self.center_rings = None
+        #the outermost of them a gear turned this many degrees (see set_center_gear_angle), or None: a circle
+        self.center_gear_angle = None
+        self.gearLastFrame = 0.0
         ################################################################################################
         # ARC SETTINGS
         ################################################################################################
@@ -1466,6 +1469,40 @@ class AnalogGaugeWidget(QWidget):
             self.center_rings = rings
             self.update_frame()
 
+    #the outermost ring as a gear (set_center_gear_angle): this many teeth, each this much of a ring's width deep
+    CENTER_GEAR_TEETH = 18
+    CENTER_GEAR_DEPTH = 0.5
+
+    def set_center_gear_angle(self, angle):
+        """The outermost center ring drawn as a gear turned angle degrees clockwise (e.g. with the chainring behind
+        it), or a circle again (None). While it turns the gauge is redrawn for it at most at the Performance
+        setting's frame rate (0 fps: only along with whatever else redraws it)"""
+        old = self.center_gear_angle
+        self.center_gear_angle = angle
+        if self.center_rings is None or angle == old:
+            return
+        if angle is None or old is None:
+            self.update_frame()
+            return
+        fps = Performance.gauge_fps()
+        now = time.monotonic()
+        #(a few ms early still counts: the chainring's own frames are about the fastest rate's apart)
+        if fps and now - self.gearLastFrame >= 1/fps - 0.004:
+            self.gearLastFrame = now
+            self.update_frame()
+
+    def center_gear(self, r, depth):
+        """A gear's outline around (0, 0): its teeth' tips at r, the gaps between them depth in"""
+        root = r - depth
+        pitch = 2*math.pi/self.CENTER_GEAR_TEETH
+        points = []
+        #each tooth: along the gap's floor, up a flank, across the tip (the next tooth's gap starts down the other)
+        for k in range(self.CENTER_GEAR_TEETH):
+            for part, radius in ((0, root), (0.35, root), (0.5, r), (0.85, r)):
+                a = (k + part)*pitch
+                points.append(QPointF(radius*math.cos(a), radius*math.sin(a)))
+        return QPolygonF(points)
+
     def ring_count(self):
         if not self.center_ring_min_px:
             return self.center_ring_count
@@ -1496,7 +1533,13 @@ class AnalogGaugeWidget(QWidget):
             painter.setBrush(grad)
             #(outlines thin enough to leave narrow rings their color)
             painter.setPen(QPen(color.darker(140), max(1.0, min(radius*0.02, band*0.15))))
-            painter.drawEllipse(QPointF(0, 0), r, r)
+            if i == 0 and self.center_gear_angle is not None:
+                painter.save()
+                painter.rotate(self.center_gear_angle)
+                painter.drawPolygon(self.center_gear(r, band*self.CENTER_GEAR_DEPTH))
+                painter.restore()
+            else:
+                painter.drawEllipse(QPointF(0, 0), r, r)
 
     def draw_big_needle_center_point(self, diameter=30):
         painter = QPainter(self.paintTarget)
@@ -1786,6 +1829,8 @@ class BeatingSvgWidget(QWidget):
 class RotatingSvgWidget(QWidget):
     #background image that spins clockwise at the rate rpmSource() returns
     #the svg is rendered to a pixmap once per size, each frame only draws that pixmap rotated
+    #turned(angle): each frame it turns, and once when it stops (e.g. the gauge's center gear turns with it)
+    turned = pyqtSignal(float)
     FRAME_MS = 16 #~60fps while spinning
     IDLE_MS = 250 #how often to check for motion again while stopped
 
@@ -1812,12 +1857,14 @@ class RotatingSvgWidget(QWidget):
         if rpm <= 0: #stopped, nothing to redraw
             if self.spinTimer.interval() != self.IDLE_MS:
                 self.spinTimer.setInterval(self.IDLE_MS)
+                self.turned.emit(self.angle)
             return
         if self.spinTimer.interval() != self.FRAME_MS:
             self.spinTimer.setInterval(self.FRAME_MS)
             return #dt covered the idle wait, start timing from here
         self.angle = (self.angle + rpm*6*dt) % 360 #rpm*360/60 degrees per second
         self.update()
+        self.turned.emit(self.angle)
 
     def resizeEvent(self, event):
         self.pixmap = None
@@ -1869,6 +1916,9 @@ class Ui_Form(object):
         elif spin: #spins at the gauge's current value in RPM
             gauge = self.widget
             self.svg = RotatingSvgWidget(svgFile, lambda: gauge.reading if gauge.reading > gauge.minValue else 0)
+            #(with center rings, their outermost a gear turning with it)
+            gauge.set_center_gear_angle(self.svg.angle)
+            self.svg.turned.connect(gauge.set_center_gear_angle)
             self.vLayout.addWidget(self.svg, 0,0)
         else:
             self.svg = QSvgWidget()

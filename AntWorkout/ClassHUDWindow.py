@@ -50,8 +50,8 @@ import SavedSettings
 import Units
 from ClassGradeWidgets import GradeList, GradeOverlay
 
-#Musical Cadence Mode's beat: the nested circles in the cadence gauge's middle brighten on each pedal stroke's
-#beat (AppState.musicPulses) and fade back over this long
+#the beat of the nested circles in the cadence gauge's middle: they brighten on each pedal stroke's beat
+#(Musical Cadence Mode: the music's, AppState.musicPulses; else the chainring's turn) and fade back over this long
 BEAT_SECONDS = 0.2
 
 #the workout clock's tick (process_events)
@@ -500,6 +500,10 @@ class HUDWindow(QWidget):
                 self.cadenceGaugeDisplay.setMaximumSize(400, 300)
                 self.cadenceGaugeDisplay.setMinimumSize(400, 300)
                 self.hudLayout.addWidget(self.cadenceGaugeDisplay,10,0,9,11, alignment=Qt.AlignmentFlag.AlignBottom)
+            if not self.cadenceMode:
+                #the nested circles too, beating with each pedal stroke as the chainring comes round
+                self.cadenceGaugeDisplay.ui.svg.turned.connect(lambda angle: self.update_center_rings())
+                self.update_center_rings()
         self.gaugeChooser() #(the cadence gauge's band, now it's there)
         #the gauge showing the Ride At target's arc
         self.targetGauge = self.cadenceGaugeDisplay if self.cadenceMode else self.wattGaugeDisplay
@@ -1030,14 +1034,22 @@ class HUDWindow(QWidget):
 
     def update_center_rings(self, level=None):
         """The cadence gauge's nested circles: the band's color at the target cadence (so they match the band's tip
-        when riding on target; free ride's color with no target), brightened on the music's beat (or at level, given)"""
+        when riding on target; free ride's color with no target), brightened on the music's beat (or at level, given).
+        Outside Musical Cadence Mode: the target power's color, brightened on each pedal stroke (the chainring
+        coming round to where it started)"""
         if level is None:
             level = 0.0
-            seconds = self.music_seconds() if self.startedBool and self.workoutUnpausedBool else None
-            if seconds is not None:
-                index = bisect.bisect_right(AppState.musicPulses, seconds) - 1
-                if index >= 0:
-                    level = max(0.0, 1 - (seconds - AppState.musicPulses[index])/BEAT_SECONDS)
+            if self.cadenceMode:
+                seconds = self.music_seconds() if self.startedBool and self.workoutUnpausedBool else None
+                if seconds is not None:
+                    index = bisect.bisect_right(AppState.musicPulses, seconds) - 1
+                    if index >= 0:
+                        level = max(0.0, 1 - (seconds - AppState.musicPulses[index])/BEAT_SECONDS)
+            else:
+                chainring = self.cadenceGaugeDisplay.ui.svg
+                rpm = chainring.rpmSource()
+                if rpm > 0: #(the time since it came round: rpm*6 degrees a second)
+                    level = max(0.0, 1 - chainring.angle/(rpm*6)/BEAT_SECONDS)
         gauge = self.cadenceGaugeDisplay.ui.widget
         color = QColor("#" + FtpColors.gauge_ring(self.currentPower))
         gauge.set_center_rings((color.darker(130), color), level)
@@ -1413,7 +1425,7 @@ class HUDWindow(QWidget):
         #     f.write(str(self.timeDelta)+"\n")
 
     def update_smooth_bars(self):
-        if self.cadenceMode:
+        if hasattr(self, "cadenceGaugeDisplay"):
             self.update_center_rings()
         #only while the timer is actually running; paused, pre-start and finished bars hold their last set value
         if not (self.workoutUnpausedBool and self.startedBool) or self.newWorkoutStart:

@@ -263,6 +263,35 @@ private slots:
         QCOMPARE(w->centerRings()->first, expected);
     }
 
+    // (test_power_spiral.py test_cadence_rings_gear_turns_and_beats_with_the_chainring, the beat's half) outside
+    // Musical Cadence Mode the cadence gauge's rings are brightest as the chainring comes round, fading over
+    // kBeatSeconds; free ride's color
+    void cadenceRingsBeatWithTheChainring() {
+        AppState& state = appState();
+        state.workoutMode = false;
+        state.antCadence = true;
+        state.ftp = 200;
+        state.ftpRanges = zones::powerRanges();
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        AnalogGauge* w = hud.cadenceGauge()->gauge();
+        RotatingSvgWidget* chainring = hud.cadenceGauge()->chainring();
+        QVERIFY(w->centerRings());
+        const QColor free(QStringLiteral("#") + zones::gaugeRing(0));
+        QCOMPARE(w->centerRings()->first, (QList<QColor>{free.darker(130), free}));
+        QCOMPARE(w->centerRings()->second, 0.0);
+        w->setMaxValue(200);
+        w->setValue(60);
+        // each frame the chainring turns: (60 rpm, 360 degrees a second) the time since it came round
+        int frames = 0;
+        connect(chainring, &RotatingSvgWidget::turned, &hud, [&] {
+            const double level = std::max(0.0, 1 - chainring->angle() / 360 / kBeatSeconds);
+            QVERIFY(std::abs(w->centerRings()->second - level) < 0.02);
+            ++frames;
+        });
+        QTRY_VERIFY(frames >= 5);
+    }
+
     // ---- START, PAUSE, END ----
 
     void startsPausesAndResumes() {

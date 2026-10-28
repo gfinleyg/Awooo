@@ -50,6 +50,22 @@ void drawCentered(QPainter& painter, const QFontMetrics& fm, double x, double y,
     painter.drawText(static_cast<int>(x) - w / 2, static_cast<int>(y) - h / 2, w, h, Qt::AlignCenter, text);
 }
 
+// a gear's outline around (0, 0): its teeth's tips at r, the gaps between them depth in
+QPolygonF centerGear(double r, double depth) {
+    const double root = r - depth;
+    const double pitch = 2 * std::numbers::pi / AnalogGauge::kCenterGearTeeth;
+    QPolygonF points;
+    // each tooth: along the gap's floor, up a flank, across the tip (the next tooth's gap starts down the other)
+    for (int k = 0; k < AnalogGauge::kCenterGearTeeth; ++k) {
+        for (const auto& [part, radius] :
+             {std::pair{0.0, root}, std::pair{0.35, root}, std::pair{0.5, r}, std::pair{0.85, r}}) {
+            const double a = (k + part) * pitch;
+            points.append(QPointF(radius * std::cos(a), radius * std::sin(a)));
+        }
+    }
+    return points;
+}
+
 }  // namespace
 
 QString imagePath(const QString& name) {
@@ -270,6 +286,25 @@ void AnalogGauge::setCenterRings(const std::optional<QList<QColor>>& colors, dou
     }
     if (centerRings_ != rings) {
         centerRings_ = rings;
+        redrawFrame();
+    }
+}
+
+void AnalogGauge::setCenterGearAngle(std::optional<double> angle) {
+    const std::optional<double> old = centerGearAngle_;
+    centerGearAngle_ = angle;
+    if (!centerRings_ || angle == old) {
+        return;
+    }
+    if (!angle || !old) {
+        redrawFrame();
+        return;
+    }
+    const int fps = Performance::current().gaugeFps();
+    const double now = needleClock_.nsecsElapsed() / 1e9;
+    // (a few ms early still counts: the chainring's own frames are about the fastest rate's apart)
+    if (fps != 0 && now - gearLastFrame_ >= 1.0 / fps - 0.004) {
+        gearLastFrame_ = now;
         redrawFrame();
     }
 }
@@ -517,7 +552,14 @@ void AnalogGauge::drawCenterRings(QPainter& painter, double radius) {
         painter.setBrush(grad);
         // (outlines thin enough to leave narrow rings their color)
         painter.setPen(QPen(color.darker(140), std::max(1.0, std::min(radius * 0.02, band * 0.15))));
-        painter.drawEllipse(QPointF(0, 0), r, r);
+        if (i == 0 && centerGearAngle_) {
+            painter.save();
+            painter.rotate(*centerGearAngle_);
+            painter.drawPolygon(centerGear(r, band * kCenterGearDepth));
+            painter.restore();
+        } else {
+            painter.drawEllipse(QPointF(0, 0), r, r);
+        }
     }
 }
 
@@ -763,6 +805,7 @@ void RotatingSvgWidget::step() {
         // stopped: nothing to redraw
         if (spinTimer_->interval() != kIdleMs) {
             spinTimer_->setInterval(kIdleMs);
+            emit turned(angle_);
         }
         return;
     }
@@ -774,6 +817,7 @@ void RotatingSvgWidget::step() {
     // rpm*360/60 degrees a second
     angle_ = py::mod(angle_ + rpm * 6 * dt, 360);
     update();
+    emit turned(angle_);
 }
 
 void RotatingSvgWidget::resizeEvent(QResizeEvent* event) {
@@ -820,8 +864,13 @@ Gauge::Gauge(const QString& svgFile, const std::optional<Beat>& beat, bool spin,
         layout->addWidget(background_, 0, 0);
     } else if (spin) {
         // the chainring spins at the reading, in RPM
-        background_ = new RotatingSvgWidget(
+        auto* chainring = new RotatingSvgWidget(
             imagePath(svgFile), [gauge] { return gauge->reading() > gauge->minValue() ? gauge->reading() : 0; });
+        // (with center rings, their outermost a gear turning with it)
+        gauge->setCenterGearAngle(chainring->angle());
+        connect(chainring, &RotatingSvgWidget::turned, gauge,
+                [gauge](double angle) { gauge->setCenterGearAngle(angle); });
+        background_ = chainring;
         layout->addWidget(background_, 0, 0);
     } else if (!svgFile.isEmpty()) {
         auto* svg = new QSvgWidget(imagePath(svgFile));

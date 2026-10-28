@@ -462,6 +462,12 @@ void HudScreen::buildGauges() {
             cadenceGaugeDisplay_->setMinimumSize(400, 300);
             hudLayout_->addWidget(cadenceGaugeDisplay_, 10, 0, 9, 11, Qt::AlignBottom);
         }
+        if (!cadenceMode_) {
+            // the nested circles too, beating with each pedal stroke as the chainring comes round
+            connect(cadenceGaugeDisplay_->chainring(), &RotatingSvgWidget::turned, this,
+                    [this] { updateCenterRings(); });
+            updateCenterRings();
+        }
         w->rescale();
     }
     // (the cadence gauge's band, now it's there)

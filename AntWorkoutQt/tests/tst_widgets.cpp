@@ -460,6 +460,23 @@ private slots:
         QCOMPARE(gauge.ringCount(), 9);
     }
 
+    // (test_power_spiral.py test_cadence_rings_gear_turns_and_beats_with_the_chainring, the gear's half; the beat's
+    // is tst_hud's cadenceRingsBeatWithTheChainring) the outermost ring a gear turned with the chainring behind it
+    void cadenceRingsGearTurnsWithTheChainring() {
+        Gauge gauge(QStringLiteral("Chainring.svg"), std::nullopt, true);
+        AnalogGauge* w = gauge.gauge();
+        RotatingSvgWidget* chainring = gauge.chainring();
+        QCOMPARE(w->centerGearAngle(), std::optional<double>(0.0));
+        w->setMaxValue(200);
+        w->setValue(60);
+        QTRY_VERIFY(chainring->angle() > 0);
+        QCOMPARE(w->centerGearAngle(), std::optional<double>(chainring->angle()));
+        // stopped: it holds where it got to
+        w->setValue(0);
+        QTRY_COMPARE(chainring->spinTimer()->interval(), RotatingSvgWidget::kIdleMs);
+        QCOMPARE(w->centerGearAngle(), std::optional<double>(chainring->angle()));
+    }
+
     // ---- The grade overlay and list ----
 
     void gradeOverlayFadesOut() {

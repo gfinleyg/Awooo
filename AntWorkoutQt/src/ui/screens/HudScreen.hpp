@@ -70,7 +70,8 @@ constexpr double kPowerRingMinPx = 6;
 constexpr int kPowerRingMin = 3;
 // Space starts a workout and then pauses it: not for this long after the start
 constexpr double kSpacePauseGuardSeconds = 0.5;
-// Musical Cadence Mode's beat: the cadence gauge's rings brighten on each pedal stroke's beat and fade over this long
+// the cadence gauge's rings' beat: they brighten on each pedal stroke's beat (Musical Cadence Mode: the music's, else
+// the chainring's turn) and fade over this long
 constexpr double kBeatSeconds = 0.2;
 
 // The power gauge as the workout screen shows it, the reading in the middle as big as fits in its rings

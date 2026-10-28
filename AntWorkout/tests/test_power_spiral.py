@@ -332,6 +332,40 @@ def test_power_rings_put_the_power_now_in_the_middle(qapp):
     assert [c.name() for c in widget.center_rings[0]] == [color(140), color(300), color(300), color(300), color(200)]
 
 
+def test_cadence_rings_gear_turns_and_beats_with_the_chainring(qapp):
+    """The cadence gauge's rings: the outermost a gear turned with the chainring behind it (its teeth's tips at the
+    ring's edge, the gaps between them in from it), and outside Musical Cadence Mode brightest as the chainring comes
+    round, fading over BEAT_SECONDS"""
+    from types import SimpleNamespace
+    import ClassHUDWindow
+    from ClassAnalogGauge import AnalogGaugeWidget, Gauge
+    gauge = Gauge(None, 'Chainring.svg', spin=True)
+    chainring, widget = gauge.ui.svg, gauge.ui.widget
+    chainring.spinTimer.stop()
+    assert widget.center_gear_angle == 0.0
+    widget.setMaxValue(200)
+    widget.setValue(60)
+    chainring.step() #(the first step from stopped only starts timing)
+    chainring.lastStep -= 0.5
+    chainring.step()
+    assert chainring.angle == pytest.approx(180, abs=5)
+    assert widget.center_gear_angle == chainring.angle
+    gear = widget.center_gear(100, 10)
+    assert len(gear) == AnalogGaugeWidget.CENTER_GEAR_TEETH*4
+    assert sorted({round(math.hypot(p.x(), p.y()), 6) for p in gear}) == [90, 100]
+    #(60 rpm: 360 degrees a second)
+    hud = SimpleNamespace(cadenceMode=False, currentPower=0, cadenceGaugeDisplay=gauge)
+    for angle, level in ((0, 1.0), (360*ClassHUDWindow.BEAT_SECONDS/2, 0.5), (180, 0.0)):
+        chainring.angle = angle
+        ClassHUDWindow.HUDWindow.update_center_rings(hud)
+        assert widget.center_rings[1] == pytest.approx(level)
+    #stopped: no beat
+    chainring.angle = 0
+    widget.setValue(0)
+    ClassHUDWindow.HUDWindow.update_center_rings(hud)
+    assert widget.center_rings[1] == 0
+
+
 ###The session's earlier rides (see Session.py)
 def test_ring_carries_on_from_the_sessions_rides(qapp):
     """The ring starts with the rides before this workout, each in the zones it was ridden in, a tick where each

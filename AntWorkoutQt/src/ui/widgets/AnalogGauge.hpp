@@ -3,7 +3,8 @@
 // The analog gauges (ClassAnalogGauge.py, after Stefan Holstein's analoggaugewidget): the power, cadence and heart rate
 // gauges on the workout screen. A scale with tick marks and numbers, a colored band up to the needle, a needle that
 // eases toward each reading at the Performance setting's frame rate, the reading and units in the middle, nested
-// center rings (the power gauge's recent blocks, the cadence gauge's beat), and the Ride At target arc.
+// center rings (the power gauge's recent blocks, the cadence gauge's beat with its outermost a gear turning with the
+// chainring), and the Ride At target arc.
 //
 // It's drawn in layers kept as pixmaps: the face under the band (the outer ring) and over it (ticks, numbers) are
 // redrawn only by redraw(); each frame (redrawFrame(): a reading, the needle easing, the rings, the arc) only the
@@ -36,6 +37,9 @@ public:
     static constexpr double kNeedleEaseSeconds = 0.11;
     // the rings fill the center from its edge in to this much of its radius (the innermost a disc that size)
     static constexpr double kCenterRingSpread = 0.6;
+    // the outermost ring as a gear (setCenterGearAngle): this many teeth, each this much of a ring's width deep
+    static constexpr int kCenterGearTeeth = 18;
+    static constexpr double kCenterGearDepth = 0.5;
 
     explicit AnalogGauge(QWidget* parent = nullptr);
 
@@ -81,6 +85,11 @@ public:
     const std::optional<std::pair<QList<QColor>, double>>& centerRings() const { return centerRings_; }
     // how many rings: centerRingCount, or with centerRingMinPx as many as fit at its size with each that wide
     int ringCount() const;
+    // the outermost center ring drawn as a gear turned angle degrees clockwise (e.g. with the chainring behind it), or
+    // a circle again (none). While it turns the gauge is redrawn for it at most at the Performance setting's frame rate
+    // (0 fps: only along with whatever else redraws it)
+    void setCenterGearAngle(std::optional<double> angle);
+    std::optional<double> centerGearAngle() const { return centerGearAngle_; }
     // the target arc: centered on arcCenterValue, wider for a higher value
     void setArc(double centerValue, const QGradientStops& colors);
 
@@ -178,6 +187,9 @@ private:
     bool enableBigScaledMarker_ = true;
     bool enableNeedlePolygon_ = true;
     std::optional<std::pair<QList<QColor>, double>> centerRings_;
+    std::optional<double> centerGearAngle_;
+    // (on the needle's clock)
+    double gearLastFrame_ = 0;
 
     QPaintDevice* paintTarget_ = this;
     QPixmap paintCache_, faceUnder_, faceOver_;
@@ -219,7 +231,8 @@ private:
     QTimer* beatTimer_;
 };
 
-// a background image that spins clockwise at the rate rpmSource() returns (drawn from a pixmap rendered once per size)
+// a background image that spins clockwise at the rate rpmSource() returns (drawn from a pixmap rendered once per size);
+// turned(angle) each frame it turns, and once when it stops (e.g. the gauge's center gear turns with it)
 class RotatingSvgWidget : public QWidget {
     Q_OBJECT
 
@@ -233,6 +246,11 @@ public:
     double scale = 1.0;
     QTimer* spinTimer() const { return spinTimer_; }
     double angle() const { return angle_; }
+    // the rate it's spinning at now (0: stopped)
+    double rpm() const { return rpmSource_(); }
+
+signals:
+    void turned(double angle);
 
 protected:
     void paintEvent(QPaintEvent* event) override;

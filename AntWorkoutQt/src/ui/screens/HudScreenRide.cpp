@@ -309,9 +309,7 @@ void HudScreen::showDifficultyLabels() {
 // ---- Between ticks ----
 
 void HudScreen::updateSmoothBars() {
-    if (cadenceMode_) {
-        updateCenterRings();
-    }
+    updateCenterRings();
     // only while the timer's running: paused, before START and once finished the bars hold where they were set
     if (!(engine_->unpaused() && engine_->started()) || engine_->newWorkoutStart()) {
         return;
@@ -969,22 +967,29 @@ void HudScreen::refreshFtpColors() {
     }
 }
 
-// Musical Cadence Mode's rings: the band's color at the target cadence (so they match the band's tip when riding on
-// target; free ride's color with no target), brightened on the music's beat (or at level, given)
+// The cadence gauge's rings: the band's color at the target cadence (so they match the band's tip when riding on
+// target; free ride's color with no target), brightened on the music's beat (or at level, given). Outside Musical
+// Cadence Mode: the target power's color, brightened on each pedal stroke (the chainring coming round to where it
+// started)
 void HudScreen::updateCenterRings(std::optional<double> level) {
     if (!cadenceGaugeDisplay_) {
         return;
     }
     if (!level) {
         level = 0.0;
-        const std::optional<double> seconds =
-            engine_->started() && engine_->unpaused() ? musicSeconds() : std::nullopt;
-        const QList<double>& pulses = appState().musicPulses;
-        if (seconds) {
-            const qsizetype index = std::upper_bound(pulses.begin(), pulses.end(), *seconds) - pulses.begin() - 1;
-            if (index >= 0) {
-                level = std::max(0.0, 1 - (*seconds - pulses[index]) / kBeatSeconds);
+        if (cadenceMode_) {
+            const std::optional<double> seconds =
+                engine_->started() && engine_->unpaused() ? musicSeconds() : std::nullopt;
+            const QList<double>& pulses = appState().musicPulses;
+            if (seconds) {
+                const qsizetype index = std::upper_bound(pulses.begin(), pulses.end(), *seconds) - pulses.begin() - 1;
+                if (index >= 0) {
+                    level = std::max(0.0, 1 - (*seconds - pulses[index]) / kBeatSeconds);
+                }
             }
+        } else if (const RotatingSvgWidget* chainring = cadenceGaugeDisplay_->chainring(); chainring->rpm() > 0) {
+            // (the time since it came round: rpm*6 degrees a second)
+            level = std::max(0.0, 1 - chainring->angle() / (chainring->rpm() * 6) / kBeatSeconds);
         }
     }
     const QColor color(QStringLiteral("#") + zones::gaugeRing(currentPower_));
@@ -1248,10 +1253,8 @@ void HudScreen::runSimulatedRide(double untilSeconds, SimulatedRider& rider,
     simulatedRevolutions_ = revolutions;
     showSimulatedReading(reading);
     updatePowerRings();
-    if (cadenceMode_) {
-        // the beat caught at its brightest
-        updateCenterRings(1.0);
-    }
+    // the beat caught at its brightest
+    updateCenterRings(1.0);
 }
 
 void HudScreen::showSimulatedReading(const RiderReading& reading) {
