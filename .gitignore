@@ -35,3 +35,8 @@ AntWorkout/SimulantTests/run/
 
 # vscode settings
 /.vscode/
+
+# Personal Claude Code instructions, settings and hooks
+/CLAUDE.local.md
+/.claude/settings.local.json
+/.claude/hooks/
