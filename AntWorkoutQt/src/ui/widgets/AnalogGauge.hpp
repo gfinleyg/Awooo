@@ -77,6 +77,8 @@ public:
     // nested circles in place of the center point, shaded through colors from the outermost to the innermost (two or
     // more), or the center point back (none). level (0 to 1) brightens them and swells them a little, e.g. on a beat
     void setCenterRings(const std::optional<QList<QColor>>& colors, double level = 0.0);
+    // the rings' colors (outermost first) and level, as last set
+    const std::optional<std::pair<QList<QColor>, double>>& centerRings() const { return centerRings_; }
     // how many rings: centerRingCount, or with centerRingMinPx as many as fit at its size with each that wide
     int ringCount() const;
     // the target arc: centered on arcCenterValue, wider for a higher value

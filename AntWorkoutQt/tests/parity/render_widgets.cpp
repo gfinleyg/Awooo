@@ -305,7 +305,7 @@ QWidget* scenePowerGauge() {
     w->setValue(230);
     w->setOuterCircleBg({{0.25, QColor(0, 0, 0, 0)}, {0.18, QColor(QStringLiteral("#") + zones::gaugeRing(230))}});
     QList<QColor> rings;
-    for (const double power : {230, 180, 140, 260, 90}) {
+    for (const double power : {90, 260, 140, 180, 230}) { // (oldest outermost, the power now in the middle)
         rings.append(zones::zoneColor(power));
     }
     w->setCenterRings(rings);

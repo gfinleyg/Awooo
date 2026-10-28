@@ -12,6 +12,7 @@
 #include <QSlider>
 #include <QtTest>
 
+#include "AnalogGauge.hpp"
 #include "AntBridge.hpp"
 #include "AppLayout.hpp"
 #include "AppState.hpp"
@@ -232,6 +233,34 @@ private slots:
         QCOMPARE(samples.size(), qsizetype(1));
         QCOMPARE(samples.back().power, powerAt > 5 ? 200.0 : 0.0);
         QCOMPARE(samples.back().cadence, expected >= 0 ? std::optional<double>(expected) : std::nullopt);
+    }
+
+    // (test_power_spiral.py test_power_rings_put_the_power_now_in_the_middle) the power now innermost, then out from
+    // it each finished block's average, newest to oldest (a reading every tick: 100 W, 300 W from 3 s, the last 200 W)
+    void powerRingsPutThePowerNowInTheMiddle() {
+        AppState& state = appState();
+        state.ftp = 250;
+        std::unique_ptr<Gauge> gauge(newPowerGauge());
+        AnalogGauge* w = gauge->gauge();
+        w->centerRingMinPx.reset();
+        w->centerRingCount = 5;
+        PowerRings rings;
+        for (int tick = 1; tick <= 50; ++tick) {
+            state.secondsPassed = tick / 10.0;
+            const double power = tick == 50 ? 200 : tick < 30 ? 100 : 300;
+            state.savedPowerVals.times.append(state.secondsPassed);
+            state.savedPowerVals.values.append(power);
+            w->setValue(power);
+            rings.update(gauge.get());
+        }
+        // the blocks end half a tick after the first (0.1 s): the newest finished one ends at 4.55 s, the oldest of
+        // the four shown (2.55 to 3.05 s) has four 100 W readings and one 300 W
+        QVERIFY(w->centerRings());
+        QList<QColor> expected;
+        for (const double power : {140, 300, 300, 300, 200}) {
+            expected.append(zones::zoneColor(power, zones::powerRanges()));
+        }
+        QCOMPARE(w->centerRings()->first, expected);
     }
 
     // ---- START, PAUSE, END ----

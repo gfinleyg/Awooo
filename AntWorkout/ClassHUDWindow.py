@@ -56,9 +56,9 @@ BEAT_SECONDS = 0.2
 #the workout clock's tick (process_events)
 TICK_MS = 100
 
-#the nested circles in the power gauge's middle show the power over the last while: the outermost the power now,
-#each one in from it the average power over this many ticks, just before the time the one outside it covers
-#(see PowerRings). Whole ticks, so every ring moves in after the same number of them. A simulated ride (see
+#the nested circles in the power gauge's middle show the power over the last while: the innermost the power now,
+#each one out from it the average power over this many ticks, just before the time the one inside it covers
+#(see PowerRings). Whole ticks, so every ring moves out after the same number of them. A simulated ride (see
 #PreviewRide.run_hud) has rings a second each instead, one per simulated tick
 POWER_RING_TICKS = 5
 POWER_RING_SECONDS = POWER_RING_TICKS*TICK_MS/1000
@@ -85,7 +85,7 @@ def new_power_gauge():
     widget.big_needle_center_size = 5
     widget.altUnitsDisplay = True
     widget.fit_value_in_center = True #(fitted, the reading is smaller than the default size: the units keep theirs)
-    #paler than the cadence gauge's only enough for the reading over them: the innermost shows the power back then
+    #paler than the cadence gauge's only enough for the reading over them: the innermost shows the power now
     widget.center_rings_pale = (0.1, 0.4)
     widget.center_ring_count = POWER_RING_MIN
     widget.center_ring_min_px = POWER_RING_MIN_PX
@@ -93,10 +93,10 @@ def new_power_gauge():
 
 
 class PowerRings:
-    """The power gauge's nested circles, each the band's color at a power: the outermost the power now, then the
-    average over each block of the ride (POWER_RING_SECONDS long, or as set_seconds sets), newest to oldest. A
-    block's average is worked out once, when it ends, and kept: each ring holds its color until the next block ends
-    and moves it in one"""
+    """The power gauge's nested circles, each the band's color at a power: the innermost the power now, then out
+    from it the average over each block of the ride (POWER_RING_SECONDS long, or as set_seconds sets), newest to
+    oldest. A block's average is worked out once, when it ends, and kept: each ring holds its color until the next
+    block ends and moves it out one"""
 
     def __init__(self, seconds=POWER_RING_SECONDS):
         self.seconds = seconds #each block's length
@@ -134,8 +134,9 @@ class PowerRings:
             self.blocks.insert(0, self.block(self.block_end(self.ended - 1), self.block_end(self.ended)))
         del self.blocks[self.most_blocks():]
         widget = gauge.ui.widget
-        widget.set_center_rings([FtpColors.zone_color(widget.reading, ranges)] +
-                                [color for _, color in self.blocks[:widget.ring_count() - 1]])
+        #(set_center_rings takes them outermost first: the oldest block kept to the power now)
+        widget.set_center_rings([color for _, color in reversed(self.blocks[:widget.ring_count() - 1])] +
+                                [FtpColors.zone_color(widget.reading, ranges)])
 
     def block(self, start, end):
         power = block_average(start, end)

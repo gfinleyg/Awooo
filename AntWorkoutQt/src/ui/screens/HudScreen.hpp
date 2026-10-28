@@ -60,7 +60,8 @@ class WorkoutGraph;
 
 // the workout clock's tick
 constexpr int kTickMs = 100;
-// the power gauge's nested circles: the power now, then each one in the average over this many ticks before
+// the power gauge's nested circles: the power now in the middle, then each one out the average over this many ticks
+// before
 constexpr int kPowerRingTicks = 5;
 constexpr double kPowerRingSeconds = kPowerRingTicks * kTickMs / 1000.0;
 // as many rings as fit at the gauge's size with each at least this wide, never fewer than kPowerRingMin
@@ -74,9 +75,9 @@ constexpr double kBeatSeconds = 0.2;
 // The power gauge as the workout screen shows it, the reading in the middle as big as fits in its rings
 Gauge* newPowerGauge();
 
-// The power gauge's nested circles, each the band's color at a power: the outermost the power now, then the average
-// over each block of the ride (kPowerRingSeconds long, or setSeconds), newest to oldest. A block's average is worked
-// out once, when it ends, and kept: each ring holds its color until the next block ends and moves it in one.
+// The power gauge's nested circles, each the band's color at a power: the innermost the power now, then out from it
+// the average over each block of the ride (kPowerRingSeconds long, or setSeconds), newest to oldest. A block's average
+// is worked out once, when it ends, and kept: each ring holds its color until the next block ends and moves it out one.
 class PowerRings {
 public:
     explicit PowerRings(double seconds = kPowerRingSeconds) : seconds_(seconds) {}

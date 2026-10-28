@@ -218,7 +218,7 @@ def scene_power_gauge():
     widget.setValue(230)
     c0 = FtpColors.gauge_ring(230)
     widget.outer_circle_bg = [[0.25, QColor(0, 0, 0, 0)], [0.18, QColor("#" + c0)]]
-    widget.set_center_rings([FtpColors.zone_color(p) for p in (230, 180, 140, 260, 90)])
+    widget.set_center_rings([FtpColors.zone_color(p) for p in (90, 260, 140, 180, 230)]) #(oldest outermost, the power now in the middle)
     widget.arcCenterValue = 250
     a0, a1 = FtpColors.gauge_arc(250)
     widget.newArcColors = [[0, QColor("#88" + a0)], [.5, QColor("#88" + a1)]]

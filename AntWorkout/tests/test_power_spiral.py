@@ -307,6 +307,31 @@ def test_hud_sample_cadence(cadenceSensor, powerAt, cadenceAt, expected):
     assert got == [(5.0, 3.0, power, expected)]
 
 
+def test_power_rings_put_the_power_now_in_the_middle(qapp):
+    """The power gauge's rings: the power now innermost, then out from it each finished block's average, newest to
+    oldest (a reading every tick: 100 W, 300 W from 3 s, the last reading 200 W)"""
+    import ClassHUDWindow
+    AppState.ftp = "250"
+    AppState.secondsPassed = 0.0
+    AppState.savedPowerVals = ([], [])
+    gauge = ClassHUDWindow.new_power_gauge()
+    widget = gauge.ui.widget
+    widget.center_ring_min_px = None
+    widget.center_ring_count = 5
+    rings = ClassHUDWindow.PowerRings()
+    for tick in range(1, 51):
+        AppState.secondsPassed = tick/10
+        power = 200 if tick == 50 else 100 if tick < 30 else 300
+        AppState.savedPowerVals[0].append(AppState.secondsPassed)
+        AppState.savedPowerVals[1].append(power)
+        widget.setValue(power)
+        rings.update(gauge)
+    #the blocks end half a tick after the first (0.1 s): the newest finished one ends at 4.55 s, the oldest of the four
+    #shown (2.55 to 3.05 s) has four 100 W readings and one 300 W
+    color = lambda power: FtpColors.zone_color(power, FtpColors.power_ranges()).name()
+    assert [c.name() for c in widget.center_rings[0]] == [color(140), color(300), color(300), color(300), color(200)]
+
+
 ###The session's earlier rides (see Session.py)
 def test_ring_carries_on_from_the_sessions_rides(qapp):
     """The ring starts with the rides before this workout, each in the zones it was ridden in, a tick where each

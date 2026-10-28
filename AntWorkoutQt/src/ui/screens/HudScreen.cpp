@@ -125,7 +125,7 @@ Gauge* newPowerGauge() {
     w->altUnitsDisplay = true;
     // (fitted, the reading is smaller than the default size: the units keep theirs)
     w->fitValueInCenter = true;
-    // paler than the cadence gauge's only enough for the reading over them: the innermost shows the power back then
+    // paler than the cadence gauge's only enough for the reading over them: the innermost shows the power now
     w->centerRingsPale = {0.1, 0.4};
     w->centerRingCount = kPowerRingMin;
     w->centerRingMinPx = kPowerRingMinPx;
@@ -180,10 +180,12 @@ void PowerRings::update(Gauge* gauge) {
         blocks_.removeLast();
     }
     AnalogGauge* w = gauge->gauge();
-    QList<QColor> colors{zones::zoneColor(w->reading(), ranges_)};
-    for (qsizetype i = 0; i < std::min<qsizetype>(blocks_.size(), w->ringCount() - 1); ++i) {
+    // (setCenterRings takes them outermost first: the oldest block kept to the power now)
+    QList<QColor> colors;
+    for (qsizetype i = std::min<qsizetype>(blocks_.size(), w->ringCount() - 1) - 1; i >= 0; --i) {
         colors.append(blocks_[i].second);
     }
+    colors.append(zones::zoneColor(w->reading(), ranges_));
     w->setCenterRings(colors);
 }
 
