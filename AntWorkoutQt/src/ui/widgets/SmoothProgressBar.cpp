@@ -1,16 +1,16 @@
 #include "SmoothProgressBar.hpp"
 
 #include <QPainter>
+#include <QPainterPath>
 
 #include <algorithm>
+#include <cmath>
 
 #include "Theme.hpp"
 
 namespace awo {
 
 SmoothProgressBar::SmoothProgressBar(QWidget* parent) : QProgressBar(parent) {
-    // (the whole rect is painted every time)
-    setAttribute(Qt::WA_OpaquePaintEvent);
     connect(&theme::notifier(), &theme::Notifier::changed, this, qOverload<>(&QWidget::update));
 }
 
@@ -56,6 +56,16 @@ void SmoothProgressBar::setRange(int minimum, int maximum) {
     update();
 }
 
+// an eighth of the height, at least 2px
+double SmoothProgressBar::frameWidth() const {
+    return std::max(2.0, std::round(height() / 8.0));
+}
+
+// the timer labels' rounding: 2px short of half the height
+double SmoothProgressBar::cornerRadius() const {
+    return std::max(0.0, height() / 2.0 - 2);
+}
+
 void SmoothProgressBar::paintEvent(QPaintEvent*) {
     double fraction = 0.0;
     if (fraction_) {
@@ -66,12 +76,22 @@ void SmoothProgressBar::paintEvent(QPaintEvent*) {
     }
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const QRectF rect(this->rect());
-    painter.fillRect(rect, barColor());
-    // drawRect (not fillRect) so the antialiasing blends the fractional pixel at the leading edge
     painter.setPen(Qt::NoPen);
+    const double radius = cornerRadius();
+    painter.setBrush(barColor());
+    painter.drawRoundedRect(QRectF(rect()), radius, radius);
+    // the fill sits inside a frame of the bar color, so it never touches the window behind (in a light theme the two
+    // can be the same shade), rounded at its start and square at its leading edge
+    const double frame = frameWidth();
+    const QRectF inner = QRectF(rect()).adjusted(frame, frame, -frame, -frame);
+    const double innerRadius = std::max(0.0, radius - frame);
+    QPainterPath track;
+    track.addRoundedRect(inner, innerRadius, innerRadius);
+    QPainterPath filled;
+    filled.addRect(QRectF(inner.x(), inner.y(), inner.width() * fraction, inner.height()));
+    // (a path, not a clip, so the antialiasing blends the fractional pixel at the leading edge and the corners)
     painter.setBrush(chunkColor());
-    painter.drawRect(QRectF(rect.x(), rect.y(), rect.width() * fraction, rect.height()));
+    painter.drawPath(track.intersected(filled));
 }
 
 }  // namespace awo

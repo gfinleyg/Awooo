@@ -29,6 +29,9 @@ public:
     // (a block change, reset, workout end)
     void setValue(int value);
     void setRange(int minimum, int maximum);
+    // the bar color's border around the fill, and the bar's rounding, in pixels
+    double frameWidth() const;
+    double cornerRadius() const;
 
 protected:
     void paintEvent(QPaintEvent* event) override;

@@ -428,7 +428,7 @@ void HudScreen::workoutBlinkOn() {
     setWorkoutTimerColors(QStringLiteral("#1f15e1"), QStringLiteral("#dadbde"), QStringLiteral("#dadbde"));
 }
 
-// (the workout timer labels are rounded, so every recolor carries the radius too; the bar stays square)
+// (the workout timer labels are rounded, so every recolor carries the radius too; the bar rounds itself)
 void HudScreen::setWorkoutTimerColors(const QString& chunk, const QString& bar, const QString& label) {
     timeProgressBar_->setBarColors(QColor(chunk), QColor(bar));
     const QString style = QStringLiteral("background-color:%1; border-radius: %2px;").arg(label).arg(timerRadius_);
@@ -440,7 +440,8 @@ void HudScreen::setWorkoutTimerColors(const QString& chunk, const QString& bar, 
 void HudScreen::blockBlinkDefault() {
     blinkBlock_ = false;
     currentBlockProgressBar_->setBarColors(QColor(QStringLiteral("#1f15e1")), QColor(QStringLiteral("#bdd6de")));
-    theme::setSheet(timeBlockRemainingValue_, QStringLiteral("background-color:#9fc5d1"));
+    theme::setSheet(timeBlockRemainingValue_,
+                    QStringLiteral("background-color:#9fc5d1; border-radius: %1px;").arg(blockRemainingRadius_));
     theme::setSheet(blockMultiplierLabel_, QStringLiteral("background-color:#9fc5d1"));
     setLabelColor(blockNonIntLabel_);
     for (QLabel* label : intervalLabels()) {
@@ -453,7 +454,7 @@ void HudScreen::blockBlinkOn() {
     const QString lit = QStringLiteral("background-color:#dadbde");
     currentBlockProgressBar_->setBarColors(QColor(QStringLiteral("#1f15e1")), QColor(QStringLiteral("#dadbde")));
     theme::setSheet(blockNonIntLabel_, lit);
-    theme::setSheet(timeBlockRemainingValue_, lit);
+    theme::setSheet(timeBlockRemainingValue_, lit + QStringLiteral("; border-radius: %1px;").arg(blockRemainingRadius_));
     const int index = engine_->currentIntervalBlockIndex();
     const QString repeats = blockMultiplierLabel_->text();
     if (index == 0) {

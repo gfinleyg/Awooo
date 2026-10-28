@@ -32,6 +32,11 @@ Python app's own results (`tests\golden\`).
   measured a label against Qt's size hint, which is never smaller than the label's own minimum size, so a fixed size
   label looked exactly full and its shrunk text stayed small until the next full refit (a resize or a theme change).
 
+- **The block and workout timer bars' fill sits inside a thin frame** of the bar's own color. The fill used to run to
+  the bar's edges, where in the light themes (and with no theme) it was about the shade of the window behind it, so
+  the filled part seemed to vanish into the background. Both bars and the "Block time remaining" box are rounded now,
+  like the workout timer boxes.
+
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".
 

@@ -564,9 +564,20 @@ private slots:
         bar.setBarColors(QColor(Qt::blue), QColor(Qt::white));
         bar.setFraction(0.5);
         QImage image(bar.size(), QImage::Format_ARGB32);
-        bar.render(&image);
+        image.fill(Qt::transparent);
+        // (without the window background a top level widget gets)
+        bar.render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
+        // rounded: what's behind shows at the corners
+        QCOMPARE(bar.cornerRadius(), 3.0);
+        QVERIFY(image.pixelColor(0, 0).alpha() < 128);
+        QVERIFY(image.pixelColor(100, 9).alpha() < 128);
         QCOMPARE(image.pixelColor(10, 5), QColor(Qt::blue));
         QCOMPARE(image.pixelColor(90, 5), QColor(Qt::white));
+        // the fill is framed in the bar color (2px at this height), never reaching the bar's edges
+        QCOMPARE(bar.frameWidth(), 2.0);
+        QCOMPARE(image.pixelColor(1, 5), QColor(Qt::white));
+        QCOMPARE(image.pixelColor(10, 1), QColor(Qt::white));
+        QCOMPARE(image.pixelColor(10, 8), QColor(Qt::white));
         // the leading edge's pixel blended
         const QColor edge = image.pixelColor(50, 5);
         QVERIFY(edge != QColor(Qt::blue) && edge != QColor(Qt::white));

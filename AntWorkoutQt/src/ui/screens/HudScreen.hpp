@@ -341,6 +341,7 @@ private:
     QString startButtonBlinkOnStyle_, startButtonBlinkOffStyle_;
     double startedAt_ = 0;
     int timerRadius_ = 15;
+    int blockRemainingRadius_ = 11;
     int pastPowerIndex_ = 0;
     QList<double> timeGraphList_, powerGraphList_;
     QMap<QString, std::pair<double, double>> graphTops_;

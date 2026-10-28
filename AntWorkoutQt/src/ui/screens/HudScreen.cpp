@@ -382,7 +382,10 @@ void HudScreen::buildCurrentBlock() {
     currentBlockProgressBar_->setTextVisible(false);
     block->addWidget(currentBlockProgressBar_, 6, 0, 1, 16);
     timeBlockRemainingValue_ = centeredLabel();
-    timeBlockRemainingValue_->setMinimumHeight(26);
+    // rounded like the timer boxes (see timerRadius_)
+    constexpr int blockRemainingHeight = 26;
+    blockRemainingRadius_ = blockRemainingHeight / 2 - 2;
+    timeBlockRemainingValue_->setMinimumHeight(blockRemainingHeight);
     block->addWidget(timeBlockRemainingValue_, 7, 0, 1, 16);
     currentBlockLayoutWidget_->setLayout(block);
     hudLayout_->addWidget(currentBlockLayoutWidget_, 0, 6, 4, 16, Qt::AlignTop);
