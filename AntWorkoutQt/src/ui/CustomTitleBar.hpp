@@ -44,9 +44,12 @@ private:
     void clearTheme();
     void randomTheme(bool on);
     void snapToTop(const QPoint& cursor);
+    void tintIcons();
 
     QLabel* title_ = nullptr;
     QToolButton* settingsButton_ = nullptr;
+    QToolButton* minButton_ = nullptr;
+    QToolButton* maxButton_ = nullptr;
     QToolButton* closeButton_ = nullptr;
     std::optional<QPoint> initialPos_;
     bool snaps_ = true;

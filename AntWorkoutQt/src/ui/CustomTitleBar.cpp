@@ -7,6 +7,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QScreen>
 #include <QShortcut>
 #include <QStyle>
@@ -105,15 +106,14 @@ CustomTitleBar::CustomTitleBar(QWidget* parent, bool mainWindow) : QWidget(paren
         buttons << settingsButton_;
     }
 
-    auto* minButton = new QToolButton(this);
-    minButton->setIcon(style()->standardIcon(QStyle::SP_TitleBarMinButton));
-    connect(minButton, &QToolButton::clicked, [this] { window()->showMinimized(); });
-    auto* maxButton = new QToolButton(this);
-    maxButton->setIcon(style()->standardIcon(QStyle::SP_TitleBarMaxButton));
-    connect(maxButton, &QToolButton::clicked, [this] { window()->showMaximized(); });
+    minButton_ = new QToolButton(this);
+    connect(minButton_, &QToolButton::clicked, [this] { window()->showMinimized(); });
+    maxButton_ = new QToolButton(this);
+    connect(maxButton_, &QToolButton::clicked, [this] { window()->showMaximized(); });
     closeButton_ = new QToolButton(this);
-    closeButton_->setIcon(style()->standardIcon(QStyle::SP_TitleBarCloseButton));
     connect(closeButton_, &QToolButton::clicked, [this] { window()->close(); });
+    tintIcons();
+    connect(&theme::notifier(), &theme::Notifier::changed, this, &CustomTitleBar::tintIcons);
     // Esc is the X on the popup windows (the main window's X asks to exit the app, so it's left off there)
     if (!mainWindow) {
         auto* escape = new QShortcut(QKeySequence(Qt::Key_Escape), parent->window());
@@ -123,7 +123,7 @@ CustomTitleBar::CustomTitleBar(QWidget* parent, bool mainWindow) : QWidget(paren
         esc.place = keys::Place::Left;
         keys::add(closeButton_, {}, esc);
     }
-    buttons << minButton << maxButton << closeButton_;
+    buttons << minButton_ << maxButton_ << closeButton_;
     for (QToolButton* button : buttons) {
         button->setFocusPolicy(Qt::NoFocus);
         button->setFixedSize(28, 28);
@@ -135,6 +135,23 @@ CustomTitleBar::CustomTitleBar(QWidget* parent, bool mainWindow) : QWidget(paren
 
 void CustomTitleBar::setTitle(const QString& text) {
     layout::setText(title_, text);
+}
+
+void CustomTitleBar::tintIcons() {
+    // Qt's own icons are black, which no theme recolors (invisible on the dark themes): drawn in the theme's text
+    // color instead
+    const QColor color = theme::current().mapColor(QColor(Qt::black));
+    const std::pair<QToolButton*, QStyle::StandardPixmap> icons[] = {{minButton_, QStyle::SP_TitleBarMinButton},
+                                                                     {maxButton_, QStyle::SP_TitleBarMaxButton},
+                                                                     {closeButton_, QStyle::SP_TitleBarCloseButton}};
+    for (const auto& [button, which] : icons) {
+        QPixmap pixmap = style()->standardIcon(which).pixmap(button->iconSize(), devicePixelRatioF());
+        QPainter painter(&pixmap);
+        painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        painter.fillRect(QRectF(0, 0, pixmap.width(), pixmap.height()), color);
+        painter.end();
+        button->setIcon(QIcon(pixmap));
+    }
 }
 
 void CustomTitleBar::showLogs() {
