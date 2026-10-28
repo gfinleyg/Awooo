@@ -37,7 +37,7 @@ bool near(std::optional<double> value, double expected, double tolerance = 1e-6)
     return value && std::abs(*value - expected) <= tolerance * std::max(1.0, std::abs(expected));
 }
 
-Grade record(std::optional<double> pct, double ridden, const QString& label = QStringLiteral("Seated 200 Watts 1m"),
+Grade record(std::optional<double> pct, double ridden, const QString& label = QStringLiteral("200W 1m"),
              bool endedEarly = false) {
     Grade grade;
     grade.pct = pct;
@@ -260,10 +260,10 @@ private slots:
                                              WorkoutEntry::ofBlock(steady(200))};
         Grades grades;
         grades.set({0, 0, 0}, record(95, 60));
-        grades.set({1, 0, 0}, record(101, 60, QStringLiteral("Seated 300 Watts 1m")));
-        grades.set({1, 0, 1}, record(85, 60, QStringLiteral("Seated 300 Watts 1m")));
-        grades.set({1, 1, 0}, record(std::nullopt, 30, QStringLiteral("Seated 30s")));
-        grades.set({1, 0, 2}, record(70, 30, QStringLiteral("Seated 300 Watts 1m"), true));
+        grades.set({1, 0, 0}, record(101, 60, QStringLiteral("300W 1m")));
+        grades.set({1, 0, 1}, record(85, 60, QStringLiteral("300W 1m")));
+        grades.set({1, 1, 0}, record(std::nullopt, 30, QStringLiteral("Free 30s")));
+        grades.set({1, 0, 2}, record(70, 30, QStringLiteral("300W 1m"), true));
         // block 3 never reached
         const QList<GradeRow> rows = workoutRows(workout, grades);
         QCOMPARE(rows.size(), 4);
@@ -282,10 +282,10 @@ private slots:
     void rowsSongs() {
         const QList<WorkoutEntry> workout(5, WorkoutEntry::ofBlock(steady(90)));
         Grades grades;
-        grades.set({0, 0, 0}, record(100, 60, QStringLiteral("Seated 90 RPM 1m")));
-        grades.set({1, 0, 0}, record(80, 30, QStringLiteral("Seated 90 RPM 1m")));
+        grades.set({0, 0, 0}, record(100, 60, QStringLiteral("90rpm 1m")));
+        grades.set({1, 0, 0}, record(80, 30, QStringLiteral("90rpm 1m")));
         grades.set({2, 0, 0}, record(std::nullopt, 60, QStringLiteral("Free Ride 1m")));
-        grades.set({3, 0, 0}, record(90, 60, QStringLiteral("Seated 90 RPM 1m")));
+        grades.set({3, 0, 0}, record(90, 60, QStringLiteral("90rpm 1m")));
         // block 4, the last song's, never reached
         const QMap<int, QString> songs = {{0, QStringLiteral("Band - First")}, {2, QStringLiteral("Band - Second")},
                                           {4, QStringLiteral("Band - Third")}};

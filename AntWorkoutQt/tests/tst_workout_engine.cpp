@@ -95,7 +95,7 @@ private slots:
         }
         // (overlapping: the one that started last)
         QCOMPARE(engine.message(), QStringLiteral("Second"));
-        QCOMPARE(engine.upcoming(), (QList<WorkoutEngine::UpcomingLine>{{"Seated 120 Watts 1m"}}));
+        QCOMPARE(engine.upcoming(), (QList<WorkoutEngine::UpcomingLine>{{"120W 1m"}}));
         QCOMPARE(WorkoutEngine::difficultyFtpText(3), QStringLiteral("FTP: 212"));
         // the graph's bars: what's left of this block, then the next
         const auto [times, powers] = engine.upcomingGraph(480);

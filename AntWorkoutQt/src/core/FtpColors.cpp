@@ -105,10 +105,10 @@ const QString kSensorPower = QStringLiteral("#0000ff");
 const QString kSensorHr = QStringLiteral("#ff0000");
 const QString kSensorCadence = QStringLiteral("#ffff00");
 const QString kSensorSpeed = QStringLiteral("#ffffff");
+const std::array<QString, 2> kWindowGradient = {QStringLiteral("#28275e"), QStringLiteral("#9fc5d1")};
 
 namespace {
 
-const std::array<QString, 2> kWindowGradient = {QStringLiteral("#28275e"), QStringLiteral("#9fc5d1")};
 constexpr std::array<double, 2> kBackgroundAt{0.5, 0.85};
 const QString kHaloDark = QStringLiteral("#101018");
 const QString kHaloLight = QStringLiteral("#f2f2f6");

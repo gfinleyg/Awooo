@@ -9,8 +9,8 @@
 namespace awo {
 
 const QStringList kPositionNames = {
-    QStringLiteral("Seated"),     QStringLiteral("Seated High Cadence"), QStringLiteral("Seated Low Cadence"),
-    QStringLiteral("Standing"),   QStringLiteral("Single Leg"),          QStringLiteral("Switch Single Leg"),
+    QString(),               QStringLiteral("↑RPM"),  QStringLiteral("↓RPM"),
+    QStringLiteral("Stand"), QStringLiteral("1 Leg"), QStringLiteral("1 Leg ⇄"),
 };
 
 const QString kSongHeaderCss = QStringLiteral(
@@ -43,19 +43,28 @@ QString minimizedDuration(double seconds) {
 }
 
 QString blockText(const Block& block, int difficulty, const QString& unit) {
-    const QString position = kPositionNames.value(block.position);
+    // (seated says nothing, nor has the space after it; a seated free ride says "Free")
+    QString position = kPositionNames.value(block.position);
+    if (block.type == BlockType::FreeRide && position.isEmpty()) {
+        position = QStringLiteral("Free");
+    }
+    if (!position.isEmpty()) {
+        position += u' ';
+    }
+    // "200W", or "90rpm"
+    const QString unitText = unit == u"Watts" ? QStringLiteral("W") : unit.toLower();
     switch (block.type) {
     case BlockType::FreeRide:
-        return position + u' ' + minimizedDuration(block.seconds);
+        return position + minimizedDuration(block.seconds);
     case BlockType::Steady:
-        return QStringLiteral("%1 %2 %3 %4").arg(position).arg(block.power[difficulty]).arg(unit,
-                                                                                            minimizedDuration(block.seconds));
+        return QStringLiteral("%1%2%3 %4").arg(position).arg(block.power[difficulty]).arg(unitText,
+                                                                                         minimizedDuration(block.seconds));
     case BlockType::Ramp:
-        return QStringLiteral("%1 %2-%3 %4 %5")
+        return QStringLiteral("%1%2-%3%4 %5")
             .arg(position)
             .arg(block.power[difficulty])
             .arg(block.powerEnd[difficulty])
-            .arg(unit, minimizedDuration(block.seconds));
+            .arg(unitText, minimizedDuration(block.seconds));
     }
     return {};
 }
@@ -93,20 +102,20 @@ QString workoutText(const QList<WorkoutEntry>& entries, const QString& unit, con
 }
 
 std::optional<std::pair<int, int>> targetsFromText(const QString& text) {
-    const QStringList words = text.split(u' ');
-    for (const QString unit : {QStringLiteral("Watts"), QStringLiteral("RPM")}) {
-        const qsizetype index = words.indexOf(unit);
-        if (index < 0) {
+    for (const QString& word : text.split(u' ')) {
+        QString number;
+        if (word.size() > 1 && word.endsWith(u'W')) {
+            number = word.chopped(1);
+        } else if (word.size() > 3 && word.endsWith(QStringLiteral("rpm"))) {
+            number = word.chopped(3);
+        } else {
             continue;
         }
-        if (index == 0) {
-            return std::nullopt;
-        }
-        const QStringList values = words[index - 1].split(u'-');
+        const QStringList values = number.split(u'-');
         const std::optional<long long> low = py::toInt(values[0]);
         const std::optional<long long> high = values.size() > 1 ? py::toInt(values[1]) : std::optional<long long>(0);
         if (!low || !high) {
-            return std::nullopt;
+            continue;
         }
         return std::pair(static_cast<int>(*low), static_cast<int>(*high));
     }

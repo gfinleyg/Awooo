@@ -80,7 +80,10 @@ std::pair<double, double> zoneSpan(int zone, const ZoneRanges& ranges);
 std::pair<int, double> zonePosition(double value, const ZoneRanges& ranges);
 double fadeFrom(const ZoneRanges& ranges);
 
-// the window's background gradient, and how far along it the colors have to stand out from it: the gauges and spiral
+// the window's background gradient, corner to corner (MainWindow's, before the theme's colors replace them)
+extern const std::array<QString, 2> kWindowGradient;
+
+// how far along the window's gradient the colors have to stand out from it: the gauges and spiral
 // sit around the middle, the graph toward the end
 constexpr double kColorMinDifference = 0.16;
 constexpr double kPaleMinDifference = 0.09;

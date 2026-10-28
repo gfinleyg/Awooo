@@ -21,15 +21,17 @@ class LongVLabels : public QWidget {
 
 public:
     static constexpr int kWidgetCount = 30;
+    // a block's width (design px): room for the longest block text there can be, "1000x 1 Leg ⇄ 2400-2400W 29m 59s",
+    // in the labels' font (the default theme's; a wider font is made smaller to fit)
+    static constexpr int kLabelWidth = 330;
 
     explicit LongVLabels(const ftpcolors::ZoneRanges& ftpRanges = {}, QWidget* parent = nullptr);
 
-    // the blocks, a line each; "" shows an "Almost done!" block (if showAlmostDone); "DONE" holds the list's size
+    // the blocks, a line each (an empty list shows none); "DONE" holds the list's size
     void setFullText(const QString& text);
     QString fullText() const { return fullText_; }
     // the zones the blocks are colored in
     ftpcolors::ZoneRanges ftpRanges;
-    bool showAlmostDone = true;
     const QList<QLabel*>& labels() const { return labels_; }
     int scrollOffset() const { return scrollOffset_; }
     void scrollTo(int offset);

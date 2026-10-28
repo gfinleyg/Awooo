@@ -57,6 +57,7 @@ class MaxStar;
 class PowerSpiral;
 class SmoothProgressBar;
 class WorkoutGraph;
+class ZoneLegend;
 
 // the workout clock's tick
 constexpr int kTickMs = 100;
@@ -204,6 +205,7 @@ public:
     QLabel* blockLabel() const { return blockNonIntLabel_; }
     QLabel* upNextLabel() const { return upNextLabelDescription_; }
     LongVLabels* remainingList() const { return remainingWorkoutList_; }
+    ZoneLegend* zoneLegend() const { return zoneLegend_; }
     QLabel* workoutTimeLabel() const { return workoutTime_; }
     QLabel* remainingTimeLabel() const { return remainingWorkoutTime_; }
     QLabel* elapsedLabel() const { return timeElapsed_; }
@@ -361,6 +363,7 @@ private:
     QLabel* upNextLabelDescription_ = nullptr;
     QLabel* remainingWorkoutHeader_ = nullptr;
     LongVLabels* remainingWorkoutList_ = nullptr;
+    ZoneLegend* zoneLegend_ = nullptr;
     QLabel* workoutGradesHeader_ = nullptr;
     GradeList* workoutGradeList_ = nullptr;
     QWidget* currentBlockLayoutWidget_ = nullptr;

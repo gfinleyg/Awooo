@@ -182,7 +182,7 @@ def test_latest_power():
     assert G.latest_power([7], [100], 10) is None
 
 
-def _record(pct, ridden, label="Seated 200 Watts 1m", endedEarly=False):
+def _record(pct, ridden, label="200W 1m", endedEarly=False):
     return {"pct": pct, "ridden": ridden, "label": label, "endedEarly": endedEarly}
 
 
@@ -191,10 +191,10 @@ def test_workout_rows():
     workout = [steady, (3, 3, steady, (0, 30, 0)), (5, 3, 0, steady), steady]
     grades = {
         (0, 0, 0): _record(95, 60),
-        (1, 0, 0): _record(101, 60, "Seated 300 Watts 1m"),
-        (1, 0, 1): _record(85, 60, "Seated 300 Watts 1m"),
-        (1, 1, 0): _record(None, 30, "Seated 30s"),
-        (1, 0, 2): _record(70, 30, "Seated 300 Watts 1m", endedEarly=True),
+        (1, 0, 0): _record(101, 60, "300W 1m"),
+        (1, 0, 1): _record(85, 60, "300W 1m"),
+        (1, 1, 0): _record(None, 30, "Free 30s"),
+        (1, 0, 2): _record(70, 30, "300W 1m", endedEarly=True),
         #block 3 never reached
     }
     rows = G.workout_rows(workout, grades)
@@ -212,10 +212,10 @@ def test_workout_rows_songs():
     block = (1, 60, (90,)*21, 0)
     workout = [block, block, block, block, block]
     grades = {
-        (0, 0, 0): _record(100, 60, "Seated 90 RPM 1m"),
-        (1, 0, 0): _record(80, 30, "Seated 90 RPM 1m"),
+        (0, 0, 0): _record(100, 60, "90rpm 1m"),
+        (1, 0, 0): _record(80, 30, "90rpm 1m"),
         (2, 0, 0): _record(None, 60, "Free Ride 1m"),
-        (3, 0, 0): _record(90, 60, "Seated 90 RPM 1m"),
+        (3, 0, 0): _record(90, 60, "90rpm 1m"),
         #block 4, the last song's, never reached
     }
     songs = {0: "Band - First", 2: "Band - Second", 4: "Band - Third"}

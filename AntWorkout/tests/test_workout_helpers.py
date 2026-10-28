@@ -24,38 +24,42 @@ def _ramp(start, end, duration=90, position=1):
 
 
 def test_block_text_free_steady_ramp():
-    assert H.ProcessWorkoutLine((0, 60, 3), 10) == ["Standing 1m"]
-    assert H.ProcessWorkoutLine(_steady(200), 10) == ["Seated 200 Watts 5m"]
+    assert H.ProcessWorkoutLine((0, 60, 3), 10) == ["Stand 1m"]
+    assert H.ProcessWorkoutLine(_steady(200), 10) == ["200W 5m"]
     #the difficulty picks the power
-    assert H.ProcessWorkoutLine(_steady(200), 0) == ["Seated 190 Watts 5m"]
-    assert H.ProcessWorkoutLine(_steady(200), 20) == ["Seated 210 Watts 5m"]
-    assert H.ProcessWorkoutLine(_ramp(100, 200), 10) == ["Seated High Cadence 100-200 Watts 1m 30s"]
+    assert H.ProcessWorkoutLine(_steady(200), 0) == ["190W 5m"]
+    assert H.ProcessWorkoutLine(_steady(200), 20) == ["210W 5m"]
+    assert H.ProcessWorkoutLine(_ramp(100, 200), 10) == ["↑RPM 100-200W 1m 30s"]
 
 
 def test_block_text_intervals():
     assert H.ProcessWorkoutLine((3, 4, _steady(300, 30, 3), (0, 30, 0)), 10) == \
-        ["4x", "Standing 300 Watts 30s", "Seated 30s"]
+        ["4x", "Stand 300W 30s", "Free 30s"]
     three = (3, 2, _steady(300, 30, 4), _ramp(100, 150, 60, 5), (0, 15, 2))
     assert H.ProcessWorkoutLine(three, 10) == \
-        ["2x", "Single Leg 300 Watts 30s", "Switch Single Leg 100-150 Watts 1m", "Seated Low Cadence 15s"]
+        ["2x", "1 Leg 300W 30s", "1 Leg ⇄ 100-150W 1m", "↓RPM 15s"]
 
 
 def test_block_text_says_rpm_in_musical_cadence_mode():
     AppState.cadenceMode = True
     AppState.workoutMode = True
-    assert H.ProcessWorkoutLine(_steady(90), 10) == ["Seated 90 RPM 5m"]
+    assert H.ProcessWorkoutLine(_steady(90), 10) == ["90rpm 5m"]
     #(free mode never says RPM)
     AppState.workoutMode = False
-    assert H.ProcessWorkoutLine(_steady(90), 10) == ["Seated 90 Watts 5m"]
+    assert H.ProcessWorkoutLine(_steady(90), 10) == ["90W 5m"]
 
 
 @pytest.mark.parametrize("text, targets", [
-    ("Seated 200 Watts 5m", (200, 0)),
-    ("Seated 100-200 Watts 1m", (100, 200)),
-    ("Seated 90 RPM 5m", (90, 0)),
-    ("Standing 1m", None),
-    ("Watts 5m", None),
-    ("Seated abc Watts", None),
+    ("200W 5m", (200, 0)),
+    ("100-200W 1m", (100, 200)),
+    ("90rpm 5m", (90, 0)),
+    ("Stand 300W 30s", (300, 0)),
+    ("↑RPM 100-200W 1m", (100, 200)),
+    ("Free 5m", None),
+    ("Stand 1m", None),
+    ("↓RPM 15s", None),
+    ("W 5m", None),
+    ("abcW", None),
     ("4x", None),
 ])
 def test_targets_from_text(text, targets):
@@ -63,7 +67,7 @@ def test_targets_from_text(text, targets):
 
 
 def test_targets_round_trip_through_block_text():
-    for line in (_steady(250), _ramp(120, 330)):
+    for line in (_steady(250), _ramp(120, 330), _steady(250, position=1)):
         text = H.ProcessWorkoutLine(line, 10)[0]
         low, high = H.TargetsFromText(text)
         expected = line[2][10]
@@ -74,7 +78,7 @@ def test_song_header_only_in_cadence_mode():
     assert not H.IsSongHeader("3m 20s : Artist - Title")
     AppState.cadenceMode = True
     assert H.IsSongHeader("3m 20s : Artist - Title")
-    assert not H.IsSongHeader("Seated 90 RPM 5m")
+    assert not H.IsSongHeader("90rpm 5m")
 
 
 def test_max_helpers():

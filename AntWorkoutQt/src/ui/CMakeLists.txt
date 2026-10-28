@@ -57,6 +57,8 @@ add_library(awo_ui STATIC
     widgets/SynopsisItems.hpp
     widgets/WorkoutGraph.cpp
     widgets/WorkoutGraph.hpp
+    widgets/ZoneLegend.cpp
+    widgets/ZoneLegend.hpp
 )
 target_include_directories(awo_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/widgets"
     "${CMAKE_CURRENT_SOURCE_DIR}/dialogs" "${CMAKE_CURRENT_SOURCE_DIR}/screens")

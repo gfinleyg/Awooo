@@ -35,6 +35,7 @@
 #include "WorkoutGraph.hpp"
 #include "WorkoutHelpers.hpp"
 #include "ZoneColors.hpp"
+#include "ZoneLegend.hpp"
 
 namespace awo {
 
@@ -526,7 +527,7 @@ void HudScreen::updateUpNextRemaining() {
     if (lines.isEmpty()) {
         layout::setText(upNextLabelDescription_, kLastBlock);
         setLabelColor(upNextLabelDescription_);
-        // (the list shows "Almost done!": nothing is coming up)
+        // (nothing is coming up)
         layout::setText(remainingWorkoutHeader_, QString());
         return;
     }
@@ -552,7 +553,7 @@ void HudScreen::updateUpNextRemaining() {
             comingUp += line.front() + u'\n';
         }
     }
-    // (an empty list shows "Almost done!": nothing is "Coming up...")
+    // (an empty list shows nothing: nothing is "Coming up...")
     layout::setText(remainingWorkoutHeader_, comingUp.isEmpty() ? QString() : QStringLiteral("Coming up..."));
     remainingWorkoutList_->setFullText(comingUp);
 }
@@ -640,7 +641,8 @@ void HudScreen::fitBetweenGauges(QLabel* label, const QString& style, int points
 void HudScreen::showWorkoutGrades(bool show) {
     workoutGraded_ = show;
     for (QWidget* widget : std::initializer_list<QWidget*>{upNextLabelHeader_, upNextLabelDescription_,
-                                                           remainingWorkoutHeader_, remainingWorkoutList_}) {
+                                                           remainingWorkoutHeader_, remainingWorkoutList_,
+                                                           zoneLegend_}) {
         widget->setVisible(!show);
     }
     workoutGradesHeader_->setVisible(show);

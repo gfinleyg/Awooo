@@ -204,8 +204,9 @@ def text_golden():
     rng = random.Random(1)
     durations = [0, 1, 59, 59.9, 60, 61, 599, 3599, 3600, 3600.5, 3660, 3661, 7322, -5, 86399]
     durations += [rng.randint(0, 20000) for _ in range(200)] + [rng.uniform(0, 20000) for _ in range(50)]
-    texts = ["Seated 200 Watts 5m", "Seated 100-200 Watts 1m", "Seated 90 RPM 5m", "Standing 1m", "Watts 5m",
-             "Seated abc Watts", "4x", "Seated +5-7 Watts", "Seated 1-2-3 Watts", "Seated - Watts", "RPM", "a Watts RPM"]
+    texts = ["200W 5m", "100-200W 1m", "90rpm 5m", "Stand 1m", "Free 5m", "W 5m", "abcW 5m", "4x", "+5-7W", "1-2-3W",
+             "-W", "rpm", "a W rpm", "Stand 300W 30s", "↑RPM 100-200W 1m", "↓RPM 15s", "1 Leg ⇄ 90-120rpm 1m", "abcW 200W",
+             "3m : Band - Song", "200W 5m\n3m : Band - Song", "Watts 5m", "90 RPM 5m", "1000x 1 Leg ⇄ 2400-2400W 29m 59s"]
     write("text.json", {
         "durations": [[d, WorkoutHelpers.MinimizedDuration(d)] for d in durations],
         "targets": [[t, plain(WorkoutHelpers.TargetsFromText(t))] for t in texts],
@@ -486,6 +487,10 @@ HUD_RIDES = [
      "workout": "T:Golden Ride\n0:60|Warm up\n1:120,0.6\n2:120,0.5,0.9\n3:3;1:30,1.2;0:30\n"
                 "3:2;1:20,1.0;2:20,0.6,0.8;0:10|Spin\n1:60,250W\n3:2;1:30,1.1\n2:40,0.7,0.7\n",
      "events": [[150, "difficulty", 3], [250, "pause"], [280, "pause"], [400, "difficulty", -2], [620, "difficulty", 0]]},
+    #every riding position; switch single leg blocks (on their own and in an interval) aren't graded
+    {"name": "positions", "ftp": 250, "seed": 4, "seconds": 300,
+     "workout": "T:Positions\n1:40,0.5,1\n1:40,1.0,5\n1:40,0.9,3\n3:2;1:20,1.1,5;1:20,0.6,2\n0:30,4\n2:40,0.6,0.8\n",
+     "events": []},
     {"name": "ftp20m", "ftp": 220, "seed": 5, "seconds": 2800, "ftpTest": "20m", "events": []},
     {"name": "ramp10", "ftp": 0, "seed": 7, "seconds": 1500, "ftpTest": "ramp10", "events": []},
     #Musical Cadence Mode: music.json's click tracks (their analyses), the music silent and a second a tick

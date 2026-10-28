@@ -6,6 +6,10 @@ from PyQt6.QtCore import pyqtSignal, QMetaObject, QCoreApplication, QSize, QTime
 import FtpColors
 from WorkoutHelpers import TargetsFromText, IsSongHeader, SONG_HEADER_CSS
 
+#A block's width (design px): room for the longest block text there can be, "1000x 1 Leg ⇄ 2400-2400W 29m 59s", in
+#the labels' font (the default theme's; a wider font is made smaller to fit)
+BLOCK_LABEL_WIDTH = 330
+
 #Column of colored block labels that fits the widget height, scrollable by wheel or drag
 #shows a "more..." block at the top/bottom when blocks are scrolled out of view above/below
 class LongVLabelSerial(QWidget):
@@ -19,7 +23,6 @@ class LongVLabelSerial(QWidget):
         self.ftpRanges = ftpRanges
         self.fullText = ""
         self.moreText = "more..."
-        self.showAlmostDone = True #an empty list shows an "Almost done!" block
         self.scrollOffset = 0 #index of the first line shown
         self.wheelRemainder = 0
         self.dragStartY = None
@@ -32,7 +35,7 @@ class LongVLabelSerial(QWidget):
         self.widgetCount = 30
         self.qlabels = [QLabel() for x in range(self.widgetCount)]
         for x in self.qlabels:
-            x.setFixedSize(500,42)
+            x.setFixedSize(BLOCK_LABEL_WIDTH,42)
             self.layoutH.addWidget(x)
             x.hide()
         self.layoutMain.addLayout(self.layoutH)
@@ -70,9 +73,7 @@ class LongVLabelSerial(QWidget):
             x.hide()
         maxLines = min(int(self.geometry().height()/self.row_height()), self.widgetCount)
         lines = [line for line in self.fullText.split("\n") if line.strip() != ""]
-        if self.fullText == "":
-            shown = ["Almost done!"] if self.showAlmostDone else []
-        elif self.fullText == "DONE":
+        if self.fullText == "DONE":
             geo = self.geometry()
             self.setFixedSize(geo.width(), geo.height())
             return
@@ -128,7 +129,7 @@ class LongVLabelSerial(QWidget):
         event.accept()
 
     def getLabelColor(self, txt):
-        if txt in ["Almost done!", self.moreText]:
+        if txt == self.moreText:
             return "background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #9fc5d1 stop:1 #9fc5d1);"
         if IsSongHeader(txt):
             return SONG_HEADER_CSS

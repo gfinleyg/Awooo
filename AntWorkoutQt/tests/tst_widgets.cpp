@@ -22,6 +22,7 @@
 #include "TestSupport.hpp"
 #include "Theme.hpp"
 #include "ZoneColors.hpp"
+#include "ZoneLegend.hpp"
 
 using namespace awo;
 using namespace awo::spiral;
@@ -489,7 +490,7 @@ private slots:
         QList<GradeList::Row> rows;
         for (int i = 0; i < 20; ++i) {
             GradeList::Row row;
-            row.label = QStringLiteral("%1:00 @ 150 Watts").arg(i);
+            row.label = QStringLiteral("%1:00 @ 150W").arg(i);
             row.grade = QStringLiteral("A");
             rows.append(row);
         }
@@ -533,7 +534,7 @@ private slots:
         QVERIFY(QTest::qWaitForWindowExposed(&labels));
         QStringList lines;
         for (int i = 0; i < 10; ++i) {
-            lines.append(QStringLiteral("%1:00 @ 150 Watts").arg(i + 1));
+            lines.append(QStringLiteral("%1:00 @ 150W").arg(i + 1));
         }
         labels.setFullText(lines.join(u'\n'));
         labels.renderLines();
@@ -543,13 +544,48 @@ private slots:
         }
         QVERIFY(visible >= 3 && visible < 10);
         QCOMPARE(labels.labels()[visible - 1]->text(), QStringLiteral("more..."));
-        // an empty list: "Almost done!" (unless it's told not to)
+        // an empty list shows nothing
         labels.setFullText({});
         labels.renderLines();
-        QCOMPARE(labels.labels()[0]->text(), QStringLiteral("Almost done!"));
-        labels.showAlmostDone = false;
-        labels.renderLines();
         QVERIFY(!labels.labels()[0]->isVisibleTo(&labels));
+    }
+
+    // ---- The zone legend ----
+
+    void zoneLegendNamesWhereEachZoneEnds() {
+        appState().ftp = 200;
+        appState().ftpRanges = ftpcolors::powerRanges(200);
+        ZoneLegend legend;
+        QCOMPARE(legend.size(), QSize(LongVLabels::kLabelWidth, ZoneLegend::kHeight));
+        QCOMPARE(legend.labelTexts(), QStringList({"72W", "174W", "238W", "374W"}));
+        // Musical Cadence Mode: its cadence zones, in rpm
+        appState().workoutMode = appState().cadenceMode = true;
+        appState().ftpRanges = ftpcolors::cadenceRanges(40);
+        QCOMPARE(legend.labelTexts(), QStringList({"40rpm", "65rpm", "90rpm", "115rpm"}));
+    }
+
+    void zoneLegendHalosTextThatDoesntStandOut() {
+        ZoneLegend legend;
+        legend.resize(legend.size());
+        // the default theme: black text on the gradient's mid-tones (on its own, it's its window: the middle)
+        QVERIFY(legend.haloed());
+        // light text on a black window stands out
+        theme::current().colors = {{QStringLiteral("#28275e"), QStringLiteral("#000000")},
+                                   {QStringLiteral("#9fc5d1"), QStringLiteral("#1a1a1a")},
+                                   {QStringLiteral("#000000"), QStringLiteral("#ffffff")}};
+        QVERIFY(!legend.haloed());
+        // drawn with its halo: light around the dark text, past the text's own outline
+        theme::current().reset();
+        QImage image(legend.size(), QImage::Format_ARGB32);
+        image.fill(QColor(QStringLiteral("#5f6e98")));
+        legend.render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
+        int light = 0;
+        for (int y = static_cast<int>(ZoneLegend::kBarHeight + ZoneLegend::kTextGap); y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                light += image.pixelColor(x, y).lightness() > 200;
+            }
+        }
+        QVERIFY(light > 50);
     }
 
     void smoothBarGlidesBetweenPixels() {

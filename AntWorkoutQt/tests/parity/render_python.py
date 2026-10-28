@@ -356,12 +356,12 @@ def scene_grade_overlay():
 
 GRADE_ROWS = [
     {"kind": "ride", "label": "Workout: Test Ride", "pct": 91.2, "grade": "A", "note": "45m", "graded": True},
-    {"kind": "block", "label": "5:00 @ 150 Watts", "pct": 95, "grade": "A+", "note": ""},
+    {"kind": "block", "label": "5:00 @ 150W", "pct": 95, "grade": "A+", "note": ""},
     {"kind": "interval", "label": "3x", "pct": None, "grade": "", "note": ""},
-    {"kind": "sub", "label": "1:00 @ 300 Watts", "pct": 80, "grade": "B", "note": "S · A · B+"},
-    {"kind": "sub", "label": "2:00 @ 120 Watts", "pct": 99, "grade": "S", "note": ""},
+    {"kind": "sub", "label": "1:00 @ 300W", "pct": 80, "grade": "B", "note": "S · A · B+"},
+    {"kind": "sub", "label": "2:00 @ 120W", "pct": 99, "grade": "S", "note": ""},
     {"kind": "song", "label": "Artist - Title", "pct": 70, "grade": "C+", "note": ""},
-    {"kind": "block", "label": "3:00 @ 200-250 Watts", "pct": 60, "grade": "D", "note": "ended early", "indent": True},
+    {"kind": "block", "label": "3:00 @ 200-250W", "pct": 60, "grade": "D", "note": "ended early", "indent": True},
     {"kind": "block", "label": "Free Ride", "pct": 88, "grade": "A-", "note": ""},
 ]
 
@@ -396,8 +396,8 @@ def scene_smooth_bar():
     return shown(bar, 301, 34)
 
 
-BLOCK_LINES = ["5:00 @ 150 Watts", "1:00 @ 300 Watts", "2:00 @ 120 Watts", "3:00 @ 200-250 Watts", "Free Ride",
-               "4:00 @ 180 Watts", "0:30 @ 400 Watts", "6:00 @ 90 Watts", "2:00 @ 260 Watts", "1:00 @ 140 Watts"]
+BLOCK_LINES = ["5:00 @ 150W", "1:00 @ 300W", "2:00 @ 120W", "3:00 @ 200-250W", "Free Ride",
+               "4:00 @ 180W", "0:30 @ 400W", "6:00 @ 90W", "2:00 @ 260W", "1:00 @ 140W"]
 
 
 def scene_long_labels():
@@ -410,6 +410,14 @@ def scene_long_labels():
     for _ in range(3):
         app.processEvents()
     return labels
+
+
+def scene_zone_legend():
+    """The zone legend under the coming up list: the zones side by side, and where each ends (haloed: on its own
+    it's its window, the default theme's black on the gradient's middle)"""
+    from ClassZoneLegend import LEGEND_HEIGHT, ZoneLegend
+    from ClassLongVerticalLabelSeries import BLOCK_LABEL_WIDTH
+    return shown(ZoneLegend(), BLOCK_LABEL_WIDTH, LEGEND_HEIGHT)
 
 
 # ---- The screens ----

@@ -58,6 +58,7 @@
 #include "WorkoutGraph.hpp"
 #include "WorkoutHelpers.hpp"
 #include "ZoneColors.hpp"
+#include "ZoneLegend.hpp"
 
 using namespace awo;
 
@@ -445,13 +446,13 @@ QList<GradeList::Row> gradeRows() {
         return r;
     };
     return {row(Kind::Ride, QStringLiteral("Workout: Test Ride"), 91.2, QStringLiteral("A"), QStringLiteral("45m")),
-            row(Kind::Block, QStringLiteral("5:00 @ 150 Watts"), 95, QStringLiteral("A+")),
+            row(Kind::Block, QStringLiteral("5:00 @ 150W"), 95, QStringLiteral("A+")),
             row(Kind::Interval, QStringLiteral("3x"), std::nullopt, {}),
-            row(Kind::Sub, QStringLiteral("1:00 @ 300 Watts"), 80, QStringLiteral("B"),
+            row(Kind::Sub, QStringLiteral("1:00 @ 300W"), 80, QStringLiteral("B"),
                 QStringLiteral("S · A · B+")),
-            row(Kind::Sub, QStringLiteral("2:00 @ 120 Watts"), 99, QStringLiteral("S")),
+            row(Kind::Sub, QStringLiteral("2:00 @ 120W"), 99, QStringLiteral("S")),
             row(Kind::Song, QStringLiteral("Artist - Title"), 70, QStringLiteral("C+")),
-            row(Kind::Block, QStringLiteral("3:00 @ 200-250 Watts"), 60, QStringLiteral("D"),
+            row(Kind::Block, QStringLiteral("3:00 @ 200-250W"), 60, QStringLiteral("D"),
                 QStringLiteral("ended early"), true),
             row(Kind::Block, QStringLiteral("Free Ride"), 88, QStringLiteral("A-"))};
 }
@@ -483,15 +484,21 @@ QWidget* sceneSmoothBar() {
 
 // The coming up list, longer than fits: scrolled one down, "more..." above and below
 QWidget* sceneLongLabels() {
-    const QStringList lines = {"5:00 @ 150 Watts", "1:00 @ 300 Watts", "2:00 @ 120 Watts", "3:00 @ 200-250 Watts",
-                               "Free Ride",        "4:00 @ 180 Watts", "0:30 @ 400 Watts", "6:00 @ 90 Watts",
-                               "2:00 @ 260 Watts", "1:00 @ 140 Watts"};
+    const QStringList lines = {"5:00 @ 150W", "1:00 @ 300W", "2:00 @ 120W", "3:00 @ 200-250W",
+                               "Free Ride",        "4:00 @ 180W", "0:30 @ 400W", "6:00 @ 90W",
+                               "2:00 @ 260W", "1:00 @ 140W"};
     auto* labels = new LongVLabels(appState().ftpRanges);
     labels->setFullText(lines.join(u'\n') + u'\n');
     shown(labels, 500, 300);
     labels->scrollTo(1);
     settle();
     return labels;
+}
+
+// The zone legend under the coming up list: the zones side by side, and where each ends (haloed: on its own it's its
+// window, the default theme's black on the gradient's middle)
+QWidget* sceneZoneLegend() {
+    return shown(new ZoneLegend, LongVLabels::kLabelWidth, ZoneLegend::kHeight);
 }
 
 // ---- The screens ----
@@ -1073,6 +1080,7 @@ const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("grade_list_scrolled"), sceneGradeListScrolled},
     {QStringLiteral("smooth_bar"), sceneSmoothBar},
     {QStringLiteral("long_labels"), sceneLongLabels},
+    {QStringLiteral("zone_legend"), sceneZoneLegend},
     {QStringLiteral("setup_screen"), sceneSetupScreen},
     {QStringLiteral("select_devices"), sceneSelectDevices},
     {QStringLiteral("connect_devices"), sceneConnectDevices},

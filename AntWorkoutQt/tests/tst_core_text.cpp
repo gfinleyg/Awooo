@@ -167,29 +167,29 @@ private slots:
         Block free;
         free.seconds = 60;
         free.position = 3;
-        QCOMPARE(blockText(WorkoutEntry::ofBlock(free), 10, kWatts), QStringList{QStringLiteral("Standing 1m")});
-        QCOMPARE(blockText(steady(200), 10, kWatts), QStringLiteral("Seated 200 Watts 5m"));
+        QCOMPARE(blockText(WorkoutEntry::ofBlock(free), 10, kWatts), QStringList{QStringLiteral("Stand 1m")});
+        QCOMPARE(blockText(steady(200), 10, kWatts), QStringLiteral("200W 5m"));
         // the difficulty picks the power
-        QCOMPARE(blockText(steady(200), 0, kWatts), QStringLiteral("Seated 190 Watts 5m"));
-        QCOMPARE(blockText(steady(200), 20, kWatts), QStringLiteral("Seated 210 Watts 5m"));
-        QCOMPARE(blockText(ramp(100, 200), 10, kWatts), QStringLiteral("Seated High Cadence 100-200 Watts 1m 30s"));
+        QCOMPARE(blockText(steady(200), 0, kWatts), QStringLiteral("190W 5m"));
+        QCOMPARE(blockText(steady(200), 20, kWatts), QStringLiteral("210W 5m"));
+        QCOMPARE(blockText(ramp(100, 200), 10, kWatts), QStringLiteral("↑RPM 100-200W 1m 30s"));
     }
 
     void blockTextIntervals() {
         Block rest;
         rest.seconds = 30;
         QCOMPARE(blockText(WorkoutEntry::interval(4, {steady(300, 30, 3), rest}), 10, kWatts),
-                 (QStringList{QStringLiteral("4x"), QStringLiteral("Standing 300 Watts 30s"), QStringLiteral("Seated 30s")}));
+                 (QStringList{QStringLiteral("4x"), QStringLiteral("Stand 300W 30s"), QStringLiteral("Free 30s")}));
         Block low;
         low.seconds = 15;
         low.position = 2;
         QCOMPARE(blockText(WorkoutEntry::interval(2, {steady(300, 30, 4), ramp(100, 150, 60, 5), low}), 10, kWatts),
-                 (QStringList{QStringLiteral("2x"), QStringLiteral("Single Leg 300 Watts 30s"),
-                              QStringLiteral("Switch Single Leg 100-150 Watts 1m"), QStringLiteral("Seated Low Cadence 15s")}));
+                 (QStringList{QStringLiteral("2x"), QStringLiteral("1 Leg 300W 30s"),
+                              QStringLiteral("1 Leg ⇄ 100-150W 1m"), QStringLiteral("↓RPM 15s")}));
     }
 
     void blockTextInRpm() {
-        QCOMPARE(blockText(steady(90), 10, QStringLiteral("RPM")), QStringLiteral("Seated 90 RPM 5m"));
+        QCOMPARE(blockText(steady(90), 10, QStringLiteral("RPM")), QStringLiteral("90rpm 5m"));
     }
 
     void workoutTextListsIntervalsIndented() {
@@ -199,7 +199,7 @@ private slots:
                                              WorkoutEntry::interval(2, {steady(300, 30), rest}),
                                              WorkoutEntry::intervalBlock(2, 0, steady(300, 30))};
         QCOMPARE(workoutText(entries, kWatts, {{1, QStringLiteral("3m : Band - Song")}}),
-                 QStringLiteral("Seated 200 Watts 5m\n3m : Band - Song\n2x Seated 300 Watts 30s\n      Seated 30s\n"));
+                 QStringLiteral("200W 5m\n3m : Band - Song\n2x 300W 30s\n      Free 30s\n"));
     }
 
     void targetsFromText_data() {
@@ -207,12 +207,16 @@ private slots:
         QTest::addColumn<int>("low");
         QTest::addColumn<int>("high");
         QTest::addColumn<bool>("found");
-        QTest::newRow("single") << "Seated 200 Watts 5m" << 200 << 0 << true;
-        QTest::newRow("range") << "Seated 100-200 Watts 1m" << 100 << 200 << true;
-        QTest::newRow("rpm") << "Seated 90 RPM 5m" << 90 << 0 << true;
-        QTest::newRow("free") << "Standing 1m" << 0 << 0 << false;
-        QTest::newRow("first word") << "Watts 5m" << 0 << 0 << false;
-        QTest::newRow("not a number") << "Seated abc Watts" << 0 << 0 << false;
+        QTest::newRow("single") << QStringLiteral("200W 5m") << 200 << 0 << true;
+        QTest::newRow("range") << QStringLiteral("100-200W 1m") << 100 << 200 << true;
+        QTest::newRow("rpm") << QStringLiteral("90rpm 5m") << 90 << 0 << true;
+        QTest::newRow("position") << QStringLiteral("Stand 300W 30s") << 300 << 0 << true;
+        QTest::newRow("high cadence") << QStringLiteral("↑RPM 100-200W 1m") << 100 << 200 << true;
+        QTest::newRow("seated free") << QStringLiteral("Free 5m") << 0 << 0 << false;
+        QTest::newRow("free") << QStringLiteral("Stand 1m") << 0 << 0 << false;
+        QTest::newRow("low cadence free") << QStringLiteral("↓RPM 15s") << 0 << 0 << false;
+        QTest::newRow("no number") << QStringLiteral("W 5m") << 0 << 0 << false;
+        QTest::newRow("not a number") << QStringLiteral("abcW") << 0 << 0 << false;
         QTest::newRow("header") << "4x" << 0 << 0 << false;
     }
 
@@ -232,7 +236,7 @@ private slots:
     void songHeaderOnlyInCadenceMode() {
         QVERIFY(!isSongHeader(QStringLiteral("3m 20s : Artist - Title"), false));
         QVERIFY(isSongHeader(QStringLiteral("3m 20s : Artist - Title"), true));
-        QVERIFY(!isSongHeader(QStringLiteral("Seated 90 RPM 5m"), true));
+        QVERIFY(!isSongHeader(QStringLiteral("90rpm 5m"), true));
     }
 
     void maxHelpers() {

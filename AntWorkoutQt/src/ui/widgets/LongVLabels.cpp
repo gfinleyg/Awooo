@@ -20,7 +20,6 @@ namespace awo {
 namespace {
 
 const QString kMoreText = QStringLiteral("more...");
-const QString kAlmostDone = QStringLiteral("Almost done!");
 
 }  // namespace
 
@@ -32,7 +31,7 @@ LongVLabels::LongVLabels(const ftpcolors::ZoneRanges& ranges, QWidget* parent)
     main->setContentsMargins(0, 0, 0, 0);
     for (int i = 0; i < kWidgetCount; ++i) {
         auto* label = new QLabel;
-        label->setFixedSize(500, 42);
+        label->setFixedSize(kLabelWidth, 42);
         // (LayoutViewer lists them with the zone colored widgets)
         label->setProperty("awoFtpColored", true);
         labelLayout_->addWidget(label);
@@ -73,11 +72,7 @@ void LongVLabels::renderLines() {
         }
     }
     QStringList shown;
-    if (fullText_.isEmpty()) {
-        if (showAlmostDone) {
-            shown = {kAlmostDone};
-        }
-    } else if (fullText_ == QLatin1String("DONE")) {
+    if (fullText_ == QLatin1String("DONE")) {
         const QRect geo = geometry();
         setFixedSize(geo.width(), geo.height());
         return;
@@ -146,7 +141,7 @@ void LongVLabels::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 QString LongVLabels::labelColor(const QString& text) const {
-    if (text == kAlmostDone || text == kMoreText) {
+    if (text == kMoreText) {
         return QStringLiteral("background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #9fc5d1 stop:1 #9fc5d1);");
     }
     if (isSongHeader(text, appState().cadenceMode)) {

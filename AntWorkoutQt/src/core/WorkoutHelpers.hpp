@@ -17,13 +17,14 @@ namespace awo {
 // "1h 2m 3s" without the parts that are zero ("1m", "1h 30s" is "1h 0m 30s"); a time past its end shows as 0s
 QString minimizedDuration(double seconds);
 
-// The riding positions' names, by Position
+// The riding positions' names in the block text, by Position; seated says nothing
 extern const QStringList kPositionNames;
 
-// A Block or Interval entry's text at a difficulty, in the target unit ("Watts", or "RPM" in Musical Cadence Mode):
-//   free ride  "Standing 1m"
-//   steady     "Seated 200 Watts 5m"
-//   ramp       "Seated High Cadence 100-200 Watts 1m 30s"
+// A Block or Interval entry's text at a difficulty, in the target unit ("Watts", shown as "W", or "RPM" in Musical
+// Cadence Mode, shown as "rpm"):
+//   free ride  "Free 5m" (seated), "Stand 1m"
+//   steady     "200W 5m" (seated), "90rpm 5m"
+//   ramp       "↑RPM 100-200W 1m 30s"
 //   interval   "4x", then a line for each of its blocks
 QStringList blockText(const WorkoutEntry& entry, int difficulty, const QString& unit);
 QString blockText(const Block& block, int difficulty, const QString& unit);
@@ -33,8 +34,8 @@ QString blockText(const Block& block, int difficulty, const QString& unit);
 QString workoutText(const QList<WorkoutEntry>& entries, const QString& unit,
                     const QMap<int, QString>& songStarts = {});
 
-// A block label's target(s) as (low, high), high 0 for a single target, from the number before its "Watts" (or
-// "RPM"); empty for text without one (free ride, headers)
+// A block label's target(s) as (low, high), high 0 for a single target, from its first "<n>W" or "<n>-<n>W" word (or
+// "<n>rpm"); empty for text without one (free ride, headers)
 std::optional<std::pair<int, int>> targetsFromText(const QString& text);
 
 // Musical Cadence Mode's song lines in the workout lists ("<length> : <Artist> - <Title>"); no block's text has " : "

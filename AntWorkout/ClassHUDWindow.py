@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 
 from ClassAnalogGauge import *
 from ClassLongVerticalLabelSeries import *
+from ClassZoneLegend import LEGEND_HEIGHT, ZoneLegend
 from ClassSolidColoredColumns import SolidColoredColumns
 from ClassSpiralProgressBar import *
 from ClassPowerSpiral import PowerSpiral
@@ -38,7 +39,7 @@ from ClassConfirmEndWorkoutWindow import ConfirmEndWorkoutWindow
 import SoundEffects
 from WorkoutHelpers import (MinimizedDuration, ProcessWorkoutLine, ProcessNonIntervalWorkoutLineText, GetMaxOrZero,
                             WithDropoutsAsZero, DROPOUT_ZERO_SECONDS, TargetsFromText, IsSongHeader,
-                            SONG_HEADER_CSS)
+                            SONG_HEADER_CSS, SWITCH_SINGLE_LEG)
 import WorkoutGrading
 import KeyShortcuts
 import FtpTest
@@ -357,27 +358,30 @@ class HUDWindow(QWidget):
 
         if AppState.workoutMode:
             self.upNextLayout = QGridLayout()
+            #(the column as wide as its blocks, see ClassLongVerticalLabelSeries.BLOCK_LABEL_WIDTH)
             self.upNextLabelHeader = QLabel("Up Next:")
             self.upNextLabelHeader.setStyleSheet(xlTextStyleSheet)
-            self.upNextLabelHeader.setMinimumWidth(490)
+            self.upNextLabelHeader.setMinimumWidth(BLOCK_LABEL_WIDTH)
             self.upNextLabelHeader.setMaximumHeight(40)
             self.upNextLayout.addWidget(self.upNextLabelHeader, 0,0)
             self.upNextLabelDescription = QLabel()
             self.upNextLabelDescription.setFixedHeight(90)
-            self.upNextLabelDescription.setMinimumWidth(490)
+            self.upNextLabelDescription.setMinimumWidth(BLOCK_LABEL_WIDTH)
             self.upNextLayout.addWidget(self.upNextLabelDescription, 1,0,3,1)
             self.remainingWorkoutHeader = QLabel("Coming up...")
             self.remainingWorkoutHeader.setMaximumHeight(40)
-            self.remainingWorkoutHeader.setMinimumWidth(490)
+            self.remainingWorkoutHeader.setMinimumWidth(BLOCK_LABEL_WIDTH)
             self.remainingWorkoutHeader.setStyleSheet(xlTextStyleSheet)
             self.upNextLayout.addWidget(self.remainingWorkoutHeader, 4,0)
             self.remainingWorkoutList = LongVLabels(True, AppState.ftp, AppState.ftpRanges)
-            #a ramp test's blocks are added as they're ridden, so its list is always empty, not almost done
-            self.remainingWorkoutList.ui.widget.showAlmostDone = not self.rampTest
-            self.remainingWorkoutList.setMinimumWidth(490)
-            self.remainingWorkoutList.setFixedHeight(560)
+            self.remainingWorkoutList.setMinimumWidth(BLOCK_LABEL_WIDTH)
+            #(with the zone legend under it, as tall as the list alone was)
+            self.remainingWorkoutList.setFixedHeight(560 - LEGEND_HEIGHT - 6)
             # self.remainingWorkoutList.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
             self.upNextLayout.addWidget(self.remainingWorkoutList, 5,0,21,1)
+            #the zones' colors and where each ends, between the blocks and the graph
+            self.zoneLegend = ZoneLegend()
+            self.upNextLayout.addWidget(self.zoneLegend, 26,0)
             #once the workout is complete each block's grade takes over the whole column (see show_workout_grades)
             self.workoutGradesHeader = QLabel("Workout Grades")
             self.workoutGradesHeader.setStyleSheet(xlTextStyleSheet)
@@ -1925,6 +1929,9 @@ class HUDWindow(QWidget):
         """Starts grading a block (or one rep of an interval block): block is its (type, duration, ...) tuple"""
         if self.ftpTest: #FTP tests aren't graded
             return
+        position = block[2] if block[0] == 0 else block[3]
+        if position == SWITCH_SINGLE_LEG: #nor are switch single leg blocks (ridden as usual, left out of the grades)
+            return
         #Musical Cadence Mode grades cadence against the target cadence, with the block's own target standing in for
         #FTP (an intensity of 1: the grader's usual tolerances at threshold)
         ftp = AppState.ftp
@@ -1939,6 +1946,8 @@ class HUDWindow(QWidget):
     def grade_tick(self):
         #ticks only come while the workout runs, so paused time is never graded
         if self.grader is None:
+            #(a block that isn't graded still sets the target the next one is coming from)
+            self.lastGradeTarget = self.currentPower
             return
         actualVals = AppState.savedCadenceVals if self.cadenceMode else AppState.savedPowerVals
         actual = WorkoutGrading.latest_power(*actualVals, AppState.secondsPassed)
@@ -2060,7 +2069,7 @@ class HUDWindow(QWidget):
         """The left column: each block's grade once the workout is complete (show), else Up Next/Coming up"""
         self.workoutGraded = show
         for widget in (self.upNextLabelHeader, self.upNextLabelDescription, self.remainingWorkoutHeader,
-                       self.remainingWorkoutList):
+                       self.remainingWorkoutList, self.zoneLegend):
             widget.setVisible(not show)
         self.workoutGradesHeader.setVisible(show)
         self.workoutGradeList.setVisible(show)
@@ -2089,7 +2098,7 @@ class HUDWindow(QWidget):
         if len(workoutList) <= 0:
             self.upNextLabelDescription.setText("You're on the last block, way to go!")
             self.upNextLabelDescription.setStyleSheet(self.getLabelColor("You're on the last block, way to go!"))
-            self.remainingWorkoutHeader.setText("") #the list shows "Almost done!", nothing is coming up
+            self.remainingWorkoutHeader.setText("") #nothing is coming up
         else:
             #more workout remains, 
             #update up next
@@ -2115,7 +2124,7 @@ class HUDWindow(QWidget):
                     comingUpText = comingUpText + workoutElement[0]  + " " + "\n      ".join(workoutElement[1:]) + "\n" #add the remaining interval blocks, newline separated
                 else:
                     comingUpText = comingUpText + workoutElement + "\n"
-            #an empty list shows "Almost done!", so there's nothing "Coming up..."
+            #an empty list shows nothing, so there's nothing "Coming up..."
             self.remainingWorkoutHeader.setText("Coming up..." if comingUpText else "")
             self.remainingWorkoutList.ui.widget.setFullText(comingUpText)
         #nothing to do if no workout blocks remain

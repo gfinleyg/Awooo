@@ -22,19 +22,28 @@ def MinimizedDuration(duration):
             return time.strftime("%#Hh %#Mm %#Ss", time.gmtime(duration))
 
 
+#The riding positions' names in the block text, by an .awo block's position number; seated says nothing
+POSITION_NAMES = ["", "↑RPM", "↓RPM", "Stand", "1 Leg", "1 Leg ⇄"]
+#Switch single leg blocks are ridden and listed like any other, but aren't graded
+SWITCH_SINGLE_LEG = 5
+
 def ProcessNonIntervalWorkoutLineText(line, difficulty):
-    #(Musical Cadence Mode says RPM where these say Watts)
+    #(Musical Cadence Mode says "rpm" where these say "W")
     #free   [position + " " + MinimizedDuration(duration)]
-    #steady [position + " " + adjustedPower + " Watts " + MinimizedDuration(duration)]
-    #ramp   [position + " " + str(adjustedStartPower) + "-" + str(adjustedEndPower) + " Watts " + MinimizedDuration(duration)]
-    positionList = ["Seated", "Seated High Cadence", "Seated Low Cadence", "Standing", "Single Leg", "Switch Single Leg"]
+    #steady [position + " " + adjustedPower + "W " + MinimizedDuration(duration)]
+    #ramp   [position + " " + str(adjustedStartPower) + "-" + str(adjustedEndPower) + "W " + MinimizedDuration(duration)]
+    #(without the position, and its space, when seated; a seated free ride says "Free")
+    position = POSITION_NAMES[line[2] if line[0] == 0 else line[3]]
+    if line[0] == 0 and not position:
+        position = "Free"
+    position = position + " " if position else ""
     if line[0] == 0:
-        return [positionList[line[2]] + " " + MinimizedDuration(line[1])]
-    unit = " " + AppState.target_unit() + " "
+        return [position + MinimizedDuration(line[1])]
+    unit = "W " if AppState.target_unit() == "Watts" else AppState.target_unit().lower() + " "
     if line[0] == 1:
-        return [positionList[line[3]] + " " + str(line[2][difficulty]) + unit + MinimizedDuration(line[1])]
+        return [position + str(line[2][difficulty]) + unit + MinimizedDuration(line[1])]
     elif line[0] == 2:
-        return [positionList[line[3]] + " " + str(line[2][difficulty][0]) + "-" + str(line[2][difficulty][1]) + unit + MinimizedDuration(line[1])]
+        return [position + str(line[2][difficulty][0]) + "-" + str(line[2][difficulty][1]) + unit + MinimizedDuration(line[1])]
 
 
 def ProcessWorkoutLine(line, difficulty):
@@ -59,19 +68,20 @@ def IsSongHeader(txt):
     return AppState.cadenceMode and " : " in txt
 
 def TargetsFromText(txt):
-    """A block label's target(s) as (low, high) - high is 0 for a single target - read from the number before its
-    "Watts" (or "RPM"); None for text without one (free ride, headers)"""
-    words = txt.split(" ")
-    for unit in ("Watts", "RPM"):
-        if unit in words:
-            index = words.index(unit)
-            if index == 0:
-                return None
-            values = words[index-1].split("-")
-            try:
-                return (int(values[0]), int(values[1]) if len(values) > 1 else 0)
-            except ValueError:
-                return None
+    """A block label's target(s) as (low, high) - high is 0 for a single target - read from its first "<n>W" or
+    "<n>-<n>W" word (or "<n>rpm"); None for text without one (free ride, headers)"""
+    for word in txt.split(" "):
+        if len(word) > 1 and word.endswith("W"):
+            number = word[:-1]
+        elif len(word) > 3 and word.endswith("rpm"):
+            number = word[:-3]
+        else:
+            continue
+        values = number.split("-")
+        try:
+            return (int(values[0]), int(values[1]) if len(values) > 1 else 0)
+        except ValueError:
+            continue
     return None
 
 def GetMaxOrZero(lst):

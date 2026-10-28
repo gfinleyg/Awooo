@@ -40,6 +40,7 @@
 #include "WorkoutGraph.hpp"
 #include "WorkoutHelpers.hpp"
 #include "ZoneColors.hpp"
+#include "ZoneLegend.hpp"
 
 namespace awo {
 
@@ -321,26 +322,29 @@ HudScreen::~HudScreen() = default;
 
 void HudScreen::buildUpNext() {
     auto* upNext = new QGridLayout;
+    // (the column as wide as its blocks, see LongVLabels::kLabelWidth)
     upNextLabelHeader_ = new QLabel(QStringLiteral("Up Next:"));
     theme::setSheet(upNextLabelHeader_, kXlText);
-    upNextLabelHeader_->setMinimumWidth(490);
+    upNextLabelHeader_->setMinimumWidth(LongVLabels::kLabelWidth);
     upNextLabelHeader_->setMaximumHeight(40);
     upNext->addWidget(upNextLabelHeader_, 0, 0);
     upNextLabelDescription_ = new QLabel;
     upNextLabelDescription_->setFixedHeight(90);
-    upNextLabelDescription_->setMinimumWidth(490);
+    upNextLabelDescription_->setMinimumWidth(LongVLabels::kLabelWidth);
     upNext->addWidget(upNextLabelDescription_, 1, 0, 3, 1);
     remainingWorkoutHeader_ = new QLabel(QStringLiteral("Coming up..."));
     remainingWorkoutHeader_->setMaximumHeight(40);
-    remainingWorkoutHeader_->setMinimumWidth(490);
+    remainingWorkoutHeader_->setMinimumWidth(LongVLabels::kLabelWidth);
     theme::setSheet(remainingWorkoutHeader_, kXlText);
     upNext->addWidget(remainingWorkoutHeader_, 4, 0);
     remainingWorkoutList_ = new LongVLabels(appState().ftpRanges);
-    // (a ramp test's blocks are added as they're ridden, so its list is always empty, not almost done)
-    remainingWorkoutList_->showAlmostDone = !engine_->rampTest();
-    remainingWorkoutList_->setMinimumWidth(490);
-    remainingWorkoutList_->setFixedHeight(560);
+    remainingWorkoutList_->setMinimumWidth(LongVLabels::kLabelWidth);
+    // (with the zone legend under it, as tall as the list alone was)
+    remainingWorkoutList_->setFixedHeight(560 - ZoneLegend::kHeight - 6);
     upNext->addWidget(remainingWorkoutList_, 5, 0, 21, 1);
+    // the zones' colors and where each ends, between the blocks and the graph
+    zoneLegend_ = new ZoneLegend;
+    upNext->addWidget(zoneLegend_, 26, 0);
     // once the workout is complete each block's grade takes over the whole column
     workoutGradesHeader_ = new QLabel(QStringLiteral("Workout Grades"));
     theme::setSheet(workoutGradesHeader_, kXlText);

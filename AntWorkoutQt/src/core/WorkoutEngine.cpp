@@ -353,7 +353,8 @@ void WorkoutEngine::storeWorkoutPowerTime(int power) {
 
 // a block (or one rep of an interval block) graded from now
 void WorkoutEngine::beginGrading(const grading::GradeKey& key, const Block& block) {
-    if (ftpTest_) {
+    // FTP tests aren't graded, nor are switch single leg blocks (ridden as usual, left out of the grades)
+    if (ftpTest_ || block.position == SwitchSingleLeg) {
         return;
     }
     const AppState& state = appState();
@@ -373,6 +374,8 @@ void WorkoutEngine::beginGrading(const grading::GradeKey& key, const Block& bloc
 // (ticks only come while the workout runs, so paused time is never graded)
 void WorkoutEngine::gradeTick() {
     if (!grader_) {
+        // (a block that isn't graded still sets the target the next one is coming from)
+        lastGradeTarget_ = currentPower_;
         return;
     }
     const AppState& state = appState();
