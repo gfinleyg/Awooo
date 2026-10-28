@@ -85,7 +85,10 @@ private:
     void run();
     bool is_watched(const Sensor& sensor);
     void check_data_freshness(Sensor& sensor, double now);
-    bool frozen_value_is_suspicious(Sensor& sensor);
+    bool frozen_value_is_suspicious(Sensor& sensor, double now);
+    // A watched power meter or trainer, heard and not frozen itself, reports
+    // power or cadence
+    bool rider_pedaling(double now);
     void log_data_recovered(Sensor& sensor);
     void handle_escalation();
     void handle_channel_escalation(double now, const std::set<std::pair<std::string, std::optional<int>>>& pending);

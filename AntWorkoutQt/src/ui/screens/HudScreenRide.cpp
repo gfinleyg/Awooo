@@ -135,6 +135,7 @@ void HudScreen::setStartButtonStyle() {
 void HudScreen::showTickEvents(const WorkoutEngine::TickEvents& events) {
     const AppState& state = appState();
     if (events.completed) {
+        log::event(QStringLiteral("WORKOUT"), QStringLiteral("Workout complete at %1").arg(minimizedDuration(state.secondsPassed)));
         showWorkoutComplete(events);
     }
     if (events.running) {
@@ -670,6 +671,10 @@ void HudScreen::startWorkout() {
     difficultySlider_->setEnabled(cadenceMode_ || !engine_->ftpTest());
     startedAt_ = steadySeconds(clock_);
     startButtonBlink_ = false;
+    const AppState& state = appState();
+    log::event(QStringLiteral("WORKOUT"),
+               QStringLiteral("Started: %1%2").arg(state.workoutMode ? state.workoutDisplayName() : QStringLiteral("free ride"),
+                                                   cadenceMode_ ? QStringLiteral(" (Musical Cadence Mode)") : QString()));
     // the trainer follows the workout from here on
     trainerCommanded_ = true;
     engine_->start();

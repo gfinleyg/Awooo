@@ -48,6 +48,14 @@ QString batteryStatusName(int status) {
     }
 }
 
+// wasLow: it read low last time, so it takes kLowVoltageCleared to clear
+bool batteryVoltageLow(const antnative::BatteryStatus& battery, bool wasLow) {
+    if (!battery.voltage || *battery.voltage < AntBridge::kLowestJudgedVoltage) {
+        return false;
+    }
+    return *battery.voltage < (wasLow ? AntBridge::kLowVoltageCleared : AntBridge::kLowVoltage);
+}
+
 BatteryInfo batteryInfo(const antnative::BatteryStatus& battery) {
     return {battery.status, battery.level_percent, battery.voltage, battery.is_low(), batteryStatusName(battery.status)};
 }
@@ -302,13 +310,24 @@ QStringList AntBridge::lowBatteryWarnings() const {
         }
         const std::shared_ptr<antnative::Sensor> sensor = selectedSensor(role);
         const std::optional<antnative::BatteryStatus> battery = sensor ? sensor->battery() : std::nullopt;
-        if (!battery || !battery->is_low()) {
+        if (!battery) {
+            continue;
+        }
+        const QString deviceName = sensor->device_type() == kDeviceTypeTrainer ? kTrainerBatteryName : name->second;
+        if (!battery->is_low()) {
+            bool voltageLow;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                voltageLow = lowVoltage_.contains(identity);
+            }
+            if (voltageLow && battery->voltage) {
+                warnings << QStringLiteral("%1 low battery voltage (%2V)").arg(deviceName, py::fixed(*battery->voltage, 2));
+            }
             continue;
         }
         const QString statusName = batteryStatusName(battery->status);
         QString text = QStringLiteral("%1 battery %2")
-                           .arg(sensor->device_type() == kDeviceTypeTrainer ? kTrainerBatteryName : name->second,
-                                statusName != u"Unknown" ? statusName.toLower() : QStringLiteral("low"));
+                           .arg(deviceName, statusName != u"Unknown" ? statusName.toLower() : QStringLiteral("low"));
         if (battery->level_percent) {
             text += QStringLiteral(" (%1%)").arg(*battery->level_percent);
         }
@@ -949,9 +968,16 @@ void AntBridge::checkBattery(const DeviceId& identity, const antnative::Sensor& 
         return;
     }
     bool selected = false;
+    bool voltageLow = false;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        const std::pair<int, std::optional<int>> state{battery->status, battery->level_percent};
+        voltageLow = batteryVoltageLow(*battery, lowVoltage_.contains(identity));
+        if (voltageLow) {
+            lowVoltage_.insert(identity);
+        } else {
+            lowVoltage_.erase(identity);
+        }
+        const std::tuple<int, std::optional<int>, bool> state{battery->status, battery->level_percent, voltageLow};
         const auto seen = batterySeen_.find(identity);
         if (seen != batterySeen_.end() && seen->second == state) {
             return;
@@ -963,10 +989,13 @@ void AntBridge::checkBattery(const DeviceId& identity, const antnative::Sensor& 
     }
     const QString level = battery->level_percent ? QStringLiteral(" %1%").arg(*battery->level_percent) : QString();
     const QString voltage = battery->voltage ? QStringLiteral(" %1V").arg(py::fixed(*battery->voltage, 2)) : QString();
-    log::event(QStringLiteral("BATTERY"), QStringLiteral("Device type=%1 number=%2 battery %3%4%5")
+    // (once the device itself says low or critical, that says it already)
+    const QString voltageWarning =
+        voltageLow && !battery->is_low() ? QStringLiteral(" - low battery voltage") : QString();
+    log::event(QStringLiteral("BATTERY"), QStringLiteral("Device type=%1 number=%2 battery %3%4%5%6")
                                               .arg(identity.first)
                                               .arg(identity.second)
-                                              .arg(batteryStatusName(battery->status), level, voltage));
+                                              .arg(batteryStatusName(battery->status), level, voltage, voltageWarning));
     if (selected) {
         emit batteryChanged();
     }

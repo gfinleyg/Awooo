@@ -142,6 +142,13 @@ public:
     static constexpr double kTrainerFailureLogSeconds = 30.0;
     // files older versions passed setup state and sensor data through, removed at startup
     static const QStringList kStaleFiles;
+    // A coin cell (or two alkaline cells) holds about 3V until it's nearly flat, and devices go on reporting "Ok" at
+    // 2.7V and below, so a reading under kLowVoltage warns sooner. It takes kLowVoltageCleared (a fresh battery) to
+    // clear, so a reading wobbling around the line doesn't flicker the warning. Under kLowestJudgedVoltage it's
+    // another kind of battery (a single 1.5V cell), not a flat one, and only the device's own status counts.
+    static constexpr double kLowVoltage = 2.75;
+    static constexpr double kLowVoltageCleared = 2.85;
+    static constexpr double kLowestJudgedVoltage = 2.0;
 
     // The real stick and clock by default
     explicit AntBridge(TransportFactory transportFactory = {}, Clock clock = {}, Sleep sleep = {},
@@ -166,7 +173,8 @@ public:
     virtual bool isReady() const;
     // workout over: the connecting/ready state dropped without disconnecting
     virtual void clearConnectionFlags();
-    // one line per selected device whose battery is low or critical
+    // one line per selected device whose battery is low or critical, or (while the device still says it's fine) whose
+    // battery voltage reads low
     virtual QStringList lowBatteryWarnings() const;
     virtual bool trainerSelected() const;
 
@@ -287,7 +295,10 @@ private:
     bool pendingDisconnect_ = false;
     std::optional<Calibration> calibration_;
     std::optional<TrainerTarget> trainerTarget_;
-    std::map<DeviceId, std::pair<int, std::optional<int>>> batterySeen_;
+    // (status, level, voltage low) as last logged
+    std::map<DeviceId, std::tuple<int, std::optional<int>, bool>> batterySeen_;
+    // devices whose battery voltage reads low (see kLowVoltage)
+    std::set<DeviceId> lowVoltage_;
 };
 
 }  // namespace awo::ant

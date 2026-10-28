@@ -10,6 +10,8 @@
 #include "Dialogs.hpp"
 #include "HudScreen.hpp"
 #include "KeyShortcuts.hpp"
+#include "Logger.hpp"
+#include "WorkoutHelpers.hpp"
 
 namespace awo {
 
@@ -49,13 +51,24 @@ ConfirmEndWorkoutWindow::ConfirmEndWorkoutWindow(HudScreen* hud) : hud_(hud) {
     layout::fitDialog(this);
 }
 
+namespace {
+
+void logEnd(const QString& what) {
+    log::event(QStringLiteral("WORKOUT"),
+               QStringLiteral("%1 at %2").arg(what, minimizedDuration(appState().secondsPassed)));
+}
+
+}  // namespace
+
 void ConfirmEndWorkoutWindow::restartWorkout() {
+    logEnd(QStringLiteral("Restarted (data kept)"));
     pausedHere_ = false;
     hud_->restartWorkout();
     hide();
 }
 
 void ConfirmEndWorkoutWindow::backToSetup() {
+    logEnd(QStringLiteral("Ended, data cleared"));
     pausedHere_ = false;
     hud_->stopTimers();
     hud_->restartWorkout();
@@ -64,6 +77,7 @@ void ConfirmEndWorkoutWindow::backToSetup() {
 }
 
 void ConfirmEndWorkoutWindow::endWorkout() {
+    logEnd(QStringLiteral("Ended, to the synopsis"));
     synopsis_->setEnabled(false);
     pausedHere_ = false;
     hud_->stopTimers();

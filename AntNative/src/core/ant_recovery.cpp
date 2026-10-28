@@ -317,7 +317,7 @@ void Recovery::check_data_freshness(Sensor& sensor, double now) {
     const double timeout =
         sensor.device_type() == kDeviceTypeHeartRate ? opts.hr_frozen_timeout : opts.value_frozen_timeout;
 
-    if (data_age >= timeout && frozen_value_is_suspicious(sensor)) {
+    if (data_age >= timeout && frozen_value_is_suspicious(sensor, now)) {
         if (!sensor.get(&Sensor::data_stalled)) {
             count("stalled");
             log("DEVICE_DATA_STALLED " + sensor_text(sensor) + " frozen=" + fixed(data_age, 1) +
@@ -336,7 +336,7 @@ void Recovery::log_data_recovered(Sensor& sensor) {
     log("DEVICE_DATA_RECOVERED " + sensor_text(sensor));
 }
 
-bool Recovery::frozen_value_is_suspicious(Sensor& sensor) {
+bool Recovery::frozen_value_is_suspicious(Sensor& sensor, double now) {
     const std::shared_ptr<Profile>& profile = sensor.profile();
     switch (sensor.device_type()) {
         case kDeviceTypeHeartRate:
@@ -352,25 +352,50 @@ bool Recovery::frozen_value_is_suspicious(Sensor& sensor) {
         }
         case kDeviceTypeSpeedCadence:
         case kDeviceTypeCadence:
-        case kDeviceTypeSpeed: {
-            auto* bsc = dynamic_cast<SpeedCadenceProfile*>(profile.get());
-            if (!bsc) return false;
-            std::lock_guard<std::mutex> lock(bsc->mutex);
-            if (sensor.device_type() == kDeviceTypeSpeedCadence) {
-                if (!bsc->latest_combined) return false;
-                return bsc->latest_combined->cadence_rpm.value_or(0) != 0 ||
-                       bsc->latest_combined->speed_mps.value_or(0) != 0;
-            }
-            if (!bsc->latest) return false;
-            if (sensor.device_type() == kDeviceTypeCadence) {
-                return bsc->latest->cadence_rpm.value_or(0) != 0;
-            }
-            return bsc->latest->speed_mps.value_or(0) != 0;
-        }
+        case kDeviceTypeSpeed:
+            // Stopped cranks and wheel sound exactly like a stuck sensor: the
+            // last event repeated, its last rate still non-zero. Only a power
+            // meter or trainer saying the rider is pedaling tells them apart
+            // (and without one there's no fallback reading to switch to anyway)
+            return rider_pedaling(now);
         default:
             // e.g. a trainer: no validated field to judge frozen-at-zero by yet
             return false;
     }
+}
+
+bool Recovery::rider_pedaling(double now) {
+    // Changing well within the frozen timeout, so clearly more recently than
+    // the sensor it vouches for - not one that stopped a message after it and
+    // holds its last values (its own freshness rather than its data_stalled
+    // flag, which it may not have been given yet this check)
+    const double fresh = options().value_frozen_timeout / 2;
+    for (const std::shared_ptr<Sensor>& sensor : manager_.get_devices()) {
+        if (!is_watched(*sensor) || sensor->get(&Sensor::state) != "ACTIVE" ||
+            now - sensor->get(&Sensor::last_new_data_seen) >= fresh) {
+            continue;
+        }
+        const std::shared_ptr<Profile>& profile = sensor->profile();
+        int watts = 0;
+        int cadence = 0;
+        if (auto* power = dynamic_cast<PowerMeterProfile*>(profile.get())) {
+            std::lock_guard<std::mutex> lock(power->mutex);
+            if (power->latest) {
+                watts = power->latest->instantaneous_power_watts;
+                cadence = power->latest->power_meter_cadence_rpm.value_or(0);
+            }
+        } else if (auto* trainer = dynamic_cast<FitnessEquipmentProfile*>(profile.get())) {
+            std::lock_guard<std::mutex> lock(trainer->mutex);
+            if (trainer->latest) {
+                watts = trainer->latest->instantaneous_power_watts;
+                cadence = trainer->latest->power_meter_cadence_rpm.value_or(0);
+            }
+        }
+        if (watts > 0 || cadence > 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // ---- Escalation --------------------------------------------------------------

@@ -50,3 +50,17 @@ Python app's own results (`tests\golden\`).
   same, and either app reads the other's file.
 - **Crashes are logged**, with a minidump (`AntWorkout_crash.dmp`) beside the log, and so are uncaught C++ exceptions,
   in place of the Python tracebacks.
+
+## Sensors
+
+- **A battery whose voltage reads low is warned about before the device says so.** Devices go on reporting "Ok" at
+  2.7V and below on a 3V coin cell, so under 2.75V (cleared again at 2.85V) the setup, workout and synopsis screens
+  show "... low battery voltage (2.70V)", and the log line says "- low battery voltage". Once the device itself says
+  low or critical, its own warning is the one shown. Batteries under 2V (single 1.5V cells) are judged only by what
+  the device says.
+- **Stopping pedaling no longer flags the speed/cadence sensor as stalled.** A stopped sensor repeats its last
+  message just as a stuck one does, so it's only flagged while a power meter or trainer shows the rider pedaling.
+  The Python app (whose AntNative build predates this) flagged it about 6 seconds into every stop, logging
+  "DEVICE_DATA_STALLED ... check battery/contact".
+- **Workouts are logged**: when one starts (its name, or free ride), completes, is restarted or ended (to the
+  synopsis, or back to setup with its data cleared), and going back to setup, which disconnects the devices.

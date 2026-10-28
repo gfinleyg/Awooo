@@ -85,6 +85,7 @@ void MainWindow::goBackToSetup() {
         hud_->stopReadings();
         hud_->hide();
     }
+    log::event(QStringLiteral("SETUP"), QStringLiteral("Back to setup, disconnecting the devices"));
     bridge_->requestDisconnect();
     workoutData().clear();
     AppState& state = appState();

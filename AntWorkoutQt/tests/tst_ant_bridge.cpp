@@ -1,8 +1,11 @@
 // The ANT bridge (src/ant/AntBridge) on a fake stick, with AntNative's real Manager and Recovery: discovery,
-// connecting, the trainer's target power, power meter calibration, battery warnings, and starting without a stick
+// connecting, the trainer's target power, power meter calibration, battery warnings, the watchdog's stall check on a
+// speed/cadence sensor, and starting without a stick
 // (tests/test_ant_bridge.py)
 
 #include <QSignalSpy>
+
+#include <cmath>
 
 #include "FakeAnt.hpp"
 #include "Logger.hpp"
@@ -22,9 +25,27 @@ using Channels = std::map<int, antnative::ChannelIdentity>;
 const DeviceId kPower{11, 100};
 const DeviceId kTrainer{17, 300};
 const DeviceId kHrm{120, 200};
+const DeviceId kSpeedCadence{121, 400};
 
 antnative::RawMessage power(int watts = 200, int channel = 0) {
     return awotest::powerPage(100, watts, 90, awotest::uniqueByte(), channel, 5);
+}
+
+// The combined speed and cadence sensor at its revolutions-th crank and wheel revolution (about 88 rpm); the same
+// count again is the same message again, as a sensor sends while nothing turns
+antnative::RawMessage speedCadence(int revolutions) {
+    return awotest::combinedPage(400, revolutions * 700, revolutions, revolutions * 500, revolutions);
+}
+
+// A battery page carrying its voltage: the heart rate monitor's page 7, otherwise common page 82
+antnative::RawMessage batteryVoltage(int deviceType, int deviceNumber, int status, double volts) {
+    const int coarse = static_cast<int>(volts);
+    const auto fractional = static_cast<std::uint8_t>(std::lround((volts - coarse) * 256));
+    const auto descriptive = static_cast<std::uint8_t>((status << 4) | coarse);
+    if (deviceType == 120) {
+        return awotest::message(120, deviceNumber, {0x07, 0xFF, fractional, descriptive, 0, 0, 0, 0}, 0, 1);
+    }
+    return awotest::message(deviceType, deviceNumber, {0x52, 0xFF, 0xFF, 0, 0, 0, fractional, descriptive}, 0, 5);
 }
 
 antnative::RawMessage trainer(int watts = 200, int channel = 0) {
@@ -478,6 +499,87 @@ private slots:
         QVERIFY(logText().contains(QStringLiteral("battery Low 3.00V")));
     }
 
+    void lowBatteryVoltage() {
+        initialized();
+        hear({power(), hr()});
+        connectDevices({{Role::Power, kPower}, {Role::Hrm, kHrm}});
+        // as on a real ride: the power meter's coin cell fine at 2.87V, the heart rate monitor's at 2.70V and the
+        // monitor still saying "Ok"
+        hear({batteryVoltage(11, 100, 3, 2.87), batteryVoltage(120, 200, 3, 2.70)});
+        QCOMPARE(bridge_->lowBatteryWarnings(), QStringList{QStringLiteral("Heart rate monitor low battery voltage (2.70V)")});
+        QVERIFY(logText().contains(QStringLiteral("number=200 battery Ok 2.70V - low battery voltage")));
+        QVERIFY(logText().contains(QStringLiteral("number=100 battery Ok 2.87V")));
+        QVERIFY(!logText().contains(QStringLiteral("2.87V - low battery voltage")));
+
+        // a reading wobbling just over the line keeps the warning (and doesn't log or signal again); a fresh battery
+        // clears it
+        QSignalSpy changed(bridge_.get(), &AntBridge::batteryChanged);
+        hear({batteryVoltage(120, 200, 3, 2.80)});
+        QCOMPARE(bridge_->lowBatteryWarnings().size(), 1);
+        QCOMPARE(changed.count(), 0);
+        hear({batteryVoltage(120, 200, 3, 2.95)});
+        QVERIFY(bridge_->lowBatteryWarnings().isEmpty());
+        QCOMPARE(changed.count(), 1);
+
+        // once the monitor itself says low, its own warning is the one shown
+        hear({batteryVoltage(120, 200, 4, 2.60)});
+        QCOMPARE(bridge_->lowBatteryWarnings(), QStringList{QStringLiteral("Heart rate monitor battery low")});
+        QVERIFY(logText().contains(QStringLiteral("number=200 battery Low 2.60V")));
+        QVERIFY(!logText().contains(QStringLiteral("2.60V - low battery voltage")));
+    }
+
+    void singleCellBatteriesArentJudgedByVoltage() {
+        initialized();
+        hear({power()});
+        connectDevices({{Role::Power, kPower}});
+        // a 1.5V cell (some pedals use one) reads far under a coin cell's line without being flat
+        hear({batteryVoltage(11, 100, 2, 1.45)});
+        QVERIFY(bridge_->lowBatteryWarnings().isEmpty());
+        QVERIFY(!logText().contains(QStringLiteral("low battery voltage")));
+    }
+
+    // ---- The watchdog's stall check on a speed/cadence sensor ----
+
+    void stoppingPedalingIsntAStall() {
+        withSpeedCadence(true);
+        int revolutions = 0;
+        ride(3, [&] { hear({power(200), speedCadence(++revolutions)}); });
+        // stopped: the power meter at 0 W and 0 rpm, the speed/cadence sensor repeating its last revolution
+        ride(10, [&] { hear({awotest::powerPage(100, 0, 0), speedCadence(revolutions)}); });
+        QVERIFY(!stalled(Role::SpeedCadence));
+        QVERIFY(!logText().contains(QStringLiteral("DEVICE_DATA_STALLED")));
+    }
+
+    void aSpeedCadenceSensorFrozenWhilePedalingIsStalled() {
+        withSpeedCadence(true);
+        int revolutions = 0;
+        ride(3, [&] { hear({power(200), speedCadence(++revolutions)}); });
+        // the magnets out of its reach: its last revolution repeated while the power meter says the rider's pedaling
+        ride(7, [&] { hear({power(200), speedCadence(revolutions)}); });
+        QVERIFY(stalled(Role::SpeedCadence));
+        QVERIFY(logText().contains(QStringLiteral("DEVICE_DATA_STALLED id=400 type=121")));
+        ride(1, [&] { hear({power(200), speedCadence(++revolutions)}); });
+        QVERIFY(!stalled(Role::SpeedCadence));
+    }
+
+    void aFrozenPowerMeterDoesntVouchForPedaling() {
+        withSpeedCadence(true);
+        int revolutions = 0;
+        ride(3, [&] { hear({power(200), speedCadence(++revolutions)}); });
+        // both stopped, the power meter repeating its last 200 W: it's the one flagged
+        ride(10, [&] { hear({awotest::powerPage(100, 200, 90, 7), speedCadence(revolutions)}); });
+        QVERIFY(stalled(Role::Power));
+        QVERIFY(!stalled(Role::SpeedCadence));
+    }
+
+    void withoutAPowerMeterAStoppedSensorIsntStalled() {
+        withSpeedCadence(false);
+        int revolutions = 0;
+        ride(3, [&] { hear({speedCadence(++revolutions)}); });
+        ride(10, [&] { hear({speedCadence(revolutions)}); });
+        QVERIFY(!stalled(Role::SpeedCadence));
+    }
+
     // ---- The whole thread ----
 
     void runThread() {
@@ -543,6 +645,29 @@ private:
         connectDevices({{Role::Power, kPower}});
         ant_->stick->calls.clear();
     }
+
+    void withSpeedCadence(bool meter) {
+        initialized();
+        hear({power(), speedCadence(0)});
+        Selection selection{{Role::SpeedCadence, kSpeedCadence}};
+        if (meter) {
+            selection[Role::Power] = kPower;
+        }
+        connectDevices(selection);
+        // (the watchdog's stall check on its own: no channel reopening on the fake stick)
+        bridge_->recovery().disable_escalation();
+    }
+
+    // A second at a time: the messages heard in it, then the watchdog's check
+    void ride(int seconds, const std::function<void()>& eachSecond) {
+        for (int second = 0; second < seconds; ++second) {
+            eachSecond();
+            ant_->clock.advance(1);
+            bridge_->recovery().check();
+        }
+    }
+
+    bool stalled(Role role) const { return bridge_->selectedDevice(role)->dataStalled; }
 
     void hear(std::initializer_list<antnative::RawMessage> messages) {
         for (const antnative::RawMessage& message : messages) {
