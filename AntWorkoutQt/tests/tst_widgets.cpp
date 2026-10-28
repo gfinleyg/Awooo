@@ -563,6 +563,49 @@ private slots:
         QCOMPARE(shown.back().label, rows.back().label);
     }
 
+    void gradeListFlowsIntoColumns() {
+        GradeList list;
+        list.setColumnFlow(true);
+        const auto rowsOf = [](int count) {
+            QList<GradeList::Row> rows;
+            for (int i = 0; i < count; ++i) {
+                GradeList::Row row;
+                row.label = QStringLiteral("%1:00 @ 150W").arg(i);
+                row.grade = QStringLiteral("A");
+                rows.append(row);
+            }
+            return rows;
+        };
+        list.setRows(rowsOf(20), 90);
+        // 7 rows a column: 3 columns, each its full width, all the rows in view
+        QSize size = list.fittedSize(QSize(2000, 400));
+        QCOMPARE(size, QSize(static_cast<int>(3 * GradeList::kColumnWidth + 2 * GradeList::kColumnGap), 391));
+        list.resize(size);
+        QCOMPARE(list.columns(), 3);
+        QCOMPARE(list.shownRows().size(), 20);
+        QCOMPARE(list.shownRows().back().label, list.rows().back().label);
+        // a few rows: one column, only as high as they need
+        list.setRows(rowsOf(2), 90);
+        QCOMPARE(list.fittedSize(QSize(2000, 400)), QSize(static_cast<int>(GradeList::kColumnWidth), 2 * 46 - 4 + 72 + 1));
+        // no room for 3 columns at the narrowest: 2 narrower ones, the whole list scrolling through them
+        list.setRows(rowsOf(20), 90);
+        size = list.fittedSize(QSize(700, 400));
+        QCOMPARE(size, QSize(700, 391));
+        list.resize(size);
+        QCOMPARE(list.columns(), 2);
+        QList<GradeList::Row> shown = list.shownRows();
+        QCOMPARE(shown.size(), 14);
+        QCOMPARE(shown.back().kind, GradeList::Row::Kind::More);
+        list.scrollTo(100);
+        shown = list.shownRows();
+        QCOMPARE(list.scrollOffset(), 20 - 14 + 1);
+        QCOMPARE(shown.front().kind, GradeList::Row::Kind::More);
+        QCOMPARE(shown.back().label, list.rows().back().label);
+        // off (the workout screen's list): one column, whatever its width
+        list.setColumnFlow(false);
+        QCOMPARE(list.columns(), 1);
+    }
+
     void gradeListOfTheSessionsRides() {
         Ride graded;
         graded.kind = RideKind::Workout;

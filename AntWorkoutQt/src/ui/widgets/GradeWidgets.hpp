@@ -92,6 +92,10 @@ public:
     static constexpr double kIndent = 18;
     static constexpr double kAverageHeight = 64;
     static constexpr double kLabelPoints = 14;
+    // flowing into columns (setColumnFlow): each column's width when there's room, the narrowest one, between them
+    static constexpr double kColumnWidth = 604;
+    static constexpr double kMinColumnWidth = 320;
+    static constexpr double kColumnGap = 12;
 
     // a row as shown: a grade row, a ride's heading (the synopsis' session) or "more..."
     struct Row {
@@ -127,6 +131,15 @@ public:
     int scrollOffset() const { return scrollOffset_; }
     void scrollTo(int offset);
 
+    // (the synopsis' Block Grades) rows flowing down one column into the next, side by side, as many columns as the
+    // rows need and fit at kMinColumnWidth, sharing the width; scrolling moves the whole flowed list. Off: one column.
+    void setColumnFlow(bool flow);
+    // the columns shown, at this size
+    int columns() const;
+    // the size that shows the most rows within most, flowing into columns kColumnWidth wide (narrower when they
+    // don't all fit)
+    QSize fittedSize(const QSize& most) const;
+
 protected:
     void paintEvent(QPaintEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
@@ -137,7 +150,10 @@ protected:
 private:
     static double scaled(double value);
     double rowStep() const;
-    double listHeight() const;
+    // the rows a column holds in a list this high
+    int rowsPerColumn(double height) const;
+    // the columns that fit across this width at kMinColumnWidth
+    static int columnsFit(double width);
     void drawLabel(QPainter& painter, const QRectF& rect, const QString& text, const QFont& font, const QColor& start,
                    const QColor& end, const QString& note = {}, const std::optional<QColor>& textColor = {});
     void drawAverage(QPainter& painter);
@@ -146,6 +162,7 @@ private:
     std::optional<double> average_;
     QString averageText_ = QStringLiteral("Workout Average");
     int scrollOffset_ = 0;
+    bool columnFlow_ = false;
     int wheelRemainder_ = 0;
     std::optional<double> dragStartY_;
     int dragStartOffset_ = 0;

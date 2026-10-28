@@ -362,6 +362,9 @@ def test_session_keeps_every_ride_until_cleared(app_window):
     headings = [row["label"] for row in rows if row["kind"] == "ride"]
     assert headings == ["Workout: App Flow", "Free Ride"]
     assert rows[0]["kind"] == "ride" and rows[-1]["kind"] == "ride" and rows[-1]["note"].endswith("not graded")
+    #every row in view, the sheet no bigger than the screen
+    assert synopsis.rect().contains(synopsis.blockGradesSheet.geometry())
+    assert synopsis.blockGradeList.shown_rows() == rows
     synopsis.show_block_grades(False)
     #a block's grade opens from the graph, from the workout's own record
     synopsis.step_grade(1)

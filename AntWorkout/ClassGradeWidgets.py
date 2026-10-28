@@ -13,9 +13,10 @@ What shows the block grades (see WorkoutGrading.py):
 Both draw themselves at the layout scale (AppTheme.ui_scale), in the theme's fonts and colors.
 """
 
+import math
 import time
 
-from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
+from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, QTimer
 from PyQt6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QLinearGradient, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import QWidget
 
@@ -249,6 +250,10 @@ class GradeList(QWidget):
     AVERAGE_HEIGHT = 64
     MORE_TEXT = "more..."
     LABEL_POINTS = 14
+    #flowing into columns (columnFlow): each column's width when there's room, the narrowest one, between them
+    COLUMN_WIDTH = 604
+    MIN_COLUMN_WIDTH = 320
+    COLUMN_GAP = 12
     PANEL_COLOR = "#9fc5d1"
     AVERAGE_PANEL_COLOR = "#bdd6de"
     #a song's label: the song header's colors in the workout lists (WorkoutHelpers.SONG_HEADER_CSS)
@@ -262,6 +267,9 @@ class GradeList(QWidget):
         self.average = None
         self.averageText = "Workout Average"
         self.scrollOffset = 0
+        #(the synopsis's Block Grades) rows flowing down one column into the next, side by side, as many columns as the
+        #rows need and fit at MIN_COLUMN_WIDTH, sharing the width; scrolling moves the whole flowed list. Off: one column.
+        self.columnFlow = False
         self.wheelRemainder = 0
         self.dragStartY = None
         self.dragStartOffset = 0
@@ -306,12 +314,38 @@ class GradeList(QWidget):
     def row_step(self):
         return self.scaled(self.ROW_HEIGHT + self.ROW_GAP)
 
-    def list_height(self):
-        return self.height() - self.scaled(self.AVERAGE_HEIGHT + 2*self.ROW_GAP)
+    def rows_per_column(self, height):
+        """The rows a column holds in a list this high"""
+        listHeight = height - self.scaled(self.AVERAGE_HEIGHT + 2*self.ROW_GAP)
+        return max(1, int((listHeight + self.scaled(self.ROW_GAP))/self.row_step()))
+
+    def columns_fit(self, width):
+        """The columns that fit across this width at MIN_COLUMN_WIDTH"""
+        return max(1, int((width + self.scaled(self.COLUMN_GAP))/self.scaled(self.MIN_COLUMN_WIDTH + self.COLUMN_GAP)))
+
+    def columns(self):
+        """The columns shown, at this size"""
+        if not self.columnFlow:
+            return 1
+        perColumn = self.rows_per_column(self.height())
+        needed = max(1, -(-len(self.rows)//perColumn))
+        return min(self.columns_fit(self.width()), needed)
+
+    def fitted_size(self, most):
+        """The size that shows the most rows within most, flowing into columns COLUMN_WIDTH wide (narrower when they
+        don't all fit)"""
+        perColumn = self.rows_per_column(most.height())
+        count = max(1, len(self.rows))
+        columns = min(self.columns_fit(most.width()), -(-count//perColumn))
+        width = columns*self.scaled(self.COLUMN_WIDTH) + (columns - 1)*self.scaled(self.COLUMN_GAP)
+        height = (min(count, perColumn)*self.row_step() - self.scaled(self.ROW_GAP)
+                  + self.scaled(self.AVERAGE_HEIGHT + 2*self.ROW_GAP))
+        #(a little over, so the rows still fit however the scale rounds)
+        return QSize(min(most.width(), math.ceil(width)), min(most.height(), math.ceil(height + 0.5)))
 
     def shown_rows(self):
         """The rows in view (with "more..." in the top/bottom slot when rows are out of view that way)"""
-        maxRows = max(1, int((self.list_height() + self.scaled(self.ROW_GAP))/self.row_step()))
+        maxRows = self.rows_per_column(self.height())*self.columns()
         if len(self.rows) <= maxRows or maxRows < 3:
             self.scrollOffset = 0
             return self.rows[:maxRows]
@@ -329,13 +363,19 @@ class GradeList(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        width = self.width()
+        #the rows down each column in turn, the columns sharing the width
+        columns = self.columns()
+        perColumn = self.rows_per_column(self.height())
+        columnGap = self.scaled(self.COLUMN_GAP)
+        width = (self.width() - (columns - 1)*columnGap)/columns
         rowHeight = self.scaled(self.ROW_HEIGHT)
         badgeWidth = self.scaled(self.BADGE_WIDTH)
         gap = self.scaled(6)
         labelFont = theme_font("Orbitron", self.LABEL_POINTS)
-        y = 0.0
-        for row in self.shown_rows():
+        for i, row in enumerate(self.shown_rows()):
+            y = (i % perColumn)*self.row_step()
+            painter.save()
+            painter.translate((i//perColumn)*(width + columnGap), 0)
             labelLeft = badgeWidth + gap + (self.scaled(self.INDENT) if row["kind"] == "sub" or row.get("indent") else 0)
             labelRect = QRectF(labelLeft, y, width - labelLeft, rowHeight)
             if row["kind"] == "more":
@@ -364,7 +404,7 @@ class GradeList(QWidget):
                 draw_badge(painter, QRectF(0, y, badgeWidth, rowHeight), row["grade"], 17)
                 start, end = label_gradient_colors(row["label"], row.get("ranges"))
                 self.draw_label(painter, labelRect, row["label"], labelFont, start, end, row["note"])
-            y += self.row_step()
+            painter.restore()
         self.draw_average(painter)
 
     def draw_label(self, painter, rect, text, font, start, end, note="", textColor=None):

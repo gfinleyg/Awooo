@@ -472,6 +472,15 @@ QWidget* sceneGradeListScrolled() {
     return shown(grades, 600, 400);
 }
 
+// The synopsis' Block Grades list flowing into narrowed columns, scrolled, with "more..." first and last
+QWidget* sceneGradeListColumns() {
+    auto* grades = new GradeList;
+    grades->setColumnFlow(true);
+    grades->setRows(gradeRows() + gradeRows() + gradeRows(), 85.3);
+    grades->scrollTo(2);
+    return shown(grades, 1000, 400);
+}
+
 // The workout screen's timer bar part of the way along, between pixels
 QWidget* sceneSmoothBar() {
     auto* bar = new SmoothProgressBar;
@@ -1078,6 +1087,7 @@ const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("grade_overlay"), sceneGradeOverlay},
     {QStringLiteral("grade_list"), sceneGradeList},
     {QStringLiteral("grade_list_scrolled"), sceneGradeListScrolled},
+    {QStringLiteral("grade_list_columns"), sceneGradeListColumns},
     {QStringLiteral("smooth_bar"), sceneSmoothBar},
     {QStringLiteral("long_labels"), sceneLongLabels},
     {QStringLiteral("zone_legend"), sceneZoneLegend},

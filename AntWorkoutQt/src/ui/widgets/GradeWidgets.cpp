@@ -330,12 +330,43 @@ double GradeList::rowStep() const {
     return scaled(kRowHeight + kRowGap);
 }
 
-double GradeList::listHeight() const {
-    return height() - scaled(kAverageHeight + 2 * kRowGap);
+int GradeList::rowsPerColumn(double height) const {
+    const double listHeight = height - scaled(kAverageHeight + 2 * kRowGap);
+    return std::max(1, static_cast<int>((listHeight + scaled(kRowGap)) / rowStep()));
+}
+
+int GradeList::columnsFit(double width) {
+    return std::max(1, static_cast<int>((width + scaled(kColumnGap)) / scaled(kMinColumnWidth + kColumnGap)));
+}
+
+void GradeList::setColumnFlow(bool flow) {
+    columnFlow_ = flow;
+    update();
+}
+
+int GradeList::columns() const {
+    if (!columnFlow_) {
+        return 1;
+    }
+    const qsizetype perColumn = rowsPerColumn(height());
+    const qsizetype needed = std::max<qsizetype>(1, (rows_.size() + perColumn - 1) / perColumn);
+    return static_cast<int>(std::min<qsizetype>(columnsFit(width()), needed));
+}
+
+QSize GradeList::fittedSize(const QSize& most) const {
+    const qsizetype perColumn = rowsPerColumn(most.height());
+    const qsizetype count = std::max<qsizetype>(1, rows_.size());
+    const qsizetype columns = std::min<qsizetype>(columnsFit(most.width()), (count + perColumn - 1) / perColumn);
+    const double width = columns * scaled(kColumnWidth) + (columns - 1) * scaled(kColumnGap);
+    const double height = std::min(count, perColumn) * rowStep() - scaled(kRowGap) +
+                          scaled(kAverageHeight + 2 * kRowGap);
+    // (a little over, so the rows still fit however the scale rounds)
+    return {std::min(most.width(), static_cast<int>(std::ceil(width))),
+            std::min(most.height(), static_cast<int>(std::ceil(height + 0.5)))};
 }
 
 QList<GradeList::Row> GradeList::shownRows() {
-    const int maxRows = std::max(1, static_cast<int>((listHeight() + scaled(kRowGap)) / rowStep()));
+    const int maxRows = rowsPerColumn(height()) * columns();
     if (rows_.size() <= maxRows || maxRows < 3) {
         scrollOffset_ = 0;
         return rows_.mid(0, maxRows);
@@ -362,13 +393,21 @@ QList<GradeList::Row> GradeList::shownRows() {
 void GradeList::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    const double width = this->width();
+    // the rows down each column in turn, the columns sharing the width
+    const int columns = this->columns();
+    const int perColumn = rowsPerColumn(height());
+    const double columnGap = scaled(kColumnGap);
+    const double width = (this->width() - (columns - 1) * columnGap) / columns;
     const double rowHeight = scaled(kRowHeight);
     const double badgeWidth = scaled(kBadgeWidth);
     const double gap = scaled(6);
     const QFont labelFont = themeFont(QStringLiteral("Orbitron"), kLabelPoints);
-    double y = 0.0;
-    for (const Row& row : shownRows()) {
+    const QList<Row> shown = shownRows();
+    for (qsizetype i = 0; i < shown.size(); ++i) {
+        const Row& row = shown[i];
+        const double y = (i % perColumn) * rowStep();
+        painter.save();
+        painter.translate((i / perColumn) * (width + columnGap), 0);
         const double labelLeft = badgeWidth + gap + (row.kind == Row::Kind::Sub || row.indent ? scaled(kIndent) : 0);
         const QRectF labelRect(labelLeft, y, width - labelLeft, rowHeight);
         switch (row.kind) {
@@ -405,7 +444,7 @@ void GradeList::paintEvent(QPaintEvent*) {
                 break;
             }
         }
-        y += rowStep();
+        painter.restore();
     }
     drawAverage(painter);
 }

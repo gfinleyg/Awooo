@@ -5,7 +5,7 @@ from html import escape
 
 import pyqtgraph as pg
 
-from PyQt6.QtCore import QEvent, QTime, QTimer, Qt, QPointF, QRectF, QLineF
+from PyQt6.QtCore import QEvent, QTime, QTimer, Qt, QPointF, QRectF, QLineF, QSize
 from PyQt6.QtGui import QColor, QFont, QFontMetricsF, QPen, QPainter, QPainterPath
 from PyQt6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QPushButton, QVBoxLayout, QWidget, QLabel, QTimeEdit,
                              QGraphicsSimpleTextItem, QGraphicsLineItem, QGraphicsRectItem, QGraphicsObject)
@@ -984,6 +984,7 @@ class SynopsisWindow(QWidget):
             header.setStyleSheet("font: 900 22pt 'Orbitron'; color: #fffffe; background-color: transparent;")
             layout.addWidget(header)
             self.blockGradeList = GradeList()
+            self.blockGradeList.columnFlow = True
             layout.addWidget(self.blockGradeList, 1)
             closeButton = QPushButton("CLOSE")
             closeButton.clicked.connect(lambda: self.show_block_grades(False))
@@ -999,8 +1000,17 @@ class SynopsisWindow(QWidget):
         if getattr(self, "blockGradesOverlay", None) is None:
             return
         self.blockGradesOverlay.setGeometry(self.rect())
-        width = min(round(640*AppTheme.ui_scale), self.width() - 40)
-        height = round(self.height()*0.86)
+        #as big as shows every row, growing taller then into more columns (narrower ones as needed), up to the screen
+        #less a margin; then the rows scroll
+        self.blockGradesSheet.ensurePolished()
+        layout = self.blockGradesSheet.layout()
+        frame, margins = self.blockGradesSheet.contentsMargins(), layout.contentsMargins()
+        sides = frame.left() + frame.right() + margins.left() + margins.right()
+        around = layout.totalMinimumSize().height() - self.blockGradeList.minimumHeight()
+        most = self.height() - 40
+        fitted = self.blockGradeList.fitted_size(QSize(self.width() - 40 - sides, most - around))
+        width = fitted.width() + sides
+        height = min(most, max(round(self.height()*0.86), fitted.height() + around))
         self.blockGradesSheet.setGeometry((self.width() - width)//2, (self.height() - height)//2, width, height)
 
     def fix_size(self):

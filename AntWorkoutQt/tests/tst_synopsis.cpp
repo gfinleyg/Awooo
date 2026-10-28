@@ -404,6 +404,9 @@ private slots:
         screen->blockGradesButton()->click();
         QVERIFY(screen->blockGradesShown());
         QVERIFY(!screen->blockGradeList()->rows().isEmpty());
+        // every row in view, the sheet no bigger than the screen
+        QVERIFY(screen->rect().contains(screen->blockGradeList()->parentWidget()->geometry()));
+        QCOMPARE(screen->blockGradeList()->shownRows().size(), screen->blockGradeList()->rows().size());
         // Esc closes it first
         QVERIFY(screen->escapePressed());
         QVERIFY(!screen->blockGradesShown());

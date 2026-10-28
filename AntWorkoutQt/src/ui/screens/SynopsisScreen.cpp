@@ -1286,6 +1286,7 @@ void SynopsisScreen::showBlockGrades(bool show) {
         theme::setSheet(header, QStringLiteral("font: 900 22pt 'Orbitron'; color: #fffffe; background-color: transparent;"));
         layout->addWidget(header);
         blockGradeList_ = new GradeList;
+        blockGradeList_->setColumnFlow(true);
         layout->addWidget(blockGradeList_, 1);
         auto* closeButton = new QPushButton(QStringLiteral("CLOSE"));
         connect(closeButton, &QPushButton::clicked, this, [this] { showBlockGrades(false); });
@@ -1309,8 +1310,18 @@ void SynopsisScreen::layoutBlockGrades() {
         return;
     }
     blockGradesOverlay_->setGeometry(rect());
-    const int width = std::min(roundInt(640 * theme::uiScale()), this->width() - 40);
-    const int height = roundInt(this->height() * 0.86);
+    // as big as shows every row, growing taller then into more columns (narrower ones as needed), up to the screen
+    // less a margin; then the rows scroll
+    blockGradesSheet_->ensurePolished();
+    const QLayout* layout = blockGradesSheet_->layout();
+    const QMargins frame = blockGradesSheet_->contentsMargins();
+    const QMargins margins = layout->contentsMargins();
+    const int sides = frame.left() + frame.right() + margins.left() + margins.right();
+    const int around = layout->totalMinimumSize().height() - blockGradeList_->minimumHeight();
+    const int most = this->height() - 40;
+    const QSize list = blockGradeList_->fittedSize(QSize(this->width() - 40 - sides, most - around));
+    const int width = list.width() + sides;
+    const int height = std::min(most, std::max(roundInt(this->height() * 0.86), list.height() + around));
     blockGradesSheet_->setGeometry((this->width() - width) / 2, (this->height() - height) / 2, width, height);
 }
 
