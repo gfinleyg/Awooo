@@ -35,6 +35,20 @@ Python app's own results (`tests\golden\`).
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".
 
+## Musical Cadence Mode
+
+- **Less of a song with a steady beat becomes free ride.** A stretch whose beat only just stands out (a triplet
+  feel, an odd meter or a busy mix spreads the analysis' confidence over several tempos) still gets a cadence when its
+  tempo holds steady: when it agrees with at least two of the stretches 8 to 12 seconds either side of it. In six
+  surf bands' songs, free ride went from 4.8% of the music to 1.4%, and songs more than a tenth free ride from 90 to 33.
+  It's worked out from the cached analysis, so nothing is analyzed again, and the Python app reads the same cache.
+- **Sections of a song 1 or 2 RPM apart are ridden as one**, at their average cadence over their time (the closest
+  ones joined first, so a slow drift doesn't all become one; free ride between them keeps them apart). Tempos far
+  enough apart to be separate sections can still come out that close as cadences, mostly when ridden at half the
+  beat (112 and 108 BPM as 56 and 54 RPM). In the same six bands' songs, 51 songs lost a block (1650 to 1558).
+- **Pick Random Songs picks the unchecked songs first.** The songs checked when it's pressed are picked only once
+  none of the others fits, so pressing it again gives a new set of songs (as far as the list has them).
+
 ## LayoutViewer
 
 - **The workout screen stops exactly where the Workout progress slider says.** The Python viewer's simulated ride

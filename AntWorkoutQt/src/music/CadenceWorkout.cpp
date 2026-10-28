@@ -17,7 +17,36 @@ double medianOf(const std::vector<double>& line, int first, int last) {
     return np::median(line.data() + first, static_cast<std::size_t>(last - first + 1));
 }
 
+// how far apart two tempo classes are, the short way around the octave
+double classDistance(double a, double b) {
+    const double d = std::fmod(std::abs(a - b), 1.0);
+    return std::min(d, 1 - d);
+}
+
 }  // namespace
+
+std::vector<bool> beatWindows(const Analysis& analysis) {
+    const std::vector<double>& classes = analysis.classes;
+    const int count = static_cast<int>(classes.size());
+    std::vector<bool> beat(count);
+    for (int i = 0; i < count; ++i) {
+        const double confidence = i < static_cast<int>(analysis.confidences.size()) ? analysis.confidences[i] : 0.0;
+        if (confidence >= kMinConfidence) {
+            beat[i] = true;
+        } else if (confidence >= kSteadyMinConfidence) {
+            int agreeing = 0;
+            for (const int offset : kSteadyOffsets) {
+                for (const int j : {i - offset, i + offset}) {
+                    if (j >= 0 && j < count && classDistance(classes[i], classes[j]) <= kSegmentTolerance) {
+                        ++agreeing;
+                    }
+                }
+            }
+            beat[i] = agreeing >= kSteadyAgreeing;
+        }
+    }
+    return beat;
+}
 
 std::vector<Segment> songSegments(const Analysis& analysis, double minSegmentSeconds) {
     const double duration = analysis.duration;
@@ -26,10 +55,7 @@ std::vector<Segment> songSegments(const Analysis& analysis, double minSegmentSec
         return {{0.0, duration, std::nullopt}};
     }
     const int count = static_cast<int>(classes.size());
-    std::vector<bool> beat(count);
-    for (int i = 0; i < count; ++i) {
-        beat[i] = i < static_cast<int>(analysis.confidences.size()) && analysis.confidences[i] >= kMinConfidence;
-    }
+    const std::vector<bool> beat = beatWindows(analysis);
     // each window speaks for the time around its center
     std::vector<double> centers(count);
     for (int i = 0; i < count; ++i) {
@@ -219,6 +245,34 @@ double foldRpm(double bpm, std::optional<double> previous, double preferred, dou
     return best;
 }
 
+std::vector<Segment> mergeCloseCadences(std::vector<Segment> sections, double within) {
+    const auto rounded = [](const Segment& s) { return np::roundHalfEven(*s.bpm); };
+    while (true) {
+        // the closest neighbors (the first of them on a tie)
+        std::size_t best = sections.size();
+        double bestGap = 0;
+        for (std::size_t k = 0; k + 1 < sections.size(); ++k) {
+            const Segment &a = sections[k], &b = sections[k + 1];
+            if (!a.bpm || !b.bpm) {
+                continue;
+            }
+            const double gap = std::abs(rounded(a) - rounded(b));
+            if (gap <= within && (best == sections.size() || gap < bestGap)) {
+                best = k;
+                bestGap = gap;
+            }
+        }
+        if (best == sections.size()) {
+            return sections;
+        }
+        const Segment &a = sections[best], &b = sections[best + 1];
+        const double aSeconds = a.end - a.start, bSeconds = b.end - b.start;
+        const Segment joined{a.start, b.end, (*a.bpm * aSeconds + *b.bpm * bSeconds) / (aSeconds + bSeconds)};
+        sections.erase(sections.begin() + static_cast<std::ptrdiff_t>(best) + 1);
+        sections[best] = joined;
+    }
+}
+
 std::vector<double> pulses(const std::vector<double>& beats, double start, double end, double rpm) {
     std::vector<double> inside;
     for (const double b : beats) {
@@ -283,13 +337,20 @@ CadenceRide buildWorkout(const QList<std::pair<QString, std::optional<QString>>>
         const int trackIndex = static_cast<int>(ride.tracks.size());
         ride.tracks.append({path, title && !title->isEmpty() ? *title : songTitle(path), start, analysis.duration});
         const std::vector<double> beats = beatSeconds(analysis);
+        // the song's segments at their cadences
+        std::vector<Segment> sections = songSegments(analysis, minSegmentSeconds);
         std::optional<double> previous;
+        for (Segment& section : sections) {
+            if (section.bpm) {
+                section.bpm = np::roundHalfEven(foldRpm(*section.bpm, previous, preferred));
+                previous = section.bpm;
+            }
+        }
         bool firstBlock = true;
-        for (const Segment& segment : songSegments(analysis, minSegmentSeconds)) {
+        for (const Segment& segment : mergeCloseCadences(sections)) {
             int rpm = 0;
             if (segment.bpm) {
-                rpm = static_cast<int>(np::roundHalfEven(foldRpm(*segment.bpm, previous, preferred)));
-                previous = rpm;
+                rpm = static_cast<int>(np::roundHalfEven(*segment.bpm));
                 for (const double p : pulses(beats, segment.start, segment.end, rpm)) {
                     ride.pulses.append(start + p);
                 }

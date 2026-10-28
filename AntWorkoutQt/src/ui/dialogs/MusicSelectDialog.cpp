@@ -428,9 +428,15 @@ void MusicSelectDialog::pickRandom() {
             cadences.insert(path, music::songCadence(analyses[path], preferredRpm_->value(), minSegment_->value()));
         }
     }
+    // the songs checked now come only once the others run out, so picking again gives different songs
+    QSet<QString> checked;
+    for (const auto& [path, title] : checkedSongs()) {
+        checked.insert(path);
+    }
     // (an unseeded random.Random: different every time)
     py::Random rng(std::random_device{}() | (static_cast<std::uint64_t>(std::random_device{}()) << 32));
-    const QStringList picked = music::randomSelection(songs, randomMinutes_->value() * 60.0, durations, rng, cadences);
+    const QStringList picked =
+        music::randomSelection(songs, randomMinutes_->value() * 60.0, durations, rng, cadences, checked);
     if (picked.isEmpty()) {
         return;
     }

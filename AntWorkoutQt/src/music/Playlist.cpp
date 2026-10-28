@@ -119,7 +119,8 @@ QString songTitle(const QString& path) {
 }
 
 QStringList randomSelection(const QStringList& songs, double targetSeconds, const QHash<QString, double>& durations,
-                            py::Random& rng, const QHash<QString, std::optional<double>>& cadences) {
+                            py::Random& rng, const QHash<QString, std::optional<double>>& cadences,
+                            const QSet<QString>& already) {
     // a band each: its key (none for no clear beat) and members, in the order the bands were first met
     struct Band {
         std::optional<int> key;
@@ -142,8 +143,11 @@ QStringList randomSelection(const QStringList& songs, double targetSeconds, cons
         }
         band->members.append(song);
     }
+    const auto fresh = [&](const QString& song) { return !already.contains(song); };
     for (Band& band : bands) {
         rng.shuffle(band.members);
+        // (the songs in already at the back, so a band offers them only once its others don't fit)
+        std::stable_partition(band.members.begin(), band.members.end(), fresh);
     }
     QStringList picked;
     double total = 0.0;
@@ -161,6 +165,10 @@ QStringList randomSelection(const QStringList& songs, double targetSeconds, cons
         if (fitting.isEmpty()) {
             break;
         }
+        // songs in already only once no other song fits, whichever band it's in
+        if (std::any_of(fitting.cbegin(), fitting.cend(), [&](const auto& entry) { return fresh(entry.second); })) {
+            fitting.removeIf([&](const auto& entry) { return !fresh(entry.second); });
+        }
         int fewest = bands[fitting.front().first].used;
         for (const auto& [b, song] : fitting) {
             fewest = std::min(fewest, bands[b].used);
@@ -177,12 +185,18 @@ QStringList randomSelection(const QStringList& songs, double targetSeconds, cons
         picked.append(song);
         total += durations.value(song);
     }
-    // one more song if it lands closer to the target than stopping short does
-    QStringList pool;
+    // one more song if it lands closer to the target than stopping short does (one in already only if none of the
+    // others does)
+    QStringList pools[2];
     for (const Band& band : bands) {
-        pool += band.members;
+        for (const QString& song : band.members) {
+            pools[fresh(song) ? 0 : 1].append(song);
+        }
     }
-    if (!pool.isEmpty() && total < targetSeconds) {
+    for (const QStringList& pool : pools) {
+        if (pool.isEmpty() || total >= targetSeconds) {
+            continue;
+        }
         const QString* best = &pool.front();
         for (const QString& song : pool) {
             if (std::abs(total + durations.value(song) - targetSeconds) < std::abs(total + durations.value(*best) - targetSeconds)) {
@@ -191,6 +205,7 @@ QStringList randomSelection(const QStringList& songs, double targetSeconds, cons
         }
         if (std::abs(total + durations.value(*best) - targetSeconds) < targetSeconds - total) {
             picked.append(*best);
+            break;
         }
     }
     return picked;

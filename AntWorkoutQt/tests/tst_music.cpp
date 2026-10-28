@@ -391,6 +391,31 @@ private slots:
         }
     }
 
+    // the songs already picked come only once the rest run out, in any band, and for the last song too
+    void randomSelectionPicksNewSongsFirst() {
+        const QStringList songs = {"a", "b", "c", "d", "e", "f"};
+        QHash<QString, double> durations;
+        for (const QString& s : songs) {
+            durations.insert(s, 100);
+        }
+        const QHash<QString, std::optional<double>> cadences = {
+            {"a", 60}, {"b", 80}, {"c", 100}, {"d", 60}, {"e", 60}, {"f", 60}};
+        const QSet<QString> already = {"a", "b", "c"};
+        for (int seed = 0; seed < 20; ++seed) {
+            py::Random rng(static_cast<std::uint64_t>(seed));
+            QStringList picked = randomSelection(songs, 300, durations, rng, cadences, already);
+            std::sort(picked.begin(), picked.end());
+            QCOMPARE(picked, (QStringList{"d", "e", "f"}));
+            const QStringList more = randomSelection(songs, 400, durations, rng, cadences, already);
+            QCOMPARE(more.size(), qsizetype(4));
+            QVERIFY(more.contains("d") && more.contains("e") && more.contains("f"));
+            // (the last one over the target: a new song when one lands closer than stopping short)
+            const QStringList over = randomSelection(songs, 260, durations, rng, cadences, {"a", "b", "c", "d", "e"});
+            QCOMPARE(over.size(), qsizetype(3));
+            QVERIFY(over.contains("f"));
+        }
+    }
+
     // ---- The analysis ----
 
     void songCadenceOfAClickTrack() {
@@ -521,6 +546,38 @@ private slots:
         QVERIFY(segments.size() == 1 && segments[0].bpm);
     }
 
+    // a less confident window still has a beat when its tempo agrees with enough windows that share none of its audio
+    void segmentsSteadyTempoIsABeat() {
+        const std::vector<double> steady(20, 0.3);
+        const Analysis held = analysisOf(steady, std::vector<double>(20, 2.0));
+        const std::vector<bool> heldBeat = beatWindows(held);
+        QVERIFY(std::all_of(heldBeat.begin(), heldBeat.end(), [](bool b) { return b; }));
+        const std::vector<Segment> segments = songSegments(held);
+        QVERIFY(segments.size() == 1 && segments[0].bpm && std::abs(*segments[0].bpm - 60 * std::pow(2, 0.3)) < 1e-9);
+        // (across the octave's wrap too)
+        std::vector<double> wrapping;
+        for (int i = 0; i < 10; ++i) {
+            wrapping.insert(wrapping.end(), {0.99, 0.005});
+        }
+        QVERIFY(songSegments(analysisOf(wrapping, std::vector<double>(20, 2.0)))[0].bpm);
+        // too unsure even so
+        QVERIFY(!songSegments(analysisOf(steady, std::vector<double>(20, 1.0)))[0].bpm);
+        // a tempo that wanders: no beat
+        std::vector<double> wandering;
+        for (int i = 0; i < 20; ++i) {
+            wandering.push_back(std::fmod(i * 0.29, 1.0));
+        }
+        QVERIFY(!songSegments(analysisOf(wandering, std::vector<double>(20, 2.0)))[0].bpm);
+        // agreeing only with its overlapping neighbors isn't enough: windows 4-6 away are at other tempos
+        std::vector<double> classes = wandering;
+        classes[9] = classes[10] = classes[11] = 0.5;
+        const std::vector<bool> beat = beatWindows(analysisOf(classes, std::vector<double>(20, 2.0)));
+        QVERIFY(!beat[10]);
+        // two of them agreeing is
+        classes[4] = classes[14] = 0.5;
+        QVERIFY(beatWindows(analysisOf(classes, std::vector<double>(20, 2.0)))[10]);
+    }
+
     void cutsOutSilences() {
         QCOMPARE(withSilences({{0.0, 30.0, 100.0}, {30.0, 60.0, 120.0}}, {{25.0, 35.0}}),
                  (std::vector<Segment>{{0.0, 25.0, 100.0}, {25.0, 35.0, std::nullopt}, {35.0, 60.0, 120.0}}));
@@ -619,6 +676,32 @@ private slots:
         classes.insert(classes.end(), 15, 0.21);
         const CadenceRide ride = buildWorkout({{QStringLiteral("s.wav"), QStringLiteral("S")}}, {{QStringLiteral("s.wav"), analysisOf(classes)}});
         QCOMPARE(ride.blocks.size(), qsizetype(1));
+    }
+
+    // sections a song's cadences put 1 or 2 RPM apart are one, at their average over their time
+    void mergesCloseCadences() {
+        using Sections = std::vector<Segment>;
+        QCOMPARE(mergeCloseCadences({{0, 30, 86.0}, {30, 40, 88.0}, {40, 60, 91.0}}),
+                 (Sections{{0, 40, 86.5}, {40, 60, 91.0}}));
+        // the closest first: 88 and 89, then 86 and their 88.5
+        const Sections chain = mergeCloseCadences({{0, 10, 86.0}, {10, 20, 88.0}, {20, 30, 89.0}});
+        QVERIFY(chain.size() == 1 && chain[0].end == 30 && std::abs(*chain[0].bpm - (86 + 88 + 89) / 3.0) < 1e-9);
+        // 3 apart, or free ride between them: kept apart
+        const Sections apart = {{0, 10, 86.0}, {10, 20, 89.0}};
+        QCOMPARE(mergeCloseCadences(apart), apart);
+        const Sections freeBetween = {{0, 10, 86.0}, {10, 20, std::nullopt}, {20, 30, 87.0}};
+        QCOMPARE(mergeCloseCadences(freeBetween), freeBetween);
+    }
+
+    // 112 and 108 BPM are separate tempos, but ridden at half speed they're 56 and 54 RPM: one block at 55
+    void rideMergesCloseCadencesWithinASong() {
+        std::vector<double> classes(15, std::log2(112 / 60.0));
+        classes.insert(classes.end(), 15, std::log2(108 / 60.0));
+        const Analysis analysis = analysisOf(classes);
+        QCOMPARE(songSegments(analysis).size(), std::size_t(2));
+        const CadenceRide ride = buildWorkout({{QStringLiteral("s.wav"), QStringLiteral("S")}},
+                                              {{QStringLiteral("s.wav"), analysis}}, 50);
+        QCOMPARE(ride.blocks, (QList<std::pair<int, int>>{{66, 55}}));
     }
 
     // the player: the songs back to back on the device's clock (filled by hand here, no sound device)

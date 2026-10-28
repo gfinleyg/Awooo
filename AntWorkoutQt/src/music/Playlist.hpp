@@ -4,6 +4,7 @@
 // from its file name, and a random pick that comes as close to a ride's length as it can, spread over cadences.
 
 #include <QHash>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -38,8 +39,11 @@ QString songTitle(const QString& path);
 // songs picked at random (each once at most) to come as close to targetSeconds as they can: added while they fit,
 // then the leftover filled by whichever unused song comes closest. cadences ({song: rpm, or none for no clear beat})
 // spreads the pick: each song comes from whichever kCadenceBandRpm wide band (that still has one that fits) has been
-// picked from least, ties at random. Python's random.Random, so a seed picks as the Python app does
+// picked from least, ties at random. Songs in already (the ones picked last time) come only once the others have run
+// out: a song from it is only picked when none of the rest fits. Python's random.Random, so a seed picks as the
+// Python app does (with nothing in already)
 QStringList randomSelection(const QStringList& songs, double targetSeconds, const QHash<QString, double>& durations,
-                            py::Random& rng, const QHash<QString, std::optional<double>>& cadences = {});
+                            py::Random& rng, const QHash<QString, std::optional<double>>& cadences = {},
+                            const QSet<QString>& already = {});
 
 }  // namespace awo::music

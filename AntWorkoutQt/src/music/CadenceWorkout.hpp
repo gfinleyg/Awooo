@@ -5,9 +5,11 @@
 //   - the classes are unwrapped into one continuous tempo line (so 119 -> 121 BPM doesn't flip to 60.5), median
 //     filtered, cut wherever the tempo moves more than kSegmentTolerance, and anything shorter than the minimum segment
 //     is merged into its nearest neighbor
-//   - stretches with no clear beat (confidence under kMinConfidence) become free ride, and so does silence
+//   - stretches with no clear beat (confidence under kMinConfidence, and no steady tempo either: see beatWindows)
+//     become free ride, and so does silence
 //   - each segment's tempo is doubled/halved into kMinRpm..kMaxRpm, keeping to the previous segment's octave within a
-//     song, else the one nearest the preferred cadence
+//     song, else the one nearest the preferred cadence; neighbors that end up within kMergeRpm of each other are
+//     ridden as one section at their average
 
 #include <QHash>
 #include <QMap>
@@ -26,10 +28,18 @@ namespace awo::music {
 constexpr double kMinRpm = 40, kMaxRpm = 120;
 constexpr double kDefaultPreferredRpm = 85;
 constexpr double kDefaultMinSegmentSeconds = 8;
-// windows with less than this confidence have no clear beat
+// windows with less than this confidence have no clear beat...
 constexpr double kMinConfidence = 2.5;
+// ...unless the tempo holds steady around them: a window with at least kSteadyMinConfidence whose tempo is within
+// kSegmentTolerance of at least kSteadyAgreeing of the windows kSteadyOffsets either side of it (far enough away that
+// they share none of its audio, so they can't agree just by hearing the same notes)
+constexpr double kSteadyMinConfidence = 1.5;
+constexpr int kSteadyOffsets[] = {4, 5, 6};
+constexpr int kSteadyAgreeing = 2;
 // a new segment starts when the tempo moves more than this (octaves, ~3%)
 constexpr double kSegmentTolerance = 0.043;
+// neighboring sections of a song whose cadences are this close (RPM) are ridden as one (see mergeCloseCadences)
+constexpr double kMergeRpm = 2;
 
 struct Segment {
     double start = 0, end = 0;  // seconds into the song
@@ -37,6 +47,8 @@ struct Segment {
     bool operator==(const Segment&) const = default;
 };
 
+// which of the analysis' windows have a clear beat: confident ones, and less confident ones whose tempo holds steady
+std::vector<bool> beatWindows(const Analysis& analysis);
 // The segments covering the whole song
 std::vector<Segment> songSegments(const Analysis& analysis, double minSegmentSeconds = kDefaultMinSegmentSeconds);
 // the segments with each silent stretch cut out of them as free ride (MusicCadence._with_silences)
@@ -47,6 +59,10 @@ void bridgeShortRuns(std::vector<bool>& labels, bool value, int minLength);
 // bpm doubled/halved into low..high: the octave nearest previous when there is one, else nearest preferred
 double foldRpm(double bpm, std::optional<double> previous = std::nullopt, double preferred = kDefaultPreferredRpm,
                double low = kMinRpm, double high = kMaxRpm);
+// a song's sections (bpm holding each one's cadence) with neighbors whose cadences (rounded) are within RPM of each
+// other joined into one at their average cadence over their time, the closest neighbors first; free ride sections
+// keep the ones either side of them apart
+std::vector<Segment> mergeCloseCadences(std::vector<Segment> sections, double within = kMergeRpm);
 // the beats from start to end as one pulse a pedal stroke at rpm (MusicCadence._pulses)
 std::vector<double> pulses(const std::vector<double>& beats, double start, double end, double rpm);
 // a song's typical cadence (its beat segments' rpm averaged over their time), or none without a clear beat
