@@ -4,13 +4,14 @@
 // gauges on the workout screen. A scale with tick marks and numbers, a colored band up to the needle, a needle that
 // eases toward each reading at the Performance setting's frame rate, the reading and units in the middle, nested
 // center rings (the power gauge's recent blocks, the cadence gauge's beat with its outermost a gear turning with the
-// chainring), and the Ride At target arc.
+// chainring, the heart rate gauge's nested hearts pulsing with the heart), and the Ride At target arc.
 //
 // It's drawn in layers kept as pixmaps: the face under the band (the outer ring) and over it (ticks, numbers) are
 // redrawn only by redraw(); each frame (redrawFrame(): a reading, the needle easing, the rings, the arc) only the
 // moving parts are drawn over them. Repaints from an animated widget behind it just copy the last frame.
 //
-// Gauge: the gauge over a background image: a resting/beating heart (heart rate) or a spinning chainring (cadence).
+// Gauge: the gauge over a background image: a resting/beating heart (heart rate, its center nested hearts pulsing with
+// it) or a spinning chainring (cadence).
 
 #include <QElapsedTimer>
 #include <QGradient>
@@ -40,6 +41,8 @@ public:
     // the outermost ring as a gear (setCenterGearAngle): this many teeth, each this much of a ring's width deep
     static constexpr int kCenterGearTeeth = 18;
     static constexpr double kCenterGearDepth = 0.5;
+    // the rings as nested hearts (centerHeart): each outline from this many points
+    static constexpr int kCenterHeartPoints = 72;
 
     explicit AnalogGauge(QWidget* parent = nullptr);
 
@@ -117,6 +120,8 @@ public:
     std::optional<double> centerRingMinPx;
     // how much the rings are blended toward white, outermost and innermost (the reading is drawn over the middle)
     std::pair<double, double> centerRingsPale{0.15, 0.7};
+    // the rings drawn as nested hearts instead (e.g. the heart rate gauge's, see Gauge)
+    bool centerHeart = false;
 
     // ---- Redrawing ----
 
@@ -203,18 +208,29 @@ private:
 };
 
 // a background image that flips between a resting and a beating svg once per beat, at the rate bpmSource() returns;
-// only repaints twice a beat, so it stays cheap under the gauge drawn over it
+// only repaints twice a beat, so it stays cheap under the gauge drawn over it. pulsed(level): 1 as each beat starts,
+// fading to 0 over kPulseSeconds at the Performance setting's frame rate (0 fps: 1 for the beat, 0 at rest), e.g. for
+// the gauge's center hearts
 class BeatingSvgWidget : public QWidget {
     Q_OBJECT
 
 public:
     // the portion of each beat spent showing the larger heart
     static constexpr double kBeatFraction = 0.35;
+    // (as long as the cadence gauge's beat)
+    static constexpr double kPulseSeconds = 0.2;
 
     BeatingSvgWidget(const QString& restSvgFile, const QString& beatSvgFile, const QColor& restColor,
                      const QColor& beatColor, std::function<double()> bpmSource, QWidget* parent = nullptr);
     QTimer* beatTimer() const { return beatTimer_; }
+    QTimer* pulseTimer() const { return pulseTimer_; }
     bool beating() const { return beating_; }
+    const QColor& restColor() const { return restColor_; }
+    const QColor& beatColor() const { return beatColor_; }
+    void setBeating(bool beating);
+
+signals:
+    void pulsed(double level);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -222,13 +238,16 @@ protected:
 private:
     QSvgRenderer* coloredRenderer(const QString& svgFile, const QColor& color);
     void nextPhase();
-    void setBeating(bool beating);
+    void pulseStep();
 
+    QColor restColor_, beatColor_;
     QSvgRenderer* restRenderer_;
     QSvgRenderer* beatRenderer_;
     std::function<double()> bpmSource_;
     bool beating_ = false;
     QTimer* beatTimer_;
+    QTimer* pulseTimer_;
+    QElapsedTimer pulseClock_;
 };
 
 // a background image that spins clockwise at the rate rpmSource() returns (drawn from a pixmap rendered once per size);

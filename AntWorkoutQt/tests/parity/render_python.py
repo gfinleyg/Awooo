@@ -299,7 +299,7 @@ def scene_cadence_mode_gauge():
 
 @gauge_scene
 def scene_hr_gauge():
-    """The HUD's heart rate gauge at 132 BPM, the heart at rest"""
+    """The HUD's heart rate gauge at 132 BPM, the heart (and the center's hearts) at rest"""
     from ClassAnalogGauge import Gauge
     gauge = Gauge(None, 'HeartSmaller.svg', beatSvg=('Heart.svg', "#FF8FAB", "#E8102A"))
     gauge.ui.svg.beatTimer.stop()
@@ -309,7 +309,7 @@ def scene_hr_gauge():
     w.needle_center_bg = [[0, QColor("#FFFFFF")]]
     w.set_scale_polygon_colors([[0, QColor(0, 0, 0, 0)]])
     w.outer_circle_bg = [[0, QColor(0, 0, 0, 0)]]
-    w.big_needle_center_size = 20
+    w.big_needle_center_size = 12
     w.units = "BPM"
     w.setMinValue(40)
     w.setMaxValue(200)

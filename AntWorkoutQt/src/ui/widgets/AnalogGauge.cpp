@@ -66,6 +66,19 @@ QPolygonF centerGear(double r, double depth) {
     return points;
 }
 
+// a heart's outline around (0, 0), as wide as a circle of radius r (and a little less tall), its point down
+QPolygonF centerHeartOutline(double r) {
+    QPolygonF points;
+    // the classic heart curve (32 wide, 29 tall), moved up to center it and scaled to r
+    for (int k = 0; k < AnalogGauge::kCenterHeartPoints; ++k) {
+        const double t = 2 * std::numbers::pi * k / AnalogGauge::kCenterHeartPoints;
+        const double x = 16 * std::pow(std::sin(t), 3);
+        const double y = -(13 * std::cos(t) - 5 * std::cos(2 * t) - 2 * std::cos(3 * t) - std::cos(4 * t)) - 2.5;
+        points.append(QPointF(x * r / 16, y * r / 16));
+    }
+    return points;
+}
+
 }  // namespace
 
 QString imagePath(const QString& name) {
@@ -557,6 +570,8 @@ void AnalogGauge::drawCenterRings(QPainter& painter, double radius) {
             painter.rotate(*centerGearAngle_);
             painter.drawPolygon(centerGear(r, band * kCenterGearDepth));
             painter.restore();
+        } else if (centerHeart) {
+            painter.drawPolygon(centerHeartOutline(r));
         } else {
             painter.drawEllipse(QPointF(0, 0), r, r);
         }
@@ -727,13 +742,20 @@ void AnalogGauge::drawFrame() {
 
 BeatingSvgWidget::BeatingSvgWidget(const QString& restSvgFile, const QString& beatSvgFile, const QColor& restColor,
                                    const QColor& beatColor, std::function<double()> bpmSource, QWidget* parent)
-    : QWidget(parent), bpmSource_(std::move(bpmSource)), beatTimer_(new QTimer(this)) {
+    : QWidget(parent),
+      restColor_(restColor),
+      beatColor_(beatColor),
+      bpmSource_(std::move(bpmSource)),
+      beatTimer_(new QTimer(this)),
+      pulseTimer_(new QTimer(this)) {
     restRenderer_ = coloredRenderer(restSvgFile, restColor);
     beatRenderer_ = coloredRenderer(beatSvgFile, beatColor);
     beatTimer_->setSingleShot(true);
     beatTimer_->setTimerType(Qt::PreciseTimer);
     connect(beatTimer_, &QTimer::timeout, this, &BeatingSvgWidget::nextPhase);
     beatTimer_->start(0);
+    pulseTimer_->setTimerType(Qt::PreciseTimer);
+    connect(pulseTimer_, &QTimer::timeout, this, &BeatingSvgWidget::pulseStep);
 }
 
 QSvgRenderer* BeatingSvgWidget::coloredRenderer(const QString& svgFile, const QColor& color) {
@@ -771,7 +793,25 @@ void BeatingSvgWidget::setBeating(bool beating) {
     if (beating != beating_) {
         beating_ = beating;
         update();
+        const int fps = Performance::current().gaugeFps();
+        if (beating) {
+            pulseClock_.start();
+            emit pulsed(1.0);
+            if (fps != 0) {
+                pulseTimer_->start(static_cast<int>(py::round(1000.0 / fps)));
+            }
+        } else if (fps == 0) {
+            emit pulsed(0.0);
+        }
     }
+}
+
+void BeatingSvgWidget::pulseStep() {
+    const double level = std::max(0.0, 1 - pulseClock_.nsecsElapsed() / 1e9 / kPulseSeconds);
+    if (level == 0) {
+        pulseTimer_->stop();
+    }
+    emit pulsed(level);
 }
 
 void BeatingSvgWidget::paintEvent(QPaintEvent*) {
@@ -858,9 +898,16 @@ Gauge::Gauge(const QString& svgFile, const std::optional<Beat>& beat, bool spin,
     AnalogGauge* gauge = gauge_;
     if (beat) {
         // the heart beats at the gauge's value
-        background_ = new BeatingSvgWidget(imagePath(svgFile), imagePath(beat->svgFile), beat->restColor,
+        auto* heart = new BeatingSvgWidget(imagePath(svgFile), imagePath(beat->svgFile), beat->restColor,
                                            beat->beatColor,
                                            [gauge] { return gauge->value() > gauge->minValue() ? gauge->value() : 0; });
+        // the center point nested hearts, red outside to pink in the middle, pulsing with each beat
+        gauge->centerHeart = true;
+        const QList<QColor> colors{heart->beatColor(), heart->restColor()};
+        gauge->setCenterRings(colors);
+        connect(heart, &BeatingSvgWidget::pulsed, gauge,
+                [gauge, colors](double level) { gauge->setCenterRings(colors, level); });
+        background_ = heart;
         layout->addWidget(background_, 0, 0);
     } else if (spin) {
         // the chainring spins at the reading, in RPM

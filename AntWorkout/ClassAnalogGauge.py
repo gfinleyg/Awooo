@@ -1503,6 +1503,21 @@ class AnalogGaugeWidget(QWidget):
                 points.append(QPointF(radius*math.cos(a), radius*math.sin(a)))
         return QPolygonF(points)
 
+    #the rings drawn as nested hearts instead (e.g. the heart rate gauge's, see Gauge): the outline from this many points
+    center_heart = False
+    CENTER_HEART_POINTS = 72
+
+    def center_heart_outline(self, r):
+        """A heart's outline around (0, 0), as wide as a circle of radius r (and a little less tall), its point down"""
+        points = []
+        #the classic heart curve (32 wide, 29 tall), moved up to center it and scaled to r
+        for k in range(self.CENTER_HEART_POINTS):
+            t = 2*math.pi*k/self.CENTER_HEART_POINTS
+            x = 16*math.sin(t)**3
+            y = -(13*math.cos(t) - 5*math.cos(2*t) - 2*math.cos(3*t) - math.cos(4*t)) - 2.5
+            points.append(QPointF(x*r/16, y*r/16))
+        return QPolygonF(points)
+
     def ring_count(self):
         if not self.center_ring_min_px:
             return self.center_ring_count
@@ -1538,6 +1553,8 @@ class AnalogGaugeWidget(QWidget):
                 painter.rotate(self.center_gear_angle)
                 painter.drawPolygon(self.center_gear(r, band*self.CENTER_GEAR_DEPTH))
                 painter.restore()
+            elif self.center_heart:
+                painter.drawPolygon(self.center_heart_outline(r))
             else:
                 painter.drawEllipse(QPointF(0, 0), r, r)
 
@@ -1779,10 +1796,16 @@ class AnalogGaugeWidget(QWidget):
 class BeatingSvgWidget(QWidget):
     #background image that flips between a resting and a beating svg once per beat, at the rate bpmSource() returns
     #only repaints twice per beat (not every frame), so it stays cheap even though the gauge drawn over it repaints too
+    #pulsed(level): 1 as each beat starts, fading to 0 over PULSE_SECONDS at the Performance setting's frame rate
+    #(0 fps: 1 for the beat, 0 at rest), e.g. for the gauge's center hearts
+    pulsed = pyqtSignal(float)
     BEAT_FRACTION = 0.35 #portion of each beat spent showing the larger heart
+    PULSE_SECONDS = 0.2 #(as long as the cadence gauge's beat)
 
     def __init__(self, restSvgFile, beatSvgFile, restColor, beatColor, bpmSource):
         super().__init__()
+        self.restColor = QColor(restColor)
+        self.beatColor = QColor(beatColor)
         self.restRenderer = self.colored_renderer(restSvgFile, restColor)
         self.beatRenderer = self.colored_renderer(beatSvgFile, beatColor)
         self.bpmSource = bpmSource
@@ -1792,6 +1815,10 @@ class BeatingSvgWidget(QWidget):
         self.beatTimer.setTimerType(Qt.TimerType.PreciseTimer)
         self.beatTimer.timeout.connect(self.next_phase)
         self.beatTimer.start(0)
+        self.pulseStart = 0.0
+        self.pulseTimer = QTimer(self)
+        self.pulseTimer.setTimerType(Qt.TimerType.PreciseTimer)
+        self.pulseTimer.timeout.connect(self.pulse_step)
 
     def colored_renderer(self, svgFile, color):
         with open(svgFile, 'rb') as f:
@@ -1819,6 +1846,20 @@ class BeatingSvgWidget(QWidget):
         if beating != self.beating:
             self.beating = beating
             self.update()
+            fps = Performance.gauge_fps()
+            if beating:
+                self.pulseStart = time.monotonic()
+                self.pulsed.emit(1.0)
+                if fps:
+                    self.pulseTimer.start(round(1000/fps))
+            elif not fps:
+                self.pulsed.emit(0.0)
+
+    def pulse_step(self):
+        level = max(0.0, 1 - (time.monotonic() - self.pulseStart)/self.PULSE_SECONDS)
+        if level == 0:
+            self.pulseTimer.stop()
+        self.pulsed.emit(level)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -1912,6 +1953,11 @@ class Ui_Form(object):
             gauge = self.widget
             self.svg = BeatingSvgWidget(svgFile, beatSvgFile, restColor, beatColor,
                                         lambda: gauge.value if gauge.value > gauge.minValue else 0)
+            #the center point nested hearts, red outside to pink in the middle, pulsing with each beat
+            gauge.center_heart = True
+            heart = self.svg
+            gauge.set_center_rings((heart.beatColor, heart.restColor))
+            heart.pulsed.connect(lambda level: gauge.set_center_rings((heart.beatColor, heart.restColor), level))
             self.vLayout.addWidget(self.svg, 0,0)
         elif spin: #spins at the gauge's current value in RPM
             gauge = self.widget

@@ -365,7 +365,7 @@ QWidget* sceneCadenceModeGauge() {
     return gaugeShown(gauge);
 }
 
-// The HUD's heart rate gauge at 132 BPM, the heart at rest
+// The HUD's heart rate gauge at 132 BPM, the heart (and the center's hearts) at rest
 QWidget* sceneHrGauge() {
     auto* gauge = new Gauge(QStringLiteral("HeartSmaller.svg"),
                             Gauge::Beat{QStringLiteral("Heart.svg"), QColor(QStringLiteral("#FF8FAB")),
@@ -376,7 +376,7 @@ QWidget* sceneHrGauge() {
     w->needleCenterBg = {{0, QColor(QStringLiteral("#FFFFFF"))}};
     w->setScalePolygonColors(QGradientStops{{0, QColor(0, 0, 0, 0)}});
     w->setOuterCircleBg({{0, QColor(0, 0, 0, 0)}});
-    w->bigNeedleCenterSize = 20;
+    w->bigNeedleCenterSize = 12;
     w->units = QStringLiteral("BPM");
     w->setMinValue(40);
     w->setMaxValue(200);

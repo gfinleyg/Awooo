@@ -551,7 +551,7 @@ class HUDWindow(QWidget):
             self.hrGaugeDisplay.ui.widget.needle_center_bg = [[0, QColor("#FFFFFF")]] #Solid White
             self.hrGaugeDisplay.ui.widget.set_scale_polygon_colors([[0, QColor(0,0,0,0)]]) #Transparent
             self.hrGaugeDisplay.ui.widget.outer_circle_bg = [[0, QColor(0,0,0,0)]] #Transparent
-            self.hrGaugeDisplay.ui.widget.big_needle_center_size = 20 #change the center size, lower is bigger, default 8
+            self.hrGaugeDisplay.ui.widget.big_needle_center_size = 12 #change the center (its hearts) size, lower is bigger, default 8
             self.hrGaugeDisplay.ui.widget.units = "BPM"
             self.hrGaugeDisplay.ui.widget.setMinValue(40)
             self.hrGaugeDisplay.ui.widget.setMaxValue(200)

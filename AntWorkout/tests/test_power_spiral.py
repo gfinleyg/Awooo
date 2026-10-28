@@ -366,6 +366,42 @@ def test_cadence_rings_gear_turns_and_beats_with_the_chainring(qapp):
     assert widget.center_rings[1] == 0
 
 
+def test_heart_rate_rings_are_hearts_pulsing_with_the_heart(qapp):
+    """The heart rate gauge's center: nested hearts (as wide as the rings' circles, centered), red outside to pink in
+    the middle, brightest as each beat starts and fading over PULSE_SECONDS (0 fps: bright for the beat, not at rest)"""
+    import Performance
+    from ClassAnalogGauge import AnalogGaugeWidget, BeatingSvgWidget, Gauge
+    Performance._gaugeFps = 60
+    gauge = Gauge(None, 'HeartSmaller.svg', beatSvg=('Heart.svg', "#FF8FAB", "#E8102A"))
+    heart, widget = gauge.ui.svg, gauge.ui.widget
+    heart.beatTimer.stop()
+    assert widget.center_heart
+    assert [c.name() for c in widget.center_rings[0]] == ["#e8102a", "#ff8fab"]
+    assert widget.center_rings[1] == 0
+    outline = widget.center_heart_outline(100)
+    assert len(outline) == AnalogGaugeWidget.CENTER_HEART_POINTS
+    xs, ys = [p.x() for p in outline], [p.y() for p in outline]
+    assert (min(xs), max(xs)) == (pytest.approx(-100), pytest.approx(100))
+    assert min(ys) + max(ys) == pytest.approx(0, abs=1)
+    heart.set_beating(True)
+    assert widget.center_rings[1] == 1
+    assert heart.pulseTimer.isActive()
+    heart.pulseStart -= BeatingSvgWidget.PULSE_SECONDS/2
+    heart.pulse_step()
+    assert widget.center_rings[1] == pytest.approx(0.5, abs=0.02)
+    heart.pulseStart -= BeatingSvgWidget.PULSE_SECONDS
+    heart.pulse_step()
+    assert widget.center_rings[1] == 0
+    assert not heart.pulseTimer.isActive()
+    heart.set_beating(False)
+    Performance._gaugeFps = 0
+    heart.set_beating(True)
+    assert widget.center_rings[1] == 1
+    assert not heart.pulseTimer.isActive()
+    heart.set_beating(False)
+    assert widget.center_rings[1] == 0
+
+
 ###The session's earlier rides (see Session.py)
 def test_ring_carries_on_from_the_sessions_rides(qapp):
     """The ring starts with the rides before this workout, each in the zones it was ridden in, a tick where each

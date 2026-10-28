@@ -519,8 +519,8 @@ void HudScreen::buildGauges() {
         w->needleCenterBg = {{0, QColor(QStringLiteral("#FFFFFF"))}};
         w->setScalePolygonColors(QGradientStops{{0, QColor(0, 0, 0, 0)}});
         w->setOuterCircleBg({{0, QColor(0, 0, 0, 0)}});
-        // (smaller is a bigger center)
-        w->bigNeedleCenterSize = 20;
+        // (smaller is a bigger center: its hearts)
+        w->bigNeedleCenterSize = 12;
         w->units = QStringLiteral("BPM");
         w->setMinValue(40);
         w->setMaxValue(200);

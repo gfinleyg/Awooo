@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QtTest>
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
@@ -475,6 +476,41 @@ private slots:
         w->setValue(0);
         QTRY_COMPARE(chainring->spinTimer()->interval(), RotatingSvgWidget::kIdleMs);
         QCOMPARE(w->centerGearAngle(), std::optional<double>(chainring->angle()));
+    }
+
+    // (test_power_spiral.py test_heart_rate_rings_are_hearts_pulsing_with_the_heart) the heart rate gauge's center:
+    // nested hearts, red outside to pink in the middle, brightest as each beat starts and fading over kPulseSeconds
+    // (0 fps: bright for the beat, not at rest)
+    void heartRateRingsPulseWithTheHeart() {
+        Performance::current().setGaugeFps(60);
+        Gauge gauge(QStringLiteral("HeartSmaller.svg"),
+                    Gauge::Beat{QStringLiteral("Heart.svg"), QColor(QStringLiteral("#FF8FAB")),
+                                QColor(QStringLiteral("#E8102A"))});
+        AnalogGauge* w = gauge.gauge();
+        BeatingSvgWidget* heart = gauge.heart();
+        heart->beatTimer()->stop();
+        QVERIFY(w->centerHeart);
+        QVERIFY(w->centerRings());
+        QCOMPARE(w->centerRings()->first,
+                 (QList<QColor>{QColor(QStringLiteral("#E8102A")), QColor(QStringLiteral("#FF8FAB"))}));
+        QCOMPARE(w->centerRings()->second, 0.0);
+        QList<double> levels;
+        connect(heart, &BeatingSvgWidget::pulsed, &gauge, [&](double level) { levels.append(level); });
+        heart->setBeating(true);
+        QCOMPARE(w->centerRings()->second, 1.0);
+        QVERIFY(heart->pulseTimer()->isActive());
+        // each frame it fades, until it's out and the timer stops
+        QTRY_VERIFY(!heart->pulseTimer()->isActive());
+        QCOMPARE(w->centerRings()->second, 0.0);
+        QVERIFY(levels.size() >= 4);
+        QVERIFY(std::is_sorted(levels.rbegin(), levels.rend()));
+        heart->setBeating(false);
+        Performance::current().setGaugeFps(0);
+        heart->setBeating(true);
+        QCOMPARE(w->centerRings()->second, 1.0);
+        QVERIFY(!heart->pulseTimer()->isActive());
+        heart->setBeating(false);
+        QCOMPARE(w->centerRings()->second, 0.0);
     }
 
     // ---- The grade overlay and list ----
