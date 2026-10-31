@@ -21,6 +21,7 @@
 #include "AppLayout.hpp"
 #include "AppState.hpp"
 #include "CustomTitleBar.hpp"
+#include "HaloLabel.hpp"
 #include "HudScreen.hpp"
 #include "MaxStar.hpp"
 #include "MusicSelectDialog.hpp"
@@ -218,6 +219,15 @@ private slots:
         controls.setColor(QStringLiteral("#9fc5d1"), std::nullopt);
         QVERIFY(!theme::current().colors.contains(QStringLiteral("#9fc5d1")));
         QTRY_VERIFY(!display.styleSheet().contains(QStringLiteral("#123456")));
+        // the Up Next headers' text is haloed where it's lost in the gradient, and not once it stands out
+        const QList<HaloLabel*> headers = display.view(QStringLiteral("Workout"))->findChildren<HaloLabel*>();
+        QVERIFY(headers.size() >= 2);
+        HaloLabel* upNext = headers[0];
+        QVERIFY(upNext->haloed());
+        controls.setColor(QStringLiteral("#000000"), QStringLiteral("#ffffff"));
+        QTRY_VERIFY(!upNext->haloed());
+        controls.setColor(QStringLiteral("#000000"), std::nullopt);
+        QTRY_VERIFY(upNext->haloed());
     }
 
     void fontsChangeTheTheme() {

@@ -45,6 +45,8 @@ add_library(awo_ui STATIC
     widgets/FtpColorsEditor.hpp
     widgets/GradeWidgets.cpp
     widgets/GradeWidgets.hpp
+    widgets/HaloLabel.cpp
+    widgets/HaloLabel.hpp
     widgets/LongVLabels.cpp
     widgets/LongVLabels.hpp
     widgets/MaxStar.cpp

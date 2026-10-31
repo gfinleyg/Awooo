@@ -19,6 +19,9 @@
 
 #include "FtpColors.hpp"
 
+class QPointF;
+class QWidget;
+
 namespace awo::zones {
 
 using ftpcolors::GraphState;
@@ -80,6 +83,8 @@ std::pair<QPen, QPen> sensorPens(const QString& color, double width = ftpcolors:
                                  double haloWidth = ftpcolors::kSensorHaloPx);
 // the pen outlining a sensor's current reading marker: its line's halo color
 QPen markerOutline(const QString& color, double width = 1);
+// the window's background (its gradient corner to corner, through the theme) behind a point of a widget
+QColor windowBackgroundAt(const QWidget* widget, const QPointF& point);
 
 // ---- Redrawing what shows them ----
 

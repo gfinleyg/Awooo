@@ -22,6 +22,7 @@
 #include "AppLayout.hpp"
 #include "ConfirmEndWorkoutWindow.hpp"
 #include "GradeWidgets.hpp"
+#include "HaloLabel.hpp"
 #include "KeyShortcuts.hpp"
 #include "LongVLabels.hpp"
 #include "MusicPlayer.hpp"
@@ -322,8 +323,9 @@ HudScreen::~HudScreen() = default;
 
 void HudScreen::buildUpNext() {
     auto* upNext = new QGridLayout;
-    // (the column as wide as its blocks, see LongVLabels::kLabelWidth)
-    upNextLabelHeader_ = new QLabel(QStringLiteral("Up Next:"));
+    // (the column as wide as its blocks, see LongVLabels::kLabelWidth; its headers are over the window gradient,
+    // with a halo when their text gets lost in it)
+    upNextLabelHeader_ = new HaloLabel(QStringLiteral("Up Next:"));
     theme::setSheet(upNextLabelHeader_, kXlText);
     upNextLabelHeader_->setMinimumWidth(LongVLabels::kLabelWidth);
     upNextLabelHeader_->setMaximumHeight(40);
@@ -332,7 +334,7 @@ void HudScreen::buildUpNext() {
     upNextLabelDescription_->setFixedHeight(90);
     upNextLabelDescription_->setMinimumWidth(LongVLabels::kLabelWidth);
     upNext->addWidget(upNextLabelDescription_, 1, 0, 3, 1);
-    remainingWorkoutHeader_ = new QLabel(QStringLiteral("Coming up..."));
+    remainingWorkoutHeader_ = new HaloLabel(QStringLiteral("Coming up..."));
     remainingWorkoutHeader_->setMaximumHeight(40);
     remainingWorkoutHeader_->setMinimumWidth(LongVLabels::kLabelWidth);
     theme::setSheet(remainingWorkoutHeader_, kXlText);
@@ -346,7 +348,7 @@ void HudScreen::buildUpNext() {
     zoneLegend_ = new ZoneLegend;
     upNext->addWidget(zoneLegend_, 26, 0);
     // once the workout is complete each block's grade takes over the whole column
-    workoutGradesHeader_ = new QLabel(QStringLiteral("Workout Grades"));
+    workoutGradesHeader_ = new HaloLabel(QStringLiteral("Workout Grades"));
     theme::setSheet(workoutGradesHeader_, kXlText);
     workoutGradesHeader_->setMaximumHeight(40);
     workoutGradesHeader_->hide();

@@ -37,6 +37,11 @@ Python app's own results (`tests\golden\`).
   the filled part seemed to vanish into the background. Both bars and the "Block time remaining" box are rounded now,
   like the workout timer boxes.
 
+- **The workout screen's "Up Next:", "Coming up..." and "Workout Grades" headers get a halo where their text doesn't
+  stand out** from the window's gradient behind them, as the zone legend's numbers do: a thin light outline around
+  dark text (dark around light), only while the contrast is under WCAG AA (4.5). In the Python app these headers
+  could nearly vanish in themes whose text color is close to the top of the window's gradient.
+
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".
 

@@ -1,6 +1,9 @@
 #include "ZoneColors.hpp"
 
 #include <QJsonObject>
+#include <QWidget>
+
+#include <algorithm>
 
 #include "AppState.hpp"
 #include "Theme.hpp"
@@ -193,6 +196,15 @@ std::pair<QPen, QPen> sensorPens(const QString& color, double width, double halo
 
 QPen markerOutline(const QString& color, double width) {
     return cosmeticPen(ftpcolors::haloColor(color, 0xff), width);
+}
+
+QColor windowBackgroundAt(const QWidget* widget, const QPointF& point) {
+    const QWidget* top = widget->window();
+    const QPointF at = widget->mapTo(top, point);
+    const double t = (at.x() / std::max(1, top->width()) + at.y() / std::max(1, top->height())) / 2;
+    const QString start = theme::current().mapHex(ftpcolors::kWindowGradient[0]);
+    const QString end = theme::current().mapHex(ftpcolors::kWindowGradient[1]);
+    return QColor(colors::mix(start, end, std::clamp(t, 0.0, 1.0)));
 }
 
 Notifier& notifier() {

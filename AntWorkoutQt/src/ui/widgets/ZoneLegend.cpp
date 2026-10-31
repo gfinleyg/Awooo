@@ -65,12 +65,7 @@ QLinearGradient ZoneLegend::barGradient(const QRectF& rect) const {
 }
 
 QColor ZoneLegend::backgroundAt(const QPointF& point) const {
-    const QWidget* top = window();
-    const QPointF at = mapTo(top, point);
-    const double t = (at.x() / std::max(1, top->width()) + at.y() / std::max(1, top->height())) / 2;
-    const QString start = theme::current().mapHex(ftpcolors::kWindowGradient[0]);
-    const QString end = theme::current().mapHex(ftpcolors::kWindowGradient[1]);
-    return QColor(colors::mix(start, end, std::clamp(t, 0.0, 1.0)));
+    return zones::windowBackgroundAt(this, point);
 }
 
 QList<QPointF> ZoneLegend::labelCenters(double* textTop, double* textHeight) const {

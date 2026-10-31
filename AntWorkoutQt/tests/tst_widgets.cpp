@@ -15,6 +15,7 @@
 #include "AnalogGauge.hpp"
 #include "AppState.hpp"
 #include "GradeWidgets.hpp"
+#include "HaloLabel.hpp"
 #include "LongVLabels.hpp"
 #include "Performance.hpp"
 #include "PowerSpiral.hpp"
@@ -677,6 +678,36 @@ private slots:
         legend.render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
         int light = 0;
         for (int y = static_cast<int>(ZoneLegend::kBarHeight + ZoneLegend::kTextGap); y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                light += image.pixelColor(x, y).lightness() > 200;
+            }
+        }
+        QVERIFY(light > 50);
+    }
+
+    void haloLabelHalosTextThatDoesntStandOut() {
+        // black text at the window's top left corner: on the gradient's dark navy end
+        QWidget window;
+        window.resize(400, 300);
+        auto* label = new HaloLabel(QStringLiteral("Up Next:"), &window);
+        label->setStyleSheet(QStringLiteral("color: #000000; font: 900 22pt 'Orbitron';"));
+        label->setGeometry(0, 0, 300, 40);
+        label->ensurePolished();
+        QVERIFY(label->haloed());
+        // light text there stands out
+        label->setStyleSheet(QStringLiteral("color: #ffffff; font: 900 22pt 'Orbitron';"));
+        QVERIFY(!label->haloed());
+        // no text, no halo
+        label->setStyleSheet(QStringLiteral("color: #000000; font: 900 22pt 'Orbitron';"));
+        label->clear();
+        QVERIFY(!label->haloed());
+        // drawn with its halo: light around the dark text
+        label->setText(QStringLiteral("Up Next:"));
+        QImage image(label->size(), QImage::Format_ARGB32);
+        image.fill(QColor(QStringLiteral("#28275e")));
+        label->render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
+        int light = 0;
+        for (int y = 0; y < image.height(); ++y) {
             for (int x = 0; x < image.width(); ++x) {
                 light += image.pixelColor(x, y).lightness() > 200;
             }
