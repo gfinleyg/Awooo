@@ -756,7 +756,11 @@ private slots:
         saveCache(cache);
         forgetCrcs();
         const Cache loaded = loadCache();
-        QCOMPARE(cached(loaded, paths_["a_100"])->toJson(), analyses_["a_100"].toJson());
+        // (saved without its own version: the file's)
+        Analysis stamped = analyses_["a_100"];
+        stamped.version = cacheVersion();
+        QCOMPARE(cached(loaded, paths_["a_100"])->toJson(), stamped.toJson());
+        QVERIFY(!isOutdated(*cached(loaded, paths_["a_100"])));
         QVERIFY(!rememberedCrcs().isEmpty());
         QCOMPARE(rememberedCrcs().front().crc, fileCrc(paths_["a_100"]));
         QVERIFY(!cached(loaded, QStringLiteral("nowhere.wav")));
@@ -771,6 +775,62 @@ private slots:
         QVERIFY(loadCache().songs.isEmpty());
         awotest::writeFile(kCacheFile, "{broken");
         QVERIFY(loadCache().songs.isEmpty());
+    }
+
+    void cacheVersionsEachSong() {
+        const QJsonObject current = cacheVersion();
+        const auto with = [&](const QString& key, const QJsonValue& value) {
+            QJsonObject version = current;
+            version.insert(key, value);
+            return version;
+        };
+        const QJsonObject older = with(QStringLiteral("analysis"), QJsonArray{kAnalysisMajor, kAnalysisMinor - 1});
+        const QJsonObject song{{"duration", 1.0}, {"classes", QJsonArray()}, {"confidences", QJsonArray()}, {"beats", QJsonArray()}};
+        const auto stamped = [&](const QJsonObject& version) {
+            QJsonObject s = song;
+            s.insert(QStringLiteral("version"), version);
+            return s;
+        };
+        const QJsonObject songs{{"current", stamped(current)},
+                                {"file's", song},
+                                {"older minor", stamped(older)},
+                                {"older settings", stamped(with(QStringLiteral("window"), 99))},
+                                {"other major", stamped(with(QStringLiteral("analysis"), QJsonArray{kAnalysisMajor - 1, kAnalysisMinor}))},
+                                {"read differently", stamped(with(QStringLiteral("hop"), 99))}};
+        awotest::writeFile(kCacheFile, QJsonDocument(QJsonObject{{"version", current}, {"songs", songs}}).toJson());
+        const Cache cache = loadCache();
+        // a different major version, or one read by different settings, can't be used
+        QStringList keys = cache.songs.keys();
+        keys.sort();
+        QCOMPARE(keys, (QStringList{"current", "file's", "older minor", "older settings"}));
+        QList<bool> outdated;
+        for (const QString& key : keys) {
+            outdated.append(isOutdated(cache.songs[key]));
+        }
+        QCOMPARE(outdated, (QList<bool>{false, false, true, true}));
+        QCOMPARE(cache.songs["older minor"].version, older);
+        // (an analysis just made, and an unreadable one, aren't from an older version)
+        Analysis unreadable;
+        unreadable.error = QStringLiteral("x");
+        unreadable.version = older;
+        QVERIFY(!isOutdated(Analysis()) && !isOutdated(unreadable));
+    }
+
+    void cacheFromBeforeTwoPartVersions() {
+        // the version's "analysis" was one number, the file's for every song: that's major.0
+        const QJsonObject song{{"duration", 1.0}, {"classes", QJsonArray()}, {"confidences", QJsonArray()}, {"beats", QJsonArray()}};
+        for (const auto& [number, kept] : {std::pair{kAnalysisMajor, true}, std::pair{kAnalysisMajor - 1, false}}) {
+            QJsonObject version = cacheVersion();
+            version.insert(QStringLiteral("analysis"), number);
+            awotest::writeFile(kCacheFile,
+                               QJsonDocument(QJsonObject{{"version", version}, {"songs", QJsonObject{{"x", song}}}}).toJson());
+            const Cache cache = loadCache();
+            QCOMPARE(cache.songs.contains(QStringLiteral("x")), kept);
+            if (kept) {
+                QCOMPARE(cache.songs["x"].version.value(QStringLiteral("analysis")).toArray(), (QJsonArray{kAnalysisMajor, 0}));
+                QCOMPARE(isOutdated(cache.songs["x"]), kAnalysisMinor != 0);
+            }
+        }
     }
 
     void cacheKeyFollowsTheContents() {
@@ -806,8 +866,24 @@ private slots:
         const auto results = analyzeSongs({paths_["b_75"]}, [&](int d, int t) { progress.append({d, t}); }, {}, 1);
         QCOMPARE(results[paths_["b_75"]].classes, analyses_["b_75"].classes);
         QCOMPARE(progress, (QList<std::pair<int, int>>{{0, 1}, {1, 1}}));
-        // saved for next time
-        QVERIFY(cached(loadCache(), paths_["b_75"]).has_value());
+        // saved for next time, with the version it was made with
+        QCOMPARE(cached(loadCache(), paths_["b_75"])->version, cacheVersion());
+    }
+
+    void analyzeSongsRedoSkipsTheCache() {
+        Cache cache = loadCache();
+        Analysis fake;
+        fake.duration = 1.0;
+        fake.version = cacheVersion();
+        fake.version.insert(QStringLiteral("window"), 99);
+        cache.songs.insert(cacheKey(paths_["a_100"]), fake);
+        saveCache(cache);
+        QVERIFY(isOutdated(*cached(loadCache(), paths_["a_100"])));
+        const auto results = analyzeSongs({paths_["a_100"]}, {}, {}, 1, true);
+        QCOMPARE(results[paths_["a_100"]].classes, analyses_["a_100"].classes);
+        // the cache brought up to date
+        const std::optional<Analysis> redone = cached(loadCache(), paths_["a_100"]);
+        QVERIFY(redone && redone->classes == analyses_["a_100"].classes && !isOutdated(*redone));
     }
 
     void selectionRoundTrip() {

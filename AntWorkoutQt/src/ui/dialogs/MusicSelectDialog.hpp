@@ -2,8 +2,10 @@
 
 // Musical Cadence Mode's song picker (ClassMusicSelectWindow.py): a folder, songs, or an .m3u playlist; the checked
 // songs make up the ride, in list order (drag to reorder). Each song is analyzed as it's added, off the UI thread
-// (cached, see music::analyzeSongs). A random pick checks songs adding up to about the minutes asked for, spread over
-// cadences. The list is kept for next time (musicSelectionANT.json), the settings in savedSettingsANT.json.
+// (cached, see music::analyzeSongs); Reprocess Songs analyzes again the ones from an older version of the analysis and
+// the ones that couldn't be read. A random pick checks songs adding up to about the minutes asked for, spread over
+// cadences. The list is kept for next time (musicSelectionANT.json; songs whose files are gone are taken off it), the
+// settings in savedSettingsANT.json.
 
 #include <QDialog>
 #include <QHash>
@@ -22,12 +24,12 @@ class QSpinBox;
 
 namespace awo {
 
-// works out the songs' tempos off the UI thread
+// works out the songs' tempos off the UI thread (redo: not looked up in the cache)
 class AnalysisThread : public QThread {
     Q_OBJECT
 
 public:
-    explicit AnalysisThread(const QStringList& paths) : paths_(paths) {}
+    explicit AnalysisThread(const QStringList& paths, bool redo = false) : paths_(paths), redo_(redo) {}
 
 signals:
     void progressed(int done, int total);
@@ -38,6 +40,7 @@ protected:
 
 private:
     QStringList paths_;
+    bool redo_;
 };
 
 // what a ride is built from (see music::buildWorkout)
@@ -63,6 +66,9 @@ public:
     void clearSongs();
     void checkAll(bool checked);
     void pickRandom();
+    // the listed songs from an older version of the analysis or unreadable, analyzed again (not from the cache)
+    void reprocess();
+    QStringList toReprocess() const;
     // the checked songs that have been analyzed, in list order: (path, title)
     QList<std::pair<QString, QString>> checkedSongs() const;
     MusicSelection selection() const;
@@ -73,9 +79,12 @@ public:
     // the analyses known (tests and LayoutViewer set them too)
     QHash<QString, music::Analysis> analyses;
     QStringList missing;
+    // last time's songs taken off the list, their files gone
+    int removed = 0;
 
     QListWidget* list() const { return list_; }
     QPushButton* okButton() const { return ok_; }
+    QPushButton* reprocessButton() const { return reprocess_; }
     QSpinBox* randomMinutes() const { return randomMinutes_; }
     QSpinBox* preferredRpm() const { return preferredRpm_; }
     QSpinBox* minSegment() const { return minSegment_; }
@@ -88,8 +97,9 @@ public slots:
     void reject() override;
 
 protected:
-    // the songs not analyzed yet, in the background; what's picked kept for next time (LayoutViewer: neither)
-    virtual void analyze(const QStringList& paths);
+    // the songs not analyzed yet, in the background (redo: not looked up in the cache); what's picked kept for next
+    // time (LayoutViewer: neither)
+    virtual void analyze(const QStringList& paths, bool redo = false);
     virtual void save();
     QList<QListWidgetItem*> items() const;
 
@@ -111,6 +121,7 @@ private:
     QSpinBox* minSegment_;
     QLabel* summary_;
     QPushButton* ok_;
+    QPushButton* reprocess_;
 };
 
 }  // namespace awo

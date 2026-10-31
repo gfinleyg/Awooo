@@ -55,8 +55,12 @@ QJsonObject Analysis::toJson() const {
     for (const auto& [start, end] : silences) {
         silencesJson.append(QJsonArray{start, end});
     }
-    return {{"duration", duration}, {"classes", classesJson}, {"confidences", confidencesJson},
-            {"beats", beatsJson}, {"silences", silencesJson}};
+    QJsonObject data{{"duration", duration}, {"classes", classesJson}, {"confidences", confidencesJson},
+                     {"beats", beatsJson}, {"silences", silencesJson}};
+    if (!version.isEmpty()) {
+        data.insert(QStringLiteral("version"), version);
+    }
+    return data;
 }
 
 Analysis Analysis::fromJson(const QJsonObject& data) {
@@ -79,6 +83,7 @@ Analysis Analysis::fromJson(const QJsonObject& data) {
         const QJsonArray pair = s.toArray();
         analysis.silences.push_back({pair.at(0).toDouble(), pair.at(1).toDouble()});
     }
+    analysis.version = data.value(QStringLiteral("version")).toObject();
     return analysis;
 }
 

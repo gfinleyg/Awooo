@@ -95,6 +95,23 @@ def test_every_screen_builds_and_rides(viewer, mode):
         assert live_key_conflicts(display) == {}, view
 
 
+def test_music_picker_reprocesses(viewer):
+    """The music picker's made up songs: one from an older version, one unreadable, both reprocessed"""
+    LayoutViewer, display, errors = viewer
+    display.build("cadence", os.path.join(LayoutViewer.WORKOUT_DIR, LayoutViewer.DEFAULT_WORKOUT), 40)
+    picker = display.views["Music Picker"]
+    assert picker.songList.item(3).text() == "Some Artist - Unchecked Song   4m 51s   (older version)"
+    assert picker.summaryLabel.text() == ("Ride: 3 songs, 10m 51s   ·   1 can't be read   ·   1 from an older version"
+                                          "   ·   2 missing songs removed   ·   1 playlist entry not found")
+    assert picker.reprocessButton.isEnabled()
+    picker.reprocessButton.click()
+    assert not picker.songList.item(3).text().endswith("(older version)")
+    assert "older version" not in picker.summaryLabel.text()
+    #(the broken one still can't be read: it can be tried again)
+    assert "1 can't be read" in picker.summaryLabel.text() and picker.reprocessButton.isEnabled()
+    assert errors == []
+
+
 def test_workout_screen_plays_and_pauses(viewer):
     LayoutViewer, display, errors = viewer
     display.build("workout", os.path.join(LayoutViewer.WORKOUT_DIR, LayoutViewer.DEFAULT_WORKOUT), 10)

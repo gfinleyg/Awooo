@@ -20,8 +20,10 @@ Tempo, per song (numpy only):
 Playback (MusicPlayer) is miniaudio too: the ride's songs as one continuous stream, whose position (the audio
 frames handed to the sound device) is the workout's clock, so the targets can't drift from the music.
 
-That per-window track is cached (CACHE_FILE, keyed by file name, size and CRC32, under cache_version()), so a song is
-only ever analyzed once; the segments are worked out from it each time, which is instant:
+That per-window track is cached (CACHE_FILE, keyed by file name, size and CRC32, each song with the cache_version() it
+was made with), so a song is only analyzed once, or again when the song picker's Reprocess is asked to bring one from an
+older version up to date (one this code can't use, see compatible_version, is analyzed again by itself); the segments
+are worked out from it each time, which is instant:
   - the classes are unwrapped into one continuous tempo line (so 119 -> 121 BPM doesn't flip to 60.5),
     median filtered, cut wherever the tempo moves more than SEGMENT_TOLERANCE, and anything shorter than
     the minimum segment is merged into its nearest neighbor
@@ -55,9 +57,11 @@ MIN_RPM, MAX_RPM = 40, 120
 DEFAULT_PREFERRED_RPM = 85
 DEFAULT_MIN_SEGMENT_SECONDS = 8
 
-#bump when the analysis code changes, so cached results from the old one are redone (its settings below are checked
-#by cache_version() themselves)
-ANALYSIS_VERSION = 3
+#(major, minor), bumped when the analysis code changes: the minor when its results change but the old ones still work
+#with this code (they're kept, marked as from an older version until the song picker reprocesses them), the major when
+#the old ones can't be used (dropped, so they're analyzed again). Its settings below are checked by cache_version()
+#themselves, the same way (see compatible_version)
+ANALYSIS_VERSION = (3, 0)
 CACHE_FILE = "musicCadenceCacheANT.json"
 #the song picker's list from last time: [[path, title, checked], ...]
 SELECTION_FILE = "musicSelectionANT.json"
@@ -374,14 +378,42 @@ def analyze_file(path):
 ### Cache
 ###----------------------------------------------------------------------------------------------
 def cache_version():
-    """What the cached analyses were made with: ANALYSIS_VERSION and the settings the analysis uses, so changing
-    either one redoes them all. (The minimum segment, preferred cadence, MIN_CONFIDENCE and SEGMENT_TOLERANCE are
-    applied to the cached analysis each time, so changing those needs nothing redone)"""
-    return {"analysis": ANALYSIS_VERSION, "sampleRate": SAMPLE_RATE, "fft": N_FFT, "hop": HOP,
+    """What a cached analysis was made with: ANALYSIS_VERSION and the settings the analysis uses, so changing either
+    one marks the analyses made before as from an older version. (The minimum segment, preferred cadence,
+    MIN_CONFIDENCE and SEGMENT_TOLERANCE are applied to the cached analysis each time, so changing those needs nothing
+    redone)"""
+    return {"analysis": list(ANALYSIS_VERSION), "sampleRate": SAMPLE_RATE, "fft": N_FFT, "hop": HOP,
             "window": WINDOW_SECONDS, "step": STEP_SECONDS, "classSteps": CLASS_STEPS,
             "classOctaves": list(CLASS_OCTAVES), "classOctaveWeights": list(CLASS_OCTAVE_WEIGHTS),
             "medianWindows": MEDIAN_WINDOWS, "beatTightness": BEAT_TIGHTNESS, "silenceStep": SILENCE_STEP_SECONDS,
             "silenceDb": SILENCE_DB, "silenceBelowLoud": SILENCE_BELOW_LOUD, "silenceMin": SILENCE_MIN_SECONDS}
+
+
+#the settings a cached analysis is read by (its beats are envelope frames, its classes a window every step), so one
+#made with others can't be used
+READ_SETTINGS = ("sampleRate", "fft", "hop", "step")
+
+
+def _as_two_part(version):
+    """A cache file's version from before ANALYSIS_VERSION was (major, minor): its "analysis" N as [N, 0]"""
+    if isinstance(version, dict) and isinstance(version.get("analysis"), int):
+        return {**version, "analysis": [version["analysis"], 0]}
+    return version
+
+
+def compatible_version(version):
+    """Whether an analysis made with this cache_version() can be used by this code: the same major version and read
+    by the same settings (if not, it's analyzed again)"""
+    current = cache_version()
+    return isinstance(version, dict) and isinstance(version.get("analysis"), list) and \
+        len(version["analysis"]) == 2 and version["analysis"][0] == current["analysis"][0] and \
+        all(version.get(key) == current[key] for key in READ_SETTINGS)
+
+
+def is_outdated(analysis):
+    """Whether a (usable) analysis is from an older version than this code makes: the song picker can reprocess it.
+    (One with no "version" was just made)"""
+    return "error" not in analysis and "version" in analysis and analysis["version"] != cache_version()
 
 
 #{(path, size, modified ns): crc}, so a song's file is only read for its CRC once: they're kept in the cache file too
@@ -435,16 +467,25 @@ def _cache_key(path):
 
 
 def load_cache():
+    """{"version", "songs": {key: analysis}, "crcs"}: the songs this code can use, each with the "version" it was made
+    with (a song saved without one: the file's, as every song was before they each had theirs)"""
+    loaded = {"version": cache_version(), "songs": {}}
     try:
         with open(CACHE_FILE, encoding="utf-8") as f:
             cache = json.load(f)
         #(the files' CRCs are kept whatever version the analyses were made with: they're just the files')
         _remember_crcs(cache.get("crcs"))
-        if cache.get("version") == cache_version() and isinstance(cache.get("songs"), dict):
-            return cache
+        if "crcs" in cache:
+            loaded["crcs"] = cache["crcs"]
+        fileVersion = _as_two_part(cache.get("version"))
+        for key, analysis in cache.get("songs", {}).items():
+            if isinstance(analysis, dict):
+                version = _as_two_part(analysis.get("version", fileVersion))
+                if compatible_version(version):
+                    loaded["songs"][key] = {**analysis, "version": version}
     except (OSError, ValueError, AttributeError):
         pass
-    return {"version": cache_version(), "songs": {}}
+    return loaded
 
 
 def save_cache(cache):
@@ -474,13 +515,14 @@ def cached(cache, path):
         return None
 
 
-def analyze_songs(paths, progress=None, cancelled=None, workers=None):
-    """{path: analysis} for every song, from the cache where it can be and worker processes otherwise.
-    progress(done, total) after each song; cancelled() returning True stops early (what's done is kept)"""
+def analyze_songs(paths, progress=None, cancelled=None, workers=None, redo=False):
+    """{path: analysis} for every song, from the cache where it can be and worker processes otherwise (redo: every
+    one analyzed again, the cache only written). progress(done, total) after each song; cancelled() returning True
+    stops early (what's done is kept)"""
     cache = load_cache()
     results, todo = {}, []
     for path in dict.fromkeys(paths):
-        hit = cached(cache, path)
+        hit = None if redo else cached(cache, path)
         if hit is not None:
             results[path] = hit
         else:
@@ -498,7 +540,7 @@ def analyze_songs(paths, progress=None, cancelled=None, workers=None):
                     results[path] = future.result()
                     if "error" not in results[path]:
                         try:
-                            cache["songs"][_cache_key(path)] = results[path]
+                            cache["songs"][_cache_key(path)] = {**results[path], "version": cache_version()}
                         except OSError:
                             pass
                     done += 1

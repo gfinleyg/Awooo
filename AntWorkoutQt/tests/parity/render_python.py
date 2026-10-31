@@ -770,17 +770,19 @@ def viewer_music_workout(songs, analyses, preferred=None, minSegmentSeconds=None
 
 
 def scene_music_picker():
-    """The song picker with LayoutViewer's made up songs (LayoutViewer.ViewerMusicPicker): three checked, one not,
-    one unreadable, a playlist entry not found"""
+    """The song picker with LayoutViewer's made up songs (LayoutViewer.ViewerMusicPicker): three checked, one not (from
+    an older version), one unreadable, two missing songs removed, a playlist entry not found"""
     from ClassWorkoutSetupWindow import WorkoutSetupWindow
     from ClassMusicSelectWindow import MusicSelectWindow
     _, Parent = stub_classes()
 
     class Picker(MusicSelectWindow):
-        def analyze(self, paths):
+        def analyze(self, paths, redo=False):
             for path in paths:
                 self.analyses[path] = ({"error": "can't be read"} if "Broken" in path else
                                        {"duration": 180.0 + 37*(len(self.analyses) % 4)})
+                if "Unchecked" in path:
+                    self.analyses[path]["version"] = {"analysis": [0, 0]}
             for item in self.items():
                 self.label_item(item)
 
@@ -795,6 +797,7 @@ def scene_music_picker():
                             ("C:/Music/Broken File.mp3", "Broken File")],
                            checked={f"C:/Music/{title}.mp3" for title, _ in VIEWER_SONGS})
         picker.missing = ["C:/Music/Not There.mp3"]
+        picker.removed = 2
         picker.update_summary()
         return shown_as_is(picker)
     return in_work_folder(build)

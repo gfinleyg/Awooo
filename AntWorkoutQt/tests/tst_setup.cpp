@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
@@ -109,6 +110,40 @@ void writeText(const QString& path, const QString& text) {
 
 // the rider's settings saved, as a returning rider has them
 const QJsonObject kRider{{"wheelCircumference", 2.1}, {"ftp", 200}, {"maxHr", 185}};
+
+// the song picker analyzing at once (songs added after it's built): "old" songs from an older version and "bad" ones
+// unreadable, until reprocessed
+class InstantMusicPicker : public MusicSelectDialog {
+protected:
+    void analyze(const QStringList& paths, bool redo) override {
+        for (const QString& path : paths) {
+            music::Analysis analysis;
+            if (path.contains(QStringLiteral("bad")) && !redo) {
+                analysis.error = QStringLiteral("can't be read");
+            } else {
+                analysis.duration = 60.0;
+                if (path.contains(QStringLiteral("old")) && !redo) {
+                    analysis.version = music::cacheVersion();
+                    analysis.version.insert(QStringLiteral("analysis"), QJsonArray{0, 0});
+                }
+            }
+            analyses.insert(path, analysis);
+        }
+        for (QListWidgetItem* item : items()) {
+            labelItem(item);
+        }
+        updateSummary();
+    }
+    void save() override {}
+};
+
+QStringList listTexts(const MusicSelectDialog& dialog) {
+    QStringList texts;
+    for (int i = 0; i < dialog.list()->count(); ++i) {
+        texts.append(dialog.list()->item(i)->text());
+    }
+    return texts;
+}
 
 }  // namespace
 
@@ -455,6 +490,62 @@ private slots:
         SetupScreen gone(bridge_.get());
         gone.chooseMode(QStringLiteral("cadence"));
         QCOMPARE(gone.workoutFileLabel()->text(), QStringLiteral("Music not picked"));
+    }
+
+    // last time's songs whose files are gone taken off the list (and counted), a song cached by an older version of the
+    // analysis marked and counted, and Reprocess Songs analyzing it and the unreadable one again (on the real analysis
+    // and cache: test_music_picker.py has the same on made up analyses)
+    void songPickerRemovesMissingSongsAndReprocesses() {
+        const QString fresh = QDir::current().absoluteFilePath(QStringLiteral("new.wav"));
+        const QString old = QDir::current().absoluteFilePath(QStringLiteral("old.wav"));
+        const QString bad = QDir::current().absoluteFilePath(QStringLiteral("bad.mp3"));
+        awotest::writeClickTrack(fresh, 100, 40, 1);
+        awotest::writeClickTrack(old, 75, 40, 2);
+        writeText(bad, QStringLiteral("not audio"));
+        // (old.wav cached by an older minor version)
+        music::Cache cache = music::loadCache();
+        music::Analysis older = music::analyzeFile(old);
+        older.version = music::cacheVersion();
+        older.version.insert(QStringLiteral("analysis"), QJsonArray{music::kAnalysisMajor, music::kAnalysisMinor - 1});
+        cache.songs.insert(music::cacheKey(old), older);
+        music::saveCache(cache);
+        music::saveSelection({{fresh, "New", true},
+                              {QDir::current().absoluteFilePath("gone1.mp3"), "Gone 1", true},
+                              {old, "Old", true},
+                              {bad, "Bad", true},
+                              {QDir::current().absoluteFilePath("gone2.mp3"), "Gone 2", false}});
+        MusicSelectDialog picker;
+        picker.waitForAnalysis();
+        QCOMPARE(listTexts(picker), (QStringList{"New   40s", "Old   40s   (older version)", "Bad   (can't be read)"}));
+        QCOMPARE(picker.summary(), QStringLiteral("Ride: 2 songs, 1m 20s   ·   1 can't be read   ·   1 from an older version"
+                                                  "   ·   2 missing songs removed"));
+        QVERIFY(picker.reprocessButton()->isEnabled());
+        // the older one and the unreadable one, analyzed again (not from the cache)
+        picker.reprocess();
+        QVERIFY(picker.analyzing() && !picker.reprocessButton()->isEnabled());
+        QCOMPARE(listTexts(picker), (QStringList{"New   40s", "Old   (analyzing...)", "Bad   (analyzing...)"}));
+        picker.waitForAnalysis();
+        QCOMPARE(listTexts(picker), (QStringList{"New   40s", "Old   40s", "Bad   (can't be read)"}));
+        QCOMPARE(picker.summary(), QStringLiteral("Ride: 2 songs, 1m 20s   ·   1 can't be read   ·   2 missing songs removed"));
+        QVERIFY(!music::isOutdated(*music::cached(music::loadCache(), old)));
+        // (still unreadable: it can be tried again)
+        QVERIFY(picker.reprocessButton()->isEnabled());
+        // Clear forgets the removed ones too
+        picker.clearSongs();
+        QCOMPARE(picker.summary(), QStringLiteral("Ride: 0 songs, 0s"));
+        QVERIFY(!picker.reprocessButton()->isEnabled());
+    }
+
+    // (made up analyses, see InstantMusicPicker)
+    void songPickerCountsOnlyTheListedSongs() {
+        InstantMusicPicker picker;
+        picker.addToList({{QStringLiteral("C:/Music/bad.mp3"), QStringLiteral("Bad")},
+                          {QStringLiteral("C:/Music/old.mp3"), QStringLiteral("Old")}});
+        QVERIFY(picker.summary().contains(QStringLiteral("1 can't be read   ·   1 from an older version")));
+        picker.list()->selectAll();
+        picker.removeSelected();
+        QCOMPARE(picker.summary(), QStringLiteral("Ride: 0 songs, 0s"));
+        QVERIFY(!picker.reprocessButton()->isEnabled());
     }
 
     void clearSessionNeedsRides() {

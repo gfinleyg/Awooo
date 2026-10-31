@@ -161,10 +161,19 @@ bool sameJson(const QJsonValue& a, const QJsonValue& b) {
     return a == b;
 }
 
+// a cache file's version from before the analysis version was major.minor: its "analysis" N as [N, 0]
+QJsonObject asTwoPart(QJsonObject version) {
+    const QJsonValue analysis = version.value(QStringLiteral("analysis"));
+    if (analysis.isDouble() && analysis.toDouble() == std::floor(analysis.toDouble())) {
+        version.insert(QStringLiteral("analysis"), QJsonArray{analysis.toInteger(), 0});
+    }
+    return version;
+}
+
 }  // namespace
 
 QJsonObject cacheVersion() {
-    return {{"analysis", kAnalysisVersion},
+    return {{"analysis", QJsonArray{kAnalysisMajor, kAnalysisMinor}},
             {"sampleRate", kSampleRate},
             {"fft", kNfft},
             {"hop", kHop},
@@ -182,6 +191,25 @@ QJsonObject cacheVersion() {
             {"silenceMin", kSilenceMinSeconds}};
 }
 
+bool compatibleVersion(const QJsonObject& version) {
+    static const QJsonObject current = cacheVersion();
+    const QJsonArray analysis = version.value(QStringLiteral("analysis")).toArray();
+    if (analysis.size() != 2 || !sameJson(analysis.at(0), current.value(QStringLiteral("analysis")).toArray().at(0))) {
+        return false;
+    }
+    for (const char* key : {"sampleRate", "fft", "hop", "step"}) {
+        if (!sameJson(version.value(QLatin1String(key)), current.value(QLatin1String(key)))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool isOutdated(const Analysis& analysis) {
+    static const QJsonObject current = cacheVersion();
+    return !analysis.error && !analysis.version.isEmpty() && !sameJson(analysis.version, current);
+}
+
 Cache loadCache() {
     Cache cache{cacheVersion(), {}};
     QFile file(kCacheFile);
@@ -196,11 +224,19 @@ Cache loadCache() {
     const QJsonObject data = document.object();
     // (the files' CRCs are kept whatever version the analyses were made with: they're just the files')
     rememberCrcs(data.value(QStringLiteral("crcs")));
-    if (sameJson(data.value(QStringLiteral("version")), QJsonValue(cacheVersion())) &&
-        data.value(QStringLiteral("songs")).isObject()) {
-        const QJsonObject songs = data.value(QStringLiteral("songs")).toObject();
-        for (auto it = songs.begin(); it != songs.end(); ++it) {
-            cache.songs.insert(it.key(), Analysis::fromJson(it.value().toObject()));
+    const QJsonObject fileVersion = asTwoPart(data.value(QStringLiteral("version")).toObject());
+    const QJsonObject songs = data.value(QStringLiteral("songs")).toObject();
+    for (auto it = songs.begin(); it != songs.end(); ++it) {
+        if (!it.value().isObject()) {
+            continue;
+        }
+        const QJsonObject song = it.value().toObject();
+        const QJsonObject version =
+            song.contains(QStringLiteral("version")) ? asTwoPart(song.value(QStringLiteral("version")).toObject()) : fileVersion;
+        if (compatibleVersion(version)) {
+            Analysis analysis = Analysis::fromJson(song);
+            analysis.version = version;
+            cache.songs.insert(it.key(), analysis);
         }
     }
     return cache;
@@ -268,7 +304,7 @@ void forgetCrcs() {
 }
 
 QHash<QString, Analysis> analyzeSongs(const QStringList& paths, const std::function<void(int, int)>& progress,
-                                      const std::function<bool()>& cancelled, std::optional<int> workers) {
+                                      const std::function<bool()>& cancelled, std::optional<int> workers, bool redo) {
     Cache cache = loadCache();
     QHash<QString, Analysis> results;
     QStringList todo;
@@ -279,7 +315,7 @@ QHash<QString, Analysis> analyzeSongs(const QStringList& paths, const std::funct
         }
     }
     for (const QString& path : unique) {
-        if (const std::optional<Analysis> hit = cached(cache, path)) {
+        if (const std::optional<Analysis> hit = redo ? std::nullopt : cached(cache, path)) {
             results.insert(path, *hit);
         } else {
             todo.append(path);
@@ -333,7 +369,9 @@ QHash<QString, Analysis> analyzeSongs(const QStringList& paths, const std::funct
         ++collected;
         if (!analysis.error) {
             try {
-                cache.songs.insert(cacheKey(path), analysis);
+                Analysis stamped = analysis;
+                stamped.version = cacheVersion();
+                cache.songs.insert(cacheKey(path), stamped);
             } catch (const std::exception&) {
             }
         }

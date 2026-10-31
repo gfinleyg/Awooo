@@ -4,6 +4,7 @@
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QListWidgetItem>
 #include <QPushButton>
 #include <QScreen>
@@ -77,7 +78,8 @@ const QString kWindowStyle = QStringLiteral(
     "#layoutDisplay{background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #28275e stop:1 #9fc5d1);}");
 constexpr int kTitleHeight = 36;
 
-// The song picker with made-up songs: nothing analyzed, nothing saved
+// The song picker with made-up songs: nothing analyzed, nothing saved (one from an older version of the analysis, until
+// Reprocess Songs)
 class ViewerMusicPicker : public MusicSelectDialog {
 public:
     ViewerMusicPicker() : MusicSelectDialog(nullptr, false) {
@@ -91,17 +93,21 @@ public:
         songs.append({QStringLiteral("C:/Music/Broken File.mp3"), QStringLiteral("Broken File")});
         addToList(songs, checked);
         missing = {QStringLiteral("C:/Music/Not There.mp3")};
+        removed = 2;
         updateSummary();
     }
 
 protected:
-    void analyze(const QStringList& paths) override {
+    void analyze(const QStringList& paths, bool redo) override {
         for (const QString& path : paths) {
             music::Analysis analysis;
             if (path.contains(QStringLiteral("Broken"))) {
                 analysis.error = QStringLiteral("can't be read");
             } else {
                 analysis.duration = 180.0 + 37 * (analyses.size() % 4);
+            }
+            if (path.contains(QStringLiteral("Unchecked")) && !redo) {
+                analysis.version = {{"analysis", QJsonArray{0, 0}}};
             }
             analyses.insert(path, analysis);
         }

@@ -41,7 +41,7 @@ constexpr int kTitleRole = Qt::UserRole + 1;
 void AnalysisThread::run() {
     const QHash<QString, music::Analysis> results = music::analyzeSongs(
         paths_, [this](int done, int total) { emit progressed(done, total); },
-        [this] { return isInterruptionRequested(); });
+        [this] { return isInterruptionRequested(); }, {}, redo_);
     emit analyzed(results);
 }
 
@@ -113,6 +113,11 @@ MusicSelectDialog::MusicSelectDialog(QWidget* parent, bool savedSongs) : QDialog
     minSegment_->setSuffix(QStringLiteral(" s"));
     minSegment_->setToolTip(QStringLiteral("Tempo changes shorter than this are folded into the cadence around them"));
     options->addWidget(minSegment_, 1, 3);
+    reprocess_ = new QPushButton(QStringLiteral("Reprocess Songs"));
+    reprocess_->setToolTip(
+        QStringLiteral("Analyzes again the songs from an older version of the analysis, and the ones that couldn't be read"));
+    connect(reprocess_, &QPushButton::clicked, this, &MusicSelectDialog::reprocess);
+    options->addWidget(reprocess_, 1, 4);
     layout->addLayout(options);
 
     summary_ = new QLabel;
@@ -136,6 +141,7 @@ MusicSelectDialog::MusicSelectDialog(QWidget* parent, bool savedSongs) : QDialog
     keys::add(randomButton, Qt::Key_R, QStringLiteral("R"));
     keys::add(allButton, Qt::Key_K, QStringLiteral("K"));
     keys::add(noneButton, Qt::Key_U, QStringLiteral("U"));
+    keys::add(reprocess_, Qt::Key_S, QStringLiteral("S"));
     keys::add(ok_, keys::kEnter, {QStringLiteral("Enter")});
     for (QSpinBox* box : {randomMinutes_, preferredRpm_, minSegment_}) {
         keys::Options inBox;
@@ -187,6 +193,8 @@ MusicSelectDialog::MusicSelectDialog(QWidget* parent, bool savedSongs) : QDialog
     for (const music::SelectedSong& song : savedSongs ? music::loadSelection() : QList<music::SelectedSong>()) {
         if (QFileInfo(song.path).isFile()) {
             songs.append({song.path, song.title});
+        } else {
+            ++removed;
         }
         if (song.checked) {
             checked.insert(song.path);
@@ -273,6 +281,7 @@ void MusicSelectDialog::removeSelected() {
 void MusicSelectDialog::clearSongs() {
     list_->clear();
     missing.clear();
+    removed = 0;
     updateSummary();
 }
 
@@ -290,7 +299,7 @@ void MusicSelectDialog::checkAll(bool checked) {
 
 // ---- The analysis ----
 
-void MusicSelectDialog::analyze(const QStringList& pathsIn) {
+void MusicSelectDialog::analyze(const QStringList& pathsIn, bool redo) {
     QStringList todo;
     for (const QString& path : pathsIn) {
         if (!analyses.contains(path)) {
@@ -304,7 +313,7 @@ void MusicSelectDialog::analyze(const QStringList& pathsIn) {
         pending_ += todo;
         return;
     }
-    thread_ = new AnalysisThread(todo);
+    thread_ = new AnalysisThread(todo, redo);
     connect(thread_, &AnalysisThread::progressed, this, &MusicSelectDialog::analysisProgress);
     connect(thread_, &AnalysisThread::analyzed, this, &MusicSelectDialog::analysisDone);
     progress_->setRange(0, static_cast<int>(todo.size()));
@@ -351,6 +360,40 @@ void MusicSelectDialog::waitForAnalysis() {
     }
 }
 
+QStringList MusicSelectDialog::toReprocess() const {
+    QStringList songs;
+    for (const QString& path : paths()) {
+        const auto found = analyses.find(path);
+        if (found != analyses.end() && (found->error || music::isOutdated(*found))) {
+            songs.append(path);
+        }
+    }
+    return songs;
+}
+
+void MusicSelectDialog::reprocess() {
+    const QStringList songs = toReprocess();
+    if (thread_ || songs.isEmpty()) {
+        return;
+    }
+    const QSet<QString> redo(songs.begin(), songs.end());
+    for (const QString& path : songs) {
+        analyses.remove(path);
+    }
+    {
+        const QSignalBlocker blocker(list_);
+        for (QListWidgetItem* item : items()) {
+            if (redo.contains(item->data(kPathRole).toString())) {
+                // (an unreadable one can be checked again once it's read)
+                item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+                labelItem(item);
+            }
+        }
+    }
+    analyze(songs, true);
+    updateSummary();
+}
+
 void MusicSelectDialog::stopAnalysis() {
     if (thread_) {
         thread_->requestInterruption();
@@ -395,7 +438,8 @@ void MusicSelectDialog::labelItem(QListWidgetItem* item) {
         item->setCheckState(Qt::Unchecked);
         item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);
     } else {
-        item->setText(title + QStringLiteral("   ") + minimizedDuration(static_cast<int>(found->duration)));
+        item->setText(title + QStringLiteral("   ") + minimizedDuration(static_cast<int>(found->duration)) +
+                      (music::isOutdated(*found) ? QStringLiteral("   (older version)") : QString()));
     }
 }
 
@@ -476,9 +520,22 @@ void MusicSelectDialog::updateSummary() {
                              .arg(songs.size())
                              .arg(songs.size() != 1 ? QStringLiteral("s") : QString())
                              .arg(minimizedDuration(static_cast<int>(seconds)))};
-    const auto unreadable = std::count_if(analyses.cbegin(), analyses.cend(), [](const music::Analysis& a) { return a.error.has_value(); });
+    int unreadable = 0, outdated = 0;
+    for (const QString& path : paths()) {
+        const auto found = analyses.find(path);
+        if (found != analyses.end()) {
+            unreadable += found->error.has_value();
+            outdated += music::isOutdated(*found);
+        }
+    }
     if (unreadable) {
         parts.append(QStringLiteral("%1 can't be read").arg(unreadable));
+    }
+    if (outdated) {
+        parts.append(QStringLiteral("%1 from an older version").arg(outdated));
+    }
+    if (removed) {
+        parts.append(QStringLiteral("%1 missing song%2 removed").arg(removed).arg(removed != 1 ? QStringLiteral("s") : QString()));
     }
     if (!missing.isEmpty()) {
         parts.append(QStringLiteral("%1 playlist entr%2 not found")
@@ -490,6 +547,7 @@ void MusicSelectDialog::updateSummary() {
     }
     summary_->setText(parts.join(QStringLiteral("   ·   ")));
     ok_->setEnabled(!songs.isEmpty() && !thread_);
+    reprocess_->setEnabled(!thread_ && !toReprocess().isEmpty());
 }
 
 // ---- Done ----

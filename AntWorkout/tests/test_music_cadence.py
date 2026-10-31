@@ -283,7 +283,9 @@ def test_cache_round_trip(songs, tmp_path):
     cache["songs"][M._cache_key(paths["100"])] = analyses["100"]
     M.save_cache(cache)
     loaded = M.load_cache()
-    assert M.cached(loaded, paths["100"]) == json.loads(json.dumps(analyses["100"]))
+    #(saved without its own version: the file's)
+    assert M.cached(loaded, paths["100"]) == {**json.loads(json.dumps(analyses["100"])), "version": M.cache_version()}
+    assert not M.is_outdated(M.cached(loaded, paths["100"]))
     assert loaded["crcs"] and loaded["crcs"][0][3] == M._crc(paths["100"], os.stat(paths["100"]))
     assert M.cached(loaded, "nowhere.wav") is None
 
@@ -295,6 +297,42 @@ def test_cache_from_another_version_is_dropped():
     with open(M.CACHE_FILE, "w") as f:
         f.write("{broken")
     assert M.load_cache()["songs"] == {}
+
+
+def test_cache_versions_each_song():
+    current = M.cache_version()
+    major, minor = M.ANALYSIS_VERSION
+    older = {**current, "analysis": [major, minor - 1]}
+    song = {"duration": 1.0, "classes": [], "confidences": [], "beats": []}
+    with open(M.CACHE_FILE, "w") as f:
+        json.dump({"version": current, "songs": {
+            "current": {**song, "version": current},
+            "file's": song,
+            "older minor": {**song, "version": older},
+            "older settings": {**song, "version": {**current, "window": 99}},
+            "other major": {**song, "version": {**current, "analysis": [major - 1, minor]}},
+            "read differently": {**song, "version": {**current, "hop": 99}}}}, f)
+    songs = M.load_cache()["songs"]
+    #a different major version, or one read by different settings, can't be used
+    assert sorted(songs) == ["current", "file's", "older minor", "older settings"]
+    assert [M.is_outdated(songs[k]) for k in sorted(songs)] == [False, False, True, True]
+    assert songs["older minor"]["version"] == older
+    #(an analysis just made, and an unreadable one, aren't from an older version)
+    assert not M.is_outdated(song) and not M.is_outdated({"error": "x", "version": older})
+
+
+def test_cache_from_before_two_part_versions():
+    #the version's "analysis" was one number, the file's for every song: that's major.0
+    major, _ = M.ANALYSIS_VERSION
+    song = {"duration": 1.0, "classes": [], "confidences": [], "beats": []}
+    for number, kept in ((major, True), (major - 1, False)):
+        with open(M.CACHE_FILE, "w") as f:
+            json.dump({"version": {**M.cache_version(), "analysis": number}, "songs": {"x": song}}, f)
+        songs = M.load_cache()["songs"]
+        assert ("x" in songs) == kept
+        if kept:
+            assert songs["x"]["version"]["analysis"] == [major, 0]
+            assert M.is_outdated(songs["x"]) == (M.ANALYSIS_VERSION != (major, 0))
 
 
 def test_cache_key_follows_the_contents(tmp_path):
@@ -329,8 +367,22 @@ def test_analyze_songs_in_a_worker_process(songs):
     results = M.analyze_songs([paths["75"]], progress=lambda d, t: progress.append((d, t)), workers=1)
     assert results[paths["75"]]["classes"] == analyses["75"]["classes"]
     assert progress == [(0, 1), (1, 1)]
-    #saved for next time
-    assert M.cached(M.load_cache(), paths["75"]) is not None
+    #saved for next time, with the version it was made with
+    assert M.cached(M.load_cache(), paths["75"])["version"] == M.cache_version()
+
+
+def test_analyze_songs_redo_skips_the_cache(songs):
+    paths, analyses = songs
+    cache = M.load_cache()
+    cache["songs"][M._cache_key(paths["100"])] = {"duration": 1.0, "classes": [], "confidences": [], "beats": [],
+                                                  "version": {**M.cache_version(), "window": 99}}
+    M.save_cache(cache)
+    assert M.is_outdated(M.cached(M.load_cache(), paths["100"]))
+    results = M.analyze_songs([paths["100"]], redo=True, workers=1)
+    assert results[paths["100"]]["classes"] == analyses["100"]["classes"]
+    #the cache brought up to date
+    redone = M.cached(M.load_cache(), paths["100"])
+    assert redone["classes"] == analyses["100"]["classes"] and not M.is_outdated(redone)
 
 
 def test_selection_round_trip():

@@ -16,7 +16,9 @@ stick, and shows a live HUD with power, cadence, speed and heart rate while you 
 - **FTP tests**: 20 minute, 1 hour, and ramp tests (10W or 20W steps). The result can be applied as your new FTP.
 - **Musical Cadence Mode**: pick songs (a folder, files, or an `.m3u`/`.m3u8` playlist). Each song's tempo is
   analyzed and turned into target cadences (RPM), so you pedal to the beat. Analysis results are cached, so each song
-  is only analyzed once.
+  is only analyzed once. When a newer version of the analysis comes out, songs analyzed by an older version are
+  marked in the song picker, and its **Reprocess Songs** button analyzes those again, along with any that couldn't be
+  read. Songs whose files have gone are taken off the list.
 - **Synopsis**: a post-ride summary with graphs and grading.
 - **Sessions**: every ride since the app opened is kept (in memory only) and shown together on the synopsis, one
   after the other with a heading and divider for each, and the workout spiral's outer ring carries on from them. Each

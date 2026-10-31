@@ -38,12 +38,15 @@ constexpr double kSilenceMinSeconds = 3.0;
 constexpr int kMedianWindows = 5;
 // how strongly the beat tracker keeps to the local tempo (higher: steadier beats, fewer jumps onto off beat hits)
 constexpr double kBeatTightness = 100;
-// bump when the analysis changes, so cached results from the old one are redone (see cacheVersion)
-constexpr int kAnalysisVersion = 3;
+// major.minor, bumped when the analysis changes: the minor when its results change but the old ones still work with
+// this code (kept, marked as from an older version until the song picker reprocesses them), the major when the old ones
+// can't be used (dropped, so they're analyzed again). See cacheVersion and compatibleVersion
+constexpr int kAnalysisMajor = 3;
+constexpr int kAnalysisMinor = 0;
 
 // A song's cacheable analysis: duration (seconds), each window's tempo class and confidence (rounded as cached), the
 // beats as envelope frames each the gap from the one before, and the silent stretches (start, end seconds); or why it
-// couldn't be analyzed
+// couldn't be analyzed. A cached one has the cacheVersion it was made with (empty: just made)
 struct Analysis {
     double duration = 0;
     std::vector<double> classes;
@@ -51,6 +54,7 @@ struct Analysis {
     std::vector<int> beats;
     std::vector<std::pair<double, double>> silences;
     std::optional<QString> error;
+    QJsonObject version;
 
     QJsonObject toJson() const;
     static Analysis fromJson(const QJsonObject& data);

@@ -133,7 +133,8 @@ class ViewerSynopsis(SynopsisWindow):
 
 
 class ViewerMusicPicker(MusicSelectWindow):
-    """The song picker with made-up songs: nothing analyzed, nothing saved"""
+    """The song picker with made-up songs: nothing analyzed, nothing saved (one from an older version of the
+    analysis, until Reprocess Songs)"""
     def __init__(self, parent):
         super().__init__(parent)
         self.clear_songs()
@@ -142,12 +143,15 @@ class ViewerMusicPicker(MusicSelectWindow):
                           ("C:/Music/Broken File.mp3", "Broken File")],
                          checked={f"C:/Music/{title}.mp3" for title, _ in VIEWER_SONGS})
         self.missing = ["C:/Music/Not There.mp3"]
+        self.removed = 2
         self.update_summary()
 
-    def analyze(self, paths):
+    def analyze(self, paths, redo=False):
         for path in paths:
             self.analyses[path] = ({"error": "can't be read"} if "Broken" in path else
                                    {"duration": 180.0 + 37*(len(self.analyses) % 4)})
+            if "Unchecked" in path and not redo:
+                self.analyses[path]["version"] = {"analysis": [0, 0]}
         for item in self.items():
             self.label_item(item)
 

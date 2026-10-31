@@ -847,8 +847,8 @@ music::CadenceRide viewerRide() {
     return ride;
 }
 
-// The song picker with LayoutViewer's made up songs (ViewerMusicPicker): three checked, one not, one unreadable, a
-// playlist entry not found
+// The song picker with LayoutViewer's made up songs (ViewerMusicPicker): three checked, one not (from an older
+// version), one unreadable, two missing songs removed, a playlist entry not found
 QWidget* sceneMusicPicker() {
     writeSceneSettings();
     auto* picker = new MusicSelectDialog;
@@ -869,10 +869,14 @@ QWidget* sceneMusicPicker() {
         } else {
             analysis.duration = 180.0 + 37 * (picker->analyses.size() % 4);
         }
+        if (path.contains(QStringLiteral("Unchecked"))) {
+            analysis.version = {{"analysis", QJsonArray{0, 0}}};
+        }
         picker->analyses.insert(path, analysis);
     }
     picker->addToList(songs, checked);
     picker->missing = {QStringLiteral("C:/Music/Not There.mp3")};
+    picker->removed = 2;
     picker->updateSummary();
     return shownAsIs(picker);
 }

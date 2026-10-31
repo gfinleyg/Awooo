@@ -45,18 +45,20 @@ class AnalysisThread(QThread):
     progressed = pyqtSignal(int, int)
     analyzed = pyqtSignal(dict)
 
-    def __init__(self, paths):
+    def __init__(self, paths, redo=False):
         super().__init__()
         self.paths = paths
+        self.redo = redo
 
     def run(self):
         results = MusicCadence.analyze_songs(self.paths, progress=self.progressed.emit,
-                                             cancelled=self.isInterruptionRequested)
+                                             cancelled=self.isInterruptionRequested, redo=self.redo)
         self.analyzed.emit(results)
 
 
 ###Musical Cadence Mode's song picker: a folder, songs, or an .m3u playlist; checked songs make up the ride, in
-###list order (drag to reorder). Each song is analyzed as it's added (cached, see MusicCadence.py).
+###list order (drag to reorder). Each song is analyzed as it's added (cached, see MusicCadence.py); Reprocess Songs
+###analyzes again the ones from an older version of the analysis and the ones that couldn't be read.
 class MusicSelectWindow(QDialog):
     def __init__(self, parent=None):
         super(MusicSelectWindow, self).__init__(parent)
@@ -67,6 +69,7 @@ class MusicSelectWindow(QDialog):
 
         self.analyses = {} #path: MusicCadence.analyze_file() result
         self.missing = [] #playlist entries that weren't found
+        self.removed = 0 #last time's songs taken off the list, their files gone
         self.thread = None
         self.pending = [] #songs added while an analysis was running, analyzed after it
 
@@ -123,6 +126,11 @@ class MusicSelectWindow(QDialog):
         self.minSegment.setSuffix(" s")
         self.minSegment.setToolTip("Tempo changes shorter than this are folded into the cadence around them")
         options.addWidget(self.minSegment, 1, 3)
+        self.reprocessButton = QPushButton("Reprocess Songs")
+        self.reprocessButton.setToolTip("Analyzes again the songs from an older version of the analysis, and the ones "
+                                        "that couldn't be read")
+        self.reprocessButton.clicked.connect(self.reprocess)
+        options.addWidget(self.reprocessButton, 1, 4)
         layout.addLayout(options)
 
         self.summaryLabel = QLabel()
@@ -150,6 +158,7 @@ class MusicSelectWindow(QDialog):
         KeyShortcuts.add(self.randomButton, Qt.Key.Key_R, label="R")
         KeyShortcuts.add(allButton, Qt.Key.Key_K, label="K")
         KeyShortcuts.add(noneButton, Qt.Key.Key_U, label="U")
+        KeyShortcuts.add(self.reprocessButton, Qt.Key.Key_S, label="S")
         KeyShortcuts.add(self.okButton, KeyShortcuts.ENTER, label="Enter")
         for box in boxes:
             KeyShortcuts.add(self.okButton, KeyShortcuts.ENTER, field=box)
@@ -176,8 +185,9 @@ class MusicSelectWindow(QDialog):
         self.preferredRpm.setValue(int(settings.get("musicPreferredRpm", MusicCadence.DEFAULT_PREFERRED_RPM)))
         self.minSegment.setValue(int(settings.get("musicMinSegment", MusicCadence.DEFAULT_MIN_SEGMENT_SECONDS)))
         saved = MusicCadence.load_selection()
-        self.add_to_list([(path, title) for path, title, _ in saved if os.path.isfile(path)],
-                         checked={path for path, _, isChecked in saved if isChecked})
+        there = [(path, title) for path, title, _ in saved if os.path.isfile(path)]
+        self.removed = len(saved) - len(there)
+        self.add_to_list(there, checked={path for path, _, isChecked in saved if isChecked})
 
         #scaled for this screen, and kept on it (see AppLayout.py)
         AppLayout.fit_dialog(self)
@@ -228,6 +238,7 @@ class MusicSelectWindow(QDialog):
     def clear_songs(self):
         self.songList.clear()
         self.missing = []
+        self.removed = 0
         self.update_summary()
 
     def check_all(self, checked):
@@ -239,14 +250,15 @@ class MusicSelectWindow(QDialog):
         self.update_summary()
 
     ###Analysis
-    def analyze(self, paths):
+    def analyze(self, paths, redo=False):
+        """The songs not analyzed yet, in the background (redo: not looked up in the cache)"""
         paths = [p for p in paths if p not in self.analyses]
         if not paths:
             return
         if self.thread is not None:
             self.pending += paths
             return
-        self.thread = AnalysisThread(paths)
+        self.thread = AnalysisThread(paths, redo)
         self.thread.progressed.connect(self.analysis_progress)
         self.thread.analyzed.connect(self.analysis_done)
         self.progressBar.setRange(0, len(paths))
@@ -271,6 +283,28 @@ class MusicSelectWindow(QDialog):
         self.songList.blockSignals(False)
         pending, self.pending = self.pending, []
         self.analyze(pending)
+        self.update_summary()
+
+    def to_reprocess(self):
+        """The listed songs Reprocess Songs analyzes again: from an older version of the analysis, or unreadable"""
+        return [path for path in self.paths() if path in self.analyses and
+                ("error" in self.analyses[path] or MusicCadence.is_outdated(self.analyses[path]))]
+
+    def reprocess(self):
+        paths = self.to_reprocess()
+        if self.thread is not None or not paths:
+            return
+        for path in paths:
+            del self.analyses[path]
+        redo = set(paths)
+        self.songList.blockSignals(True)
+        for item in self.items():
+            if item.data(Qt.ItemDataRole.UserRole) in redo:
+                #(an unreadable one can be checked again once it's read)
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                self.label_item(item)
+        self.songList.blockSignals(False)
+        self.analyze(paths, redo=True)
         self.update_summary()
 
     def stop_analysis(self):
@@ -299,7 +333,8 @@ class MusicSelectWindow(QDialog):
             item.setCheckState(Qt.CheckState.Unchecked)
             item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
         else:
-            item.setText(f"{title}   {MinimizedDuration(int(analysis['duration']))}")
+            older = "   (older version)" if MusicCadence.is_outdated(analysis) else ""
+            item.setText(f"{title}   {MinimizedDuration(int(analysis['duration']))}{older}")
 
     def checked_songs(self):
         """(path, title) of the checked songs that have been analyzed, in list order"""
@@ -338,15 +373,22 @@ class MusicSelectWindow(QDialog):
         songs = self.checked_songs()
         seconds = sum(self.analyses[p]["duration"] for p, _ in songs)
         parts = [f"Ride: {len(songs)} song{'s' if len(songs) != 1 else ''}, {MinimizedDuration(int(seconds))}"]
-        unreadable = sum(1 for a in self.analyses.values() if "error" in a)
+        listed = [self.analyses[p] for p in self.paths() if p in self.analyses]
+        unreadable = sum(1 for a in listed if "error" in a)
         if unreadable:
             parts.append(f"{unreadable} can't be read")
+        outdated = sum(1 for a in listed if MusicCadence.is_outdated(a))
+        if outdated:
+            parts.append(f"{outdated} from an older version")
+        if self.removed:
+            parts.append(f"{self.removed} missing song{'s' if self.removed != 1 else ''} removed")
         if self.missing:
             parts.append(f"{len(self.missing)} playlist entr{'ies' if len(self.missing) != 1 else 'y'} not found")
         if self.thread is not None:
             parts.append("still analyzing")
         self.summaryLabel.setText("   ·   ".join(parts))
         self.okButton.setEnabled(bool(songs) and self.thread is None)
+        self.reprocessButton.setEnabled(self.thread is None and bool(self.to_reprocess()))
 
     ###Done
     def accept(self):

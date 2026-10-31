@@ -10,6 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QListWidget>
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
@@ -22,6 +23,7 @@
 #include "CustomTitleBar.hpp"
 #include "HudScreen.hpp"
 #include "MaxStar.hpp"
+#include "MusicSelectDialog.hpp"
 #include "PreviewRide.hpp"
 #include "SetupScreen.hpp"
 #include "TestSupport.hpp"
@@ -135,6 +137,23 @@ private slots:
         const double frozen = hud->engine().workoutSecondsPassed();
         QTest::qWait(400);
         QCOMPARE(hud->engine().workoutSecondsPassed(), frozen);
+    }
+
+    // the music picker's made up songs: one from an older version, one unreadable, both reprocessed (test_screens.py)
+    void musicPickerReprocesses() {
+        DisplayWindow display;
+        display.build(QStringLiteral("cadence"), kWorkoutFile, 40);
+        auto* picker = qobject_cast<MusicSelectDialog*>(display.view(QStringLiteral("Music Picker")));
+        QVERIFY(picker);
+        QCOMPARE(picker->list()->item(3)->text(), QStringLiteral("Some Artist - Unchecked Song   4m 51s   (older version)"));
+        QCOMPARE(picker->summary(), QStringLiteral("Ride: 3 songs, 10m 51s   ·   1 can't be read   ·   1 from an older version"
+                                                   "   ·   2 missing songs removed   ·   1 playlist entry not found"));
+        QVERIFY(picker->reprocessButton()->isEnabled());
+        picker->reprocessButton()->click();
+        QVERIFY(!picker->list()->item(3)->text().endsWith(QStringLiteral("(older version)")));
+        QVERIFY(!picker->summary().contains(QStringLiteral("older version")));
+        // (the broken one still can't be read: it can be tried again)
+        QVERIFY(picker->summary().contains(QStringLiteral("1 can't be read")) && picker->reprocessButton()->isEnabled());
     }
 
     void playsMusicalCadenceModesSilentMusic() {
