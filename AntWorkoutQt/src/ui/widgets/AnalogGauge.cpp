@@ -42,6 +42,23 @@ QColor mix(const QColor& a, const QColor& b, double t) {
                             static_cast<float>(ab + (bb - ab) * t), static_cast<float>(aa + (ba - aa) * t));
 }
 
+// the color at value from (value, color) stops sorted by value, blended between them (the first's below them, the
+// last's above)
+QColor colorAt(const QList<std::pair<double, QColor>>& stops, double value) {
+    if (value <= stops.front().first) {
+        return stops.front().second;
+    }
+    for (qsizetype i = 0; i + 1 < stops.size(); ++i) {
+        const auto& [v0, c0] = stops[i];
+        const auto& [v1, c1] = stops[i + 1];
+        if (value <= v1) {
+            const double t = v1 != v0 ? (value - v0) / (v1 - v0) : 1;
+            return mix(c0, c1, t);
+        }
+    }
+    return stops.back().second;
+}
+
 // text drawn centered on (x, y) as the original does it: a box its advance (plus 1) wide and its height tall, at
 // whole pixels
 void drawCentered(QPainter& painter, const QFontMetrics& fm, double x, double y, const QString& text) {
@@ -245,27 +262,13 @@ void AnalogGauge::setValueColors(QList<std::pair<double, QColor>> stops) {
         setScalePolygonColors(std::nullopt);
         return;
     }
-    auto colorAt = [&stops](double value) {
-        if (value <= stops.front().first) {
-            return stops.front().second;
-        }
-        for (qsizetype i = 0; i + 1 < stops.size(); ++i) {
-            const auto& [v0, c0] = stops[i];
-            const auto& [v1, c1] = stops[i + 1];
-            if (value <= v1) {
-                const double t = v1 != v0 ? (value - v0) / (v1 - v0) : 1;
-                return mix(c0, c1, t);
-            }
-        }
-        return stops.back().second;
-    };
     QList<std::pair<double, QColor>> shown;
     for (const auto& [value, color] : stops) {
         if (minValue_ <= value && value <= maxValue_) {
             shown.append({value, color});
         }
     }
-    const QList<std::pair<double, QColor>> ends = {{minValue_, colorAt(minValue_)}, {maxValue_, stops.back().second}};
+    const QList<std::pair<double, QColor>> ends = {{minValue_, colorAt(stops, minValue_)}, {maxValue_, stops.back().second}};
     QList<std::pair<double, QColor>> all = shown;
     for (const auto& end : ends) {
         const bool there = std::any_of(shown.begin(), shown.end(),
@@ -294,7 +297,9 @@ void AnalogGauge::setCenterRings(const std::optional<QList<QColor>>& colors, dou
     if (colors) {
         rings = std::pair(*colors, level);
     }
-    if (centerRings_ && rings && centerRings_->first == rings->first && std::abs(centerRings_->second - level) < 0.02) {
+    // (a small step in the level isn't worth a frame, but back to rest always is)
+    if (centerRings_ && rings && centerRings_->first == rings->first && std::abs(centerRings_->second - level) < 0.02 &&
+        (level != 0 || centerRings_->second == 0)) {
         return;
     }
     if (centerRings_ != rings) {
@@ -362,16 +367,17 @@ void AnalogGauge::rescale() {
 // worked out again only when something it depends on changes, not on every needle frame
 double AnalogGauge::fittedValueFontsize() {
     const auto key = std::make_tuple(widgetDiameter_, bigNeedleCenterSize, maxValue_, valueDecimals, valueFontsize_,
-                                     valueFontname_);
+                                     valueFontname_, centerHeart);
     if (!fittedValueFontsize_ || fittedValueFontsize_->first != key) {
         fittedValueFontsize_ = std::pair(key, fitValueFontsize());
     }
     return fittedValueFontsize_->second;
 }
 
-// the largest font size (up to valueFontsize) where the widest possible value's glyphs stay inside the center circle
+// the largest font size (up to valueFontsize) where the widest possible value's glyphs stay inside the center circle (or
+// heart)
 double AnalogGauge::fitValueFontsize() const {
-    const double radius = (widgetDiameter_ / bigNeedleCenterSize - 1) * 0.92;
+    const double radius = (widgetDiameter_ / bigNeedleCenterSize - 1) * 0.92 * (centerHeart ? kCenterHeartFit : 1);
     QString widest = py::fixed(maxValue_, valueDecimals);
     const QFont font(valueFontname_, static_cast<int>(valueFontsize_), QFont::Bold);
     const QFontMetrics fm(font);
@@ -520,7 +526,9 @@ void AnalogGauge::createValuesText() {
     // halfway between the scale's start and end
     const double angleEnd = scaleAngleStartValue_ + scaleAngleSize_ - 360;
     const double angle = (angleEnd - scaleAngleStartValue_) / 2 + scaleAngleStartValue_;
-    drawCentered(painter, fm, textRadius * std::cos(radians(angle)), textRadius * std::sin(radians(angle)), text);
+    const double raise = centerHeart ? widgetDiameter_ / bigNeedleCenterSize * kCenterHeartRaise : 0;
+    drawCentered(painter, fm, textRadius * std::cos(radians(angle)), textRadius * std::sin(radians(angle)) - raise,
+                 text);
 }
 
 void AnalogGauge::createUnitsText() {
@@ -738,40 +746,19 @@ void AnalogGauge::drawFrame() {
     }
 }
 
-// ---- BeatingSvgWidget ----
+// ---- Heartbeat ----
 
-BeatingSvgWidget::BeatingSvgWidget(const QString& restSvgFile, const QString& beatSvgFile, const QColor& restColor,
-                                   const QColor& beatColor, std::function<double()> bpmSource, QWidget* parent)
-    : QWidget(parent),
-      restColor_(restColor),
-      beatColor_(beatColor),
-      bpmSource_(std::move(bpmSource)),
-      beatTimer_(new QTimer(this)),
-      pulseTimer_(new QTimer(this)) {
-    restRenderer_ = coloredRenderer(restSvgFile, restColor);
-    beatRenderer_ = coloredRenderer(beatSvgFile, beatColor);
+Heartbeat::Heartbeat(std::function<double()> bpmSource, QObject* parent)
+    : QObject(parent), bpmSource_(std::move(bpmSource)), beatTimer_(new QTimer(this)), pulseTimer_(new QTimer(this)) {
     beatTimer_->setSingleShot(true);
     beatTimer_->setTimerType(Qt::PreciseTimer);
-    connect(beatTimer_, &QTimer::timeout, this, &BeatingSvgWidget::nextPhase);
+    connect(beatTimer_, &QTimer::timeout, this, &Heartbeat::nextPhase);
     beatTimer_->start(0);
     pulseTimer_->setTimerType(Qt::PreciseTimer);
-    connect(pulseTimer_, &QTimer::timeout, this, &BeatingSvgWidget::pulseStep);
+    connect(pulseTimer_, &QTimer::timeout, this, &Heartbeat::pulseStep);
 }
 
-QSvgRenderer* BeatingSvgWidget::coloredRenderer(const QString& svgFile, const QColor& color) {
-    QFile file(svgFile);
-    QByteArray svg;
-    if (file.open(QIODevice::ReadOnly)) {
-        svg = file.readAll();
-    }
-    svg.replace(QByteArrayLiteral("fill=\"#000000\""), QByteArrayLiteral("fill=\"") + color.name().toLatin1() + '"');
-    auto* renderer = new QSvgRenderer(svg, this);
-    renderer->setAspectRatioMode(Qt::KeepAspectRatio);
-    return renderer;
-}
-
-// the rate is read again every beat, so it follows the heart rate as it changes
-void BeatingSvgWidget::nextPhase() {
+void Heartbeat::nextPhase() {
     const double bpm = bpmSource_();
     if (bpm <= 0) {
         // no reading: rest and check again shortly
@@ -789,10 +776,9 @@ void BeatingSvgWidget::nextPhase() {
     }
 }
 
-void BeatingSvgWidget::setBeating(bool beating) {
+void Heartbeat::setBeating(bool beating) {
     if (beating != beating_) {
         beating_ = beating;
-        update();
         const int fps = Performance::current().gaugeFps();
         if (beating) {
             pulseClock_.start();
@@ -806,18 +792,12 @@ void BeatingSvgWidget::setBeating(bool beating) {
     }
 }
 
-void BeatingSvgWidget::pulseStep() {
+void Heartbeat::pulseStep() {
     const double level = std::max(0.0, 1 - pulseClock_.nsecsElapsed() / 1e9 / kPulseSeconds);
     if (level == 0) {
         pulseTimer_->stop();
     }
     emit pulsed(level);
-}
-
-void BeatingSvgWidget::paintEvent(QPaintEvent*) {
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-    (beating_ ? beatRenderer_ : restRenderer_)->render(&painter, QRectF(rect()));
 }
 
 // ---- RotatingSvgWidget ----
@@ -897,18 +877,26 @@ Gauge::Gauge(const QString& svgFile, const std::optional<Beat>& beat, bool spin,
     auto* layout = new QGridLayout(this);
     AnalogGauge* gauge = gauge_;
     if (beat) {
-        // the heart beats at the gauge's value
-        auto* heart = new BeatingSvgWidget(imagePath(svgFile), imagePath(beat->svgFile), beat->restColor,
-                                           beat->beatColor,
-                                           [gauge] { return gauge->value() > gauge->minValue() ? gauge->value() : 0; });
-        // the center point nested hearts, red outside to pink in the middle, pulsing with each beat
+        // the center point nested hearts in the color for the gauge's value (paler toward the middle, see
+        // centerRingsPale), pulsing with each beat at it
+        heart_ = new Heartbeat([gauge] { return gauge->value() > gauge->minValue() ? gauge->value() : 0; }, this);
         gauge->centerHeart = true;
-        const QList<QColor> colors{heart->beatColor(), heart->restColor()};
-        gauge->setCenterRings(colors);
-        connect(heart, &BeatingSvgWidget::pulsed, gauge,
-                [gauge, colors](double level) { gauge->setCenterRings(colors, level); });
-        background_ = heart;
-        layout->addWidget(background_, 0, 0);
+        heartColors_ = beat->colors;
+        std::stable_sort(heartColors_.begin(), heartColors_.end(),
+                         [](const auto& a, const auto& b) { return a.first < b.first; });
+        // (LayoutViewer lists them with the colors a theme can change)
+        QStringList names;
+        for (const auto& [value, color] : heartColors_) {
+            names.append(color.name());
+        }
+        theme::setPaintedColors(gauge, names);
+        connect(heart_, &Heartbeat::pulsed, this, [this](double level) {
+            heartLevel_ = level;
+            colorHeart();
+        });
+        connect(gauge, &AnalogGauge::valueChanged, this, &Gauge::colorHeart);
+        connect(&theme::notifier(), &theme::Notifier::changed, this, &Gauge::colorHeart);
+        colorHeart();
     } else if (spin) {
         // the chainring spins at the reading, in RPM
         auto* chainring = new RotatingSvgWidget(
@@ -926,6 +914,15 @@ Gauge::Gauge(const QString& svgFile, const std::optional<Beat>& beat, bool spin,
         layout->addWidget(svg, 0, 0);
     }
     layout->addWidget(gauge_, 0, 0);
+}
+
+QColor Gauge::heartColor() const {
+    return heartColors_.isEmpty() ? QColor() : themed(colorAt(heartColors_, gauge_->value()));
+}
+
+void Gauge::colorHeart() {
+    const QColor color = heartColor();
+    gauge_->setCenterRings(QList<QColor>{color, color}, heartLevel_);
 }
 
 }  // namespace awo

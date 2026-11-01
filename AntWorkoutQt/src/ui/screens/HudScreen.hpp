@@ -77,6 +77,18 @@ constexpr double kBeatSeconds = 0.2;
 // The power gauge as the workout screen shows it, the reading in the middle as big as fits in its rings
 Gauge* newPowerGauge();
 
+// the heart rate gauge's hearts: light pink up to kHeartPinkBpm, through red to dark red at kHeartDarkOfMax of the max
+// heart rate (none set: the gauge's 200 BPM top); each color can be changed by a theme
+inline const QString kHeartPink = QStringLiteral("#ffb3c6");
+inline const QString kHeartRed = QStringLiteral("#e8102a");
+inline const QString kHeartDark = QStringLiteral("#800014");
+constexpr double kHeartPinkBpm = 90;
+constexpr double kHeartDarkOfMax = 0.95;
+QList<std::pair<double, QColor>> heartColors(int maxHr);
+// The heart rate gauge as the workout screen shows it: its center nested hearts the size of the other gauges' rings,
+// in the color for the heart rate at maxHr, the reading in the middle as big as fits and the units below
+Gauge* newHeartRateGauge(int maxHr);
+
 // The power gauge's nested circles, each the band's color at a power: the innermost the power now, then out from it
 // the average over each block of the ride (kPowerRingSeconds long, or setSeconds), newest to oldest. A block's average
 // is worked out once, when it ends, and kept: each ring holds its color until the next block ends and moves it out one.

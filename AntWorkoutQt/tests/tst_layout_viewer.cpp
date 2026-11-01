@@ -210,6 +210,18 @@ private slots:
         // the workout graph's stars, which it paints itself
         QVERIFY(colors.contains(MaxStar::kColor.toLower()));
         QVERIFY(controls.usesText(MaxStar::kColor.toLower()).contains(QStringLiteral("Workout")));
+        // the heart rate gauge's hearts' colors, and changing one recolors the hearts
+        for (const QString& heart : {kHeartPink, kHeartRed, kHeartDark}) {
+            QVERIFY(colors.contains(heart));
+            QVERIFY(controls.usesText(heart).contains(QStringLiteral("Workout")));
+        }
+        Gauge* hrGauge = display.workoutHud()->heartRateGauge();
+        hrGauge->gauge()->setValue(40);
+        QCOMPARE(hrGauge->heartColor(), QColor(kHeartPink));
+        controls.setColor(kHeartPink, QStringLiteral("#123456"));
+        QTRY_COMPARE(hrGauge->heartColor(), QColor(QStringLiteral("#123456")));
+        controls.setColor(kHeartPink, std::nullopt);
+        QTRY_COMPARE(hrGauge->heartColor(), QColor(kHeartPink));
         // the zone colors are the FTP Colors tab's, not on this list unless something else uses them
         QVERIFY(!colors.contains(zones::zoneColors()[2].toLower()));
         // a color changed: everywhere it's used, once the restyle runs

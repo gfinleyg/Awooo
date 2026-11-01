@@ -1133,8 +1133,7 @@ void ControlWindow::identify(QWidget* widget) {
     bool inGauge = false;
     for (int i = 0; i < std::min<qsizetype>(3, chain.size()); ++i) {
         const QWidget* part = chain[i];
-        inGauge = inGauge || isA<AnalogGauge>(part) || isA<Gauge>(part) || isA<RotatingSvgWidget>(part) ||
-                  isA<BeatingSvgWidget>(part);
+        inGauge = inGauge || isA<AnalogGauge>(part) || isA<Gauge>(part) || isA<RotatingSvgWidget>(part);
     }
     // its colors: the widget's own, else the closest part around it (never the whole screen's)
     WidgetColors colors;

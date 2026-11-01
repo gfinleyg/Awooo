@@ -134,6 +134,38 @@ Gauge* newPowerGauge() {
     return gauge;
 }
 
+QList<std::pair<double, QColor>> heartColors(int maxHr) {
+    const double dark = std::max((maxHr > 0 ? maxHr : 200) * kHeartDarkOfMax, kHeartPinkBpm + 10);
+    // (red a little past halfway, so the dark red is kept for near the max)
+    return {{kHeartPinkBpm, QColor(kHeartPink)},
+            {kHeartPinkBpm + (dark - kHeartPinkBpm) * 0.6, QColor(kHeartRed)},
+            {dark, QColor(kHeartDark)}};
+}
+
+Gauge* newHeartRateGauge(int maxHr) {
+    auto* gauge = new Gauge({}, Gauge::Beat{heartColors(maxHr)});
+    AnalogGauge* w = gauge->gauge();
+    w->setNeedleColor(QColor(kGaugeRed));
+    w->setMouseTracking(false);
+    w->needleCenterBg = {{0, QColor(QStringLiteral("#FFFFFF"))}};
+    w->setScalePolygonColors(QGradientStops{{0, QColor(0, 0, 0, 0)}});
+    w->setOuterCircleBg({{0, QColor(0, 0, 0, 0)}});
+    // (as big a center as the power and cadence gauges')
+    w->bigNeedleCenterSize = 5;
+    w->units = QStringLiteral("BPM");
+    w->initialValueFontsize = 56;
+    w->altUnitsDisplay = true;
+    w->fitValueInCenter = true;
+    // the outermost heart the color itself, the middle pale enough for the reading over it
+    w->centerRingsPale = {0.0, 0.75};
+    w->setMinValue(40);
+    w->setMaxValue(200);
+    w->setEnableBarGraph(false);
+    w->setScalaCount(2);
+    w->scalaSubdivCount = 5;
+    return gauge;
+}
+
 void PowerRings::setSeconds(double seconds) {
     seconds_ = seconds;
     start_.reset();
@@ -530,24 +562,8 @@ void HudScreen::buildGauges() {
     // (the gauges either side can move without the whole screen resizing)
     rideAtWidget_->installEventFilter(this);
     if (state.antHRM) {
-        // a pink resting heart, red and bigger on each beat at the heart rate
-        hrGaugeDisplay_ = new Gauge(QStringLiteral("HeartSmaller.svg"),
-                                    Gauge::Beat{QStringLiteral("Heart.svg"), QColor(QStringLiteral("#FF8FAB")),
-                                                QColor(QStringLiteral("#E8102A"))});
-        AnalogGauge* w = hrGaugeDisplay_->gauge();
-        w->setNeedleColor(QColor(kGaugeRed));
-        w->setMouseTracking(false);
-        w->needleCenterBg = {{0, QColor(QStringLiteral("#FFFFFF"))}};
-        w->setScalePolygonColors(QGradientStops{{0, QColor(0, 0, 0, 0)}});
-        w->setOuterCircleBg({{0, QColor(0, 0, 0, 0)}});
-        // (smaller is a bigger center: its hearts)
-        w->bigNeedleCenterSize = 12;
-        w->units = QStringLiteral("BPM");
-        w->setMinValue(40);
-        w->setMaxValue(200);
-        w->setEnableBarGraph(false);
-        w->setScalaCount(2);
-        w->scalaSubdivCount = 5;
+        // its center hearts beating at the heart rate, pink to dark red toward the max heart rate
+        hrGaugeDisplay_ = newHeartRateGauge(state.maxHr);
         if (state.workoutMode) {
             hudLayout_->addWidget(hrGaugeDisplay_, 15, 21, 6, 4);
         } else {

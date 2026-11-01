@@ -49,6 +49,14 @@ Python app's own results (`tests\golden\`).
   edge, as if at the top cadence. The last reading is kept for up to 4 s now; past that it's still the outer edge, and
   with no power (coasting) it's the inner edge. The synopsis' rings rebuilt from a ride's readings do the same.
 
+- **The heart rate gauge has no heart behind it any more; its center hearts are as big as the other gauges' center
+  rings and colored by the heart rate.** They're light pink up to 90 BPM, then blend through red to dark red at 95%
+  of the max heart rate set (no max set: of 200 BPM), the middle hearts paler so the reading over them stays easy to
+  read. They still pulse with each beat. The reading sits in the middle as big as fits in the heart (raised a little
+  into its widest part) with "BPM" below, like the power and cadence gauges. The three colors can be changed in a
+  theme's colors (`#ffb3c6`, `#e8102a`, `#800014`), and LayoutViewer lists them. The Python app's resting/beating
+  heart image and its small red-to-pink hearts are gone, so the `hr_gauge` parity scene is meant to differ.
+
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".
 

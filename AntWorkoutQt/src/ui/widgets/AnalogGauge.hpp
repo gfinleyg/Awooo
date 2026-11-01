@@ -4,14 +4,14 @@
 // gauges on the workout screen. A scale with tick marks and numbers, a colored band up to the needle, a needle that
 // eases toward each reading at the Performance setting's frame rate, the reading and units in the middle, nested
 // center rings (the power gauge's recent blocks, the cadence gauge's beat with its outermost a gear turning with the
-// chainring, the heart rate gauge's nested hearts pulsing with the heart), and the Ride At target arc.
+// chainring, the heart rate gauge's nested hearts pulsing with the heartbeat), and the Ride At target arc.
 //
 // It's drawn in layers kept as pixmaps: the face under the band (the outer ring) and over it (ticks, numbers) are
 // redrawn only by redraw(); each frame (redrawFrame(): a reading, the needle easing, the rings, the arc) only the
 // moving parts are drawn over them. Repaints from an animated widget behind it just copy the last frame.
 //
-// Gauge: the gauge over a background image: a resting/beating heart (heart rate, its center nested hearts pulsing with
-// it) or a spinning chainring (cadence).
+// Gauge: the gauge over a background image (a spinning chainring for cadence), or for heart rate with no background, its
+// center nested hearts pulsing with the heartbeat and colored by the heart rate.
 
 #include <QElapsedTimer>
 #include <QGradient>
@@ -43,6 +43,10 @@ public:
     static constexpr double kCenterGearDepth = 0.5;
     // the rings as nested hearts (centerHeart): each outline from this many points
     static constexpr int kCenterHeartPoints = 72;
+    // with them, the reading raised this much of the center's radius into the heart's widest part, and (fitValueInCenter)
+    // fitted in this much of the room a circle would give it
+    static constexpr double kCenterHeartRaise = 0.15;
+    static constexpr double kCenterHeartFit = 0.7;
 
     explicit AnalogGauge(QWidget* parent = nullptr);
 
@@ -201,48 +205,38 @@ private:
     bool paintCacheDirty_ = true;
     bool frameDirty_ = true;
     std::map<std::tuple<double, double, double, int, double>, QPolygonF> pieCache_;
-    std::optional<std::pair<std::tuple<double, double, double, int, double, QString>, double>> fittedValueFontsize_;
+    std::optional<std::pair<std::tuple<double, double, double, int, double, QString, bool>, double>> fittedValueFontsize_;
     QTimer* needleTimer_;
     QElapsedTimer needleClock_;
     double needleLastStep_ = 0;
 };
 
-// a background image that flips between a resting and a beating svg once per beat, at the rate bpmSource() returns;
-// only repaints twice a beat, so it stays cheap under the gauge drawn over it. pulsed(level): 1 as each beat starts,
-// fading to 0 over kPulseSeconds at the Performance setting's frame rate (0 fps: 1 for the beat, 0 at rest), e.g. for
-// the gauge's center hearts
-class BeatingSvgWidget : public QWidget {
+// a heartbeat at the rate bpmSource() returns (read again every beat, so it follows the heart rate as it changes):
+// beating() for the first kBeatFraction of each beat. pulsed(level): 1 as each beat starts, fading to 0 over
+// kPulseSeconds at the Performance setting's frame rate (0 fps: 1 for the beat, 0 at rest), e.g. for the gauge's center
+// hearts
+class Heartbeat : public QObject {
     Q_OBJECT
 
 public:
-    // the portion of each beat spent showing the larger heart
+    // the portion of each beat that's the beat
     static constexpr double kBeatFraction = 0.35;
     // (as long as the cadence gauge's beat)
     static constexpr double kPulseSeconds = 0.2;
 
-    BeatingSvgWidget(const QString& restSvgFile, const QString& beatSvgFile, const QColor& restColor,
-                     const QColor& beatColor, std::function<double()> bpmSource, QWidget* parent = nullptr);
+    explicit Heartbeat(std::function<double()> bpmSource, QObject* parent = nullptr);
     QTimer* beatTimer() const { return beatTimer_; }
     QTimer* pulseTimer() const { return pulseTimer_; }
     bool beating() const { return beating_; }
-    const QColor& restColor() const { return restColor_; }
-    const QColor& beatColor() const { return beatColor_; }
     void setBeating(bool beating);
 
 signals:
     void pulsed(double level);
 
-protected:
-    void paintEvent(QPaintEvent* event) override;
-
 private:
-    QSvgRenderer* coloredRenderer(const QString& svgFile, const QColor& color);
     void nextPhase();
     void pulseStep();
 
-    QColor restColor_, beatColor_;
-    QSvgRenderer* restRenderer_;
-    QSvgRenderer* beatRenderer_;
     std::function<double()> bpmSource_;
     bool beating_ = false;
     QTimer* beatTimer_;
@@ -292,25 +286,32 @@ class Gauge : public QWidget {
     Q_OBJECT
 
 public:
-    enum class Background { None, Image, Beating, Spinning };
+    // the center's nested hearts, colored by the gauge's value from (value, color) stops, blended between (each color
+    // "#rrggbb", through the theme)
     struct Beat {
-        QString svgFile;
-        QColor restColor, beatColor;
+        QList<std::pair<double, QColor>> colors;
     };
 
-    // svgFile: the background (none: no background); beat: beats at the gauge's value (heart rate); spin: spins at
-    // the gauge's reading (cadence)
+    // svgFile: the background (none: no background); beat: no background, the center's nested hearts beat at the
+    // gauge's value (heart rate); spin: spins at the gauge's reading (cadence)
     explicit Gauge(const QString& svgFile = {}, const std::optional<Beat>& beat = std::nullopt, bool spin = false,
                    QWidget* parent = nullptr);
 
     AnalogGauge* gauge() const { return gauge_; }
     QWidget* background() const { return background_; }
     RotatingSvgWidget* chainring() const { return qobject_cast<RotatingSvgWidget*>(background_); }
-    BeatingSvgWidget* heart() const { return qobject_cast<BeatingSvgWidget*>(background_); }
+    Heartbeat* heart() const { return heart_; }
+    // the hearts' color now (through the theme)
+    QColor heartColor() const;
 
 private:
+    void colorHeart();
+
     AnalogGauge* gauge_;
     QWidget* background_ = nullptr;
+    Heartbeat* heart_ = nullptr;
+    QList<std::pair<double, QColor>> heartColors_;
+    double heartLevel_ = 0.0;
 };
 
 // the app's images folder (beside the exe)

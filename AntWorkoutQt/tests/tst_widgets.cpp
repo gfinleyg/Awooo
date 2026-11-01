@@ -480,24 +480,40 @@ private slots:
         QCOMPARE(w->centerGearAngle(), std::optional<double>(chainring->angle()));
     }
 
-    // (test_power_spiral.py test_heart_rate_rings_are_hearts_pulsing_with_the_heart) the heart rate gauge's center:
-    // nested hearts, red outside to pink in the middle, brightest as each beat starts and fading over kPulseSeconds
-    // (0 fps: bright for the beat, not at rest)
+    // (test_power_spiral.py test_heart_rate_rings_are_hearts_pulsing_with_the_heart, changed) the heart rate gauge's
+    // center: nested hearts in the color for the heart rate, brightest as each beat starts and fading over kPulseSeconds
+    // (0 fps: bright for the beat, not at rest); no heart image behind it
     void heartRateRingsPulseWithTheHeart() {
         Performance::current().setGaugeFps(60);
-        Gauge gauge(QStringLiteral("HeartSmaller.svg"),
-                    Gauge::Beat{QStringLiteral("Heart.svg"), QColor(QStringLiteral("#FF8FAB")),
-                                QColor(QStringLiteral("#E8102A"))});
+        Gauge gauge({}, Gauge::Beat{{{90, QColor(QStringLiteral("#ffb3c6"))}, {170, QColor(QStringLiteral("#800014"))}}});
         AnalogGauge* w = gauge.gauge();
-        BeatingSvgWidget* heart = gauge.heart();
+        w->setMinValue(40);
+        w->setMaxValue(200);
+        Heartbeat* heart = gauge.heart();
         heart->beatTimer()->stop();
+        QVERIFY(!gauge.background());
         QVERIFY(w->centerHeart);
         QVERIFY(w->centerRings());
         QCOMPARE(w->centerRings()->first,
-                 (QList<QColor>{QColor(QStringLiteral("#E8102A")), QColor(QStringLiteral("#FF8FAB"))}));
+                 (QList<QColor>{QColor(QStringLiteral("#ffb3c6")), QColor(QStringLiteral("#ffb3c6"))}));
         QCOMPARE(w->centerRings()->second, 0.0);
+        // light pink up to the first stop, blended to the last, which it holds past it
+        w->setValue(130);
+        const QColor halfway = gauge.heartColor();
+        QVERIFY(std::abs(halfway.red() - 192) <= 1 && std::abs(halfway.green() - 90) <= 1 &&
+                std::abs(halfway.blue() - 109) <= 1);
+        QCOMPARE(w->centerRings()->first.front(), gauge.heartColor());
+        w->setValue(195);
+        QCOMPARE(gauge.heartColor(), QColor(QStringLiteral("#800014")));
+        // through the theme
+        theme::current().colors.insert(QStringLiteral("#800014"), QStringLiteral("#123456"));
+        theme::apply();
+        QCOMPARE(w->centerRings()->first.front(), QColor(QStringLiteral("#123456")));
+        theme::current().reset();
+        theme::apply();
+        QCOMPARE(theme::paintedColors(w), (QStringList{QStringLiteral("#ffb3c6"), QStringLiteral("#800014")}));
         QList<double> levels;
-        connect(heart, &BeatingSvgWidget::pulsed, &gauge, [&](double level) { levels.append(level); });
+        connect(heart, &Heartbeat::pulsed, &gauge, [&](double level) { levels.append(level); });
         heart->setBeating(true);
         QCOMPARE(w->centerRings()->second, 1.0);
         QVERIFY(heart->pulseTimer()->isActive());
