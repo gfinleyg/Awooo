@@ -1,8 +1,9 @@
 #pragma once
 
 // A label over the window's gradient (the workout screen's "Up Next:" and "Coming up..." headers) whose text gets a
-// halo where it doesn't stand out from the gradient behind it, as the zone legend's numbers do (ZoneLegend): light
-// under dark text and dark under light, only while the contrast is under ZoneLegend::kMinContrast.
+// one pixel outline where it doesn't stand out from the gradient behind it (contrast under ZoneLegend::kMinContrast,
+// as the zone legend's numbers get their halo). The outline is the gradient behind the text taken toward the lightest
+// of the theme's background colors, only as far as it needs to go to be seen against the text.
 
 #include <QLabel>
 
@@ -18,6 +19,8 @@ public:
     QRectF textRect() const;
     // whether the text is drawn over a halo (with the theme as it is and where this is in its window)
     bool haloed() const;
+    // the outline's color
+    QColor haloColor() const;
 
 protected:
     void paintEvent(QPaintEvent* event) override;

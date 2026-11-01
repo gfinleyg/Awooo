@@ -37,35 +37,11 @@ Python app's own results (`tests\golden\`).
   the filled part seemed to vanish into the background. Both bars and the "Block time remaining" box are rounded now,
   like the workout timer boxes.
 
-- **The workout screen's "Up Next:", "Coming up..." and "Workout Grades" headers get a halo where their text doesn't
-  stand out** from the window's gradient behind them, as the zone legend's numbers do: a thin light outline around
-  dark text (dark around light), only while the contrast is under WCAG AA (4.5). In the Python app these headers
-  could nearly vanish in themes whose text color is close to the top of the window's gradient.
-
-- **The last block's "Up Next:" and "You're on the last block, way to go!" go 30 seconds into it**, leaving the box
-  empty for the rest of a long last block (a shorter one ends before then, so they show to the end, as in the Python
-  app, which showed them the whole block). Not in a ramp test, whose next block is only added just before the one
-  being ridden ends.
-
-- **Nothing on the workout screen moves once it's built.** In the Python app:
-  - the "Coming up..." blocks were centered in their box, so each time a block finished the rest slid down half a
-    row;
-  - a two line workout message pushed Ride At up while it showed (the room kept for it was measured before its font
-    was set);
-  - the whole screen moved right when the workout ended, to make room for the wider block grades.
-
-  Now:
-  - the left column is the grades' width from the start (the gauge in the middle is that much narrower);
-  - the coming up list starts right under "Coming up...", its blocks from the top down;
-  - the two lines the message may use are always kept (a longer message is made smaller to fit them; it used to get
-    a third line);
-  - the block, interval and timer texts can't widen the screen's columns. Switching between a block and an interval
-    only changes the current block's box.
-
-- **The "Coming up..." blocks' and the Up Next box's text is centered**, and a line too long for its block (a song's
-  title, mostly) slowly scrolls across it and back, pausing at each end. The Python app made such text smaller to fit.
-  The setup screen's workout preview is the same: centered, scrolled, and its blocks from the top of it rather than
-  centered in it. The workout picker's preview is as it was.
+- **The workout screen's "Up Next:", "Coming up..." and "Workout Grades" headers get a one pixel outline where their
+  text doesn't stand out** from the window's gradient behind them (contrast under WCAG AA, 4.5, as the zone legend's
+  numbers get their halo). The outline is the window's color behind the text, lightened toward the theme's lightest
+  background color only as far as it needs to go to be seen against the text (3:1). In the Python app these headers could
+  nearly vanish in themes whose text color is close to the top of the window's gradient.
 
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".

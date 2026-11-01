@@ -765,15 +765,20 @@ private slots:
         label->setStyleSheet(QStringLiteral("color: #000000; font: 900 22pt 'Orbitron';"));
         label->clear();
         QVERIFY(!label->haloed());
-        // drawn with its halo: light around the dark text
+        // its outline: no lighter than it takes to stand out from the text, so short of the theme's lightest
         label->setText(QStringLiteral("Up Next:"));
+        const QColor halo = label->haloColor();
+        QVERIFY(theme::contrast(halo, Qt::black) >= 3.0);
+        QVERIFY(theme::contrast(halo, Qt::black) < 3.1);
+        QVERIFY(theme::luminance(halo) < theme::luminance(QColor(QStringLiteral("#dadbde"))));
+        // drawn around the dark text
         QImage image(label->size(), QImage::Format_ARGB32);
         image.fill(QColor(QStringLiteral("#28275e")));
         label->render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
         int light = 0;
         for (int y = 0; y < image.height(); ++y) {
             for (int x = 0; x < image.width(); ++x) {
-                light += image.pixelColor(x, y).lightness() > 200;
+                light += image.pixelColor(x, y).lightness() > QColor(QStringLiteral("#28275e")).lightness() + 20;
             }
         }
         QVERIFY(light > 50);
