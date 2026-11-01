@@ -317,7 +317,6 @@ QWidget* scenePowerGauge() {
 void cadenceGaugeLook(AnalogGauge* w) {
     w->setNeedleColor(kGaugeRed);
     w->setOuterCircleBg({{0, QColor(0, 0, 0, 0)}});
-    w->setScalePolygonColors(QGradientStops{{0, QColor(0, 0, 0, 0)}});
     w->bigScaleMarker = QColor(0, 0, 0, 0);
     w->needleCenterBg = {{0, QColor(QStringLiteral("#FFFFFF"))}};
     w->bigNeedleCenterSize = 5;
@@ -337,9 +336,14 @@ void cadenceGaugeLook(AnalogGauge* w) {
 QWidget* sceneCadenceGauge() {
     auto* gauge = new Gauge(QStringLiteral("Chainring.svg"), std::nullopt, true);
     gauge->chainring()->spinTimer()->stop();
-    cadenceGaugeLook(gauge->gauge());
-    gauge->gauge()->rescale();
-    gauge->gauge()->setValue(87.4);
+    AnalogGauge* w = gauge->gauge();
+    cadenceGaugeLook(w);
+    // (the cadence zones' band, which the Python app's gauge doesn't have: CHANGES.md)
+    w->setEnableBarGraph(false);
+    gauge->chainring()->scale = w->gaugeColorInnerRadiusFactor;
+    w->setValueColors(zones::zoneStops(ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm)));
+    w->rescale();
+    w->setValue(87.4);
     return gaugeShown(gauge);
 }
 

@@ -955,8 +955,10 @@ void HudScreen::showEvent(QShowEvent* event) {
 void HudScreen::gaugeChooser() {
     // each zone fading in where the needle points at its start, for any FTP
     wattGaugeDisplay_->gauge()->setValueColors(zones::zoneStops(zones::powerRanges()));
-    if (cadenceMode_ && cadenceGaugeDisplay_) {
-        cadenceGaugeDisplay_->gauge()->setValueColors(zones::zoneStops(appState().ftpRanges));
+    // the cadence gauge's band by Musical Cadence Mode's cadence zones, whatever the mode
+    if (cadenceGaugeDisplay_) {
+        cadenceGaugeDisplay_->gauge()->setValueColors(zones::zoneStops(
+            cadenceMode_ ? appState().ftpRanges : ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm)));
     }
 }
 

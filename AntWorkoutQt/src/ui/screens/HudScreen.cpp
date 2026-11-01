@@ -475,7 +475,6 @@ void HudScreen::buildGauges() {
         w->setNeedleColor(QColor(kGaugeRed));
         w->setMouseTracking(false);
         w->setOuterCircleBg({{0, QColor(0, 0, 0, 0)}});
-        w->setScalePolygonColors(QGradientStops{{0, QColor(0, 0, 0, 0)}});
         w->bigScaleMarker = QColor(0, 0, 0, 0);
         w->needleCenterBg = {{0, QColor(QStringLiteral("#FFFFFF"))}};
         w->bigNeedleCenterSize = 5;
@@ -489,15 +488,16 @@ void HudScreen::buildGauges() {
         w->altUnitsDisplay = true;
         w->valueDecimals = 1;
         w->fitValueInCenter = true;
+        // the cadence zones' band in every mode (like the power gauge's, filled up to the needle; colored by
+        // gaugeChooser), the chainring shrunk to sit inside it
+        w->setEnableBarGraph(false);
         if (cadenceMode_) {
-            // the cadence zones' band (like the power gauge's), a numbered tick every 10 RPM, and the chainring shrunk
-            // to sit inside the band; 0 to 140 RPM (the needle stops at 140, the number in the middle doesn't)
+            // a numbered tick every 10 RPM and a thinner band; 0 to 140 RPM (the needle stops at 140, the number in
+            // the middle doesn't)
             w->setMaxValue(140);
             w->setScalaCount(14);
             w->initialScaleFontsize = 13;
             w->gaugeColorInnerRadiusFactor = 0.95;
-            w->setEnableBarGraph(false);
-            cadenceGaugeDisplay_->chainring()->scale = w->gaugeColorInnerRadiusFactor;
             // (colored once there's a target)
             w->setCenterRings(QList<QColor>{QColor(QStringLiteral("#ffffff")), QColor(QStringLiteral("#ffffff"))});
             hudLayout_->addWidget(cadenceGaugeDisplay_, 4, 7, 16, 15);
@@ -510,6 +510,7 @@ void HudScreen::buildGauges() {
             cadenceGaugeDisplay_->setMinimumSize(400, 300);
             hudLayout_->addWidget(cadenceGaugeDisplay_, 10, 0, 9, 11, Qt::AlignBottom);
         }
+        cadenceGaugeDisplay_->chainring()->scale = w->gaugeColorInnerRadiusFactor;
         if (!cadenceMode_) {
             // the nested circles too, beating with each pedal stroke as the chainring comes round
             connect(cadenceGaugeDisplay_->chainring(), &RotatingSvgWidget::turned, this,

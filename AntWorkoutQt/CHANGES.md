@@ -63,6 +63,11 @@ Python app's own results (`tests\golden\`).
   theme's colors (`#ffb3c6`, `#e8102a`, `#800014`), and LayoutViewer lists them. The Python app's resting/beating
   heart image and its small red-to-pink hearts are gone, so the `hr_gauge` parity scene is meant to differ.
 
+- **The RPM gauge has a band of the cadence zones' colors in every mode,** filled up to the needle like the power
+  gauge's (the chainring shrunk to sit inside it): the same zones as Musical Cadence Mode's (40/65/90/115 rpm) and the
+  same fades, from the theme's zone colors. The Python app's RPM gauge had no band outside Musical Cadence Mode, so the
+  `cadence_gauge` parity scene, and the workout and free ride screens' scenes, are meant to differ.
+
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".
 

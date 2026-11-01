@@ -78,6 +78,7 @@ public:
     void setEnableDrawNewArc(bool enable = true);
     // the band's colors as (position, color) stops along its conical gradient
     void setScalePolygonColors(const std::optional<QGradientStops>& stops);
+    QGradientStops scalePolygonColors() const { return scalePolygonColors_; }
     // the band from (value, color) stops: each color exactly where the needle points at its value; the end of the
     // scale has the highest value's color (even past the end), stops below the start blend into its color there
     void setValueColors(QList<std::pair<double, QColor>> stops);

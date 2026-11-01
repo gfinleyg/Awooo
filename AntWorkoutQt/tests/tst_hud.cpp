@@ -295,6 +295,24 @@ private slots:
         QTRY_VERIFY(frames >= 5);
     }
 
+    // outside Musical Cadence Mode the cadence gauge has a band too, colored by the cadence zones (not the power
+    // zones the rest of the screen uses), filled up to the needle, the chainring inside it
+    void cadenceGaugeBandFollowsTheCadenceZones() {
+        AppState& state = appState();
+        state.workoutMode = false;
+        state.antCadence = true;
+        state.ftp = 200;
+        state.ftpRanges = zones::powerRanges();
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        AnalogGauge* w = hud.cadenceGauge()->gauge();
+        AnalogGauge expected;
+        expected.setMaxValue(w->maxValue());
+        expected.setValueColors(zones::zoneStops(ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm)));
+        QCOMPARE(w->scalePolygonColors(), expected.scalePolygonColors());
+        QCOMPARE(hud.cadenceGauge()->chainring()->scale, w->gaugeColorInnerRadiusFactor);
+    }
+
     // ---- START, PAUSE, END ----
 
     void startsPausesAndResumes() {
