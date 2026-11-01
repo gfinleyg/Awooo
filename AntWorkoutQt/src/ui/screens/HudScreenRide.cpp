@@ -16,6 +16,7 @@
 #include "AnalogGauge.hpp"
 #include "AntBridge.hpp"
 #include "AppLayout.hpp"
+#include "BlockBubble.hpp"
 #include "ConfirmEndWorkoutWindow.hpp"
 #include "GradeWidgets.hpp"
 #include "HudScreen.hpp"
@@ -134,6 +135,15 @@ void HudScreen::setStartButtonStyle() {
 
 void HudScreen::showTickEvents(const WorkoutEngine::TickEvents& events) {
     const AppState& state = appState();
+    // each block's bubble on the graph as it ends
+    if (events.running && (events.blockStarted || events.intervalBlockStarted)) {
+        finishBlockBubble();
+        blockStart_ = state.secondsPassed;
+    }
+    if (events.completed) {
+        finishBlockBubble();
+    }
+    lastTarget_ = engine_->currentPower();
     if (events.completed) {
         log::event(QStringLiteral("WORKOUT"), QStringLiteral("Workout complete at %1").arg(minimizedDuration(state.secondsPassed)));
         showWorkoutComplete(events);
@@ -785,6 +795,7 @@ void HudScreen::restartWorkout() {
         layout::setText(workoutMessageLabel_, QString());
         updateUpNextRemaining();
         pastPowerIndex_ = 0;
+        clearBlockBubbles();
         spiralWorkoutProgress_->clear(state.workoutDurationSeconds, session::ringHistory());
         gradeOverlay_->clear();
         showWorkoutGrades(false);
@@ -1168,6 +1179,12 @@ void HudScreen::fitGraphTops() {
                 rooms.append({bubble->headroom(), *bubble->star()->y});
             }
         }
+        // (and the block bubbles over the lines)
+        for (const BlockBubble* bubble : blockBubbles_) {
+            if (const std::optional<BlockBubble::Room> room = bubble->room(); room && room->vbox == vbox) {
+                rooms.append({room->headroom, room->value});
+            }
+        }
         vbox->setYRange(0, MaxStar::topWithRoom(vbox, top.first, rooms), 0.0);
     }
 }
@@ -1180,16 +1197,79 @@ void HudScreen::stepMaxStars() {
     for (int phase = 0; phase < maxStars_.size(); ++phase) {
         maxStars_[phase].first->step(now, phase);
     }
-    // the bubbles beside them, each clear of the stars and of the bubbles placed before it
+    // the block bubble, then the max bubbles beside their stars, each clear of the stars and of the bubbles placed
+    // before it
     QList<QRectF> avoid;
     for (const auto& [star, name] : maxStars_) {
         if (star->isVisible()) {
             avoid.append(star->sceneBoundingRect());
         }
     }
+    BlockBubble::stepAll(blockBubbles_, engine_->currentPower(), now, avoid);
     for (MaxBubble* bubble : maxBubbles_) {
         bubble->step(now, avoid);
     }
+}
+
+// the block's average power and cadence over its readings, at the lines' ends now (a curve's latest reading, 0 through a
+// dropout, as it's drawn; the target bar's last target)
+void HudScreen::finishBlockBubble() {
+    if (!blockStart_) {
+        return;
+    }
+    const AppState& state = appState();
+    const double start = *blockStart_;
+    const double end = state.secondsPassed;
+    blockStart_.reset();
+    plot::ViewBox* targetVBox = cadenceMode_ ? progressGraph_->hrCadenceVBox() : progressGraph_->powerVBox();
+    QList<BlockBubble::LineEnd> ends;
+    QList<BlockBubble::Row> rows;
+    // (heart rate has no line, but its curve's end is kept clear too)
+    struct Sensor {
+        QString name, label, unit;
+        plot::ViewBox* vbox;
+        bool shown, row;
+    };
+    const QList<Sensor> sensors = {
+        {QStringLiteral("power"), QStringLiteral("Avg Pwr"), QStringLiteral("W"), progressGraph_->powerVBox(), true, true},
+        {QStringLiteral("cadence"), QStringLiteral("Avg Cad"), QStringLiteral("rpm"), progressGraph_->hrCadenceVBox(),
+         state.showsCadence(), true},
+        {QStringLiteral("hr"), QString(), QString(), progressGraph_->hrCadenceVBox(), state.antHRM, false},
+    };
+    for (const Sensor& sensor : sensors) {
+        if (!sensor.shown) {
+            continue;
+        }
+        const SavedValues& saved = savedValues(sensor.name);
+        if (sensor.row) {
+            BlockBubble::Row row{sensor.label, sensor.unit, std::nullopt};
+            double sum = 0;
+            int count = 0;
+            for (qsizetype i = std::lower_bound(saved.times.begin(), saved.times.end(), start) - saved.times.begin();
+                 i < saved.times.size() && saved.times[i] < end; ++i) {
+                sum += saved.values[i];
+                ++count;
+            }
+            if (count) {
+                row.avg = sum / count;
+            }
+            rows.append(row);
+        }
+        if (!saved.times.isEmpty() && saved.times.back() >= start) {
+            ends.append({sensor.vbox, end - saved.times.back() > kDropoutZeroSeconds ? 0.0 : saved.values.back()});
+        }
+    }
+    const AppState* rideState = &state;
+    auto* bubble = new BlockBubble(start, end, rows, {targetVBox, lastTarget_}, ends, progressGraph_->powerVBox(),
+                                   [rideState] { return rideState->secondsPassed; });
+    progressGraph_->scene()->addItem(bubble);
+    blockBubbles_.append(bubble);
+}
+
+void HudScreen::clearBlockBubbles() {
+    qDeleteAll(blockBubbles_);
+    blockBubbles_.clear();
+    blockStart_.reset();
 }
 
 // a sensor quiet longer than kDropoutZeroSeconds reads 0 instead of freezing on its last value (its next reading

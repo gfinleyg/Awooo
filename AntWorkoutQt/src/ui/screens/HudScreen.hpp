@@ -47,6 +47,7 @@ class ScatterItem;
 class SolidColoredColumns;
 }  // namespace plot
 
+class BlockBubble;
 class ConfirmEndWorkoutWindow;
 class Gauge;
 class GradeList;
@@ -214,6 +215,8 @@ public:
     const music::MusicPlayer* musicPlayer() const { return musicPlayer_.get(); }
     const QList<std::pair<MaxStar*, QString>>& maxStars() const { return maxStars_; }
     const QList<MaxBubble*>& maxBubbles() const { return maxBubbles_; }
+    // each completed block's average power and cadence for the graph, oldest first (one shown at a time)
+    const QList<BlockBubble*>& blockBubbles() const { return blockBubbles_; }
 
     // ---- What's on it (tests, LayoutViewer, the theme picker's preview) ----
 
@@ -316,6 +319,9 @@ private:
     void updateMaxStars(double start);
     void fitGraphTops();
     void stepMaxStars();
+    // the block being ridden (from blockStart_) ended now: its bubble on the graph
+    void finishBlockBubble();
+    void clearBlockBubbles();
     void difficultyChanged(int value);
     void volumeChanged(int value);
     void trainerWattsChanged(int value);
@@ -414,6 +420,10 @@ private:
     QList<std::pair<plot::ScatterItem*, QString>> currentMarkers_;
     QList<std::pair<MaxStar*, QString>> maxStars_;
     QList<MaxBubble*> maxBubbles_;
+    QList<BlockBubble*> blockBubbles_;
+    // when the block being ridden started, and the target it was at the tick before (where its bar ends)
+    std::optional<double> blockStart_;
+    double lastTarget_ = 0;
     QLabel* batteryWarningLabel_ = nullptr;
     PowerSpiral* spiralWorkoutProgress_ = nullptr;
     GradeOverlay* gradeOverlay_ = nullptr;

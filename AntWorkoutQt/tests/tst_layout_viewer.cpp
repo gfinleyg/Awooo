@@ -88,7 +88,10 @@ private slots:
             // the workout view part way through (a ride's own state: the setup screen's FTP and the rider's)
             if (mode.mode != u"free") {
                 QVERIFY(display.workoutHud()->engine().workoutSecondsPassed() > 0);
+                // with the blocks ridden so far's bubbles on the graph
+                QVERIFY(!display.workoutHud()->blockBubbles().isEmpty());
             } else {
+                QVERIFY(display.workoutHud()->blockBubbles().isEmpty());
                 QVERIFY(appState().secondsPassed >= kFreeRideSeconds * 0.4);
             }
             display.showView(QStringLiteral("Init"));

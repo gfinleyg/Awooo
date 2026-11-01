@@ -68,6 +68,16 @@ Python app's own results (`tests\golden\`).
   same fades, from the theme's zone colors. The Python app's RPM gauge had no band outside Musical Cadence Mode, so the
   `cadence_gauge` parity scene, and the workout and free ride screens' scenes, are meant to differ.
 
+- **The workout screen's graph shows a completed block's stats in a bubble**: its average power and cadence
+  ("Avg Pwr 245W", "Avg Cad 88rpm"; no cadence line without a cadence sensor, "--" for one with no readings in the
+  block). One shows at a time: the latest block still on the graph with the same target as the block being ridden,
+  or else the latest block. It pops in where the lines ended as its block did: under the lowest of the power, heart
+  rate and cadence curves and the target bar if it fits there, over the highest if not (the graph's scale grows to
+  make room), kept on the graph and never reaching more than 30 s past the time now, and scrolls along with its
+  block. One that isn't under the top of its own block has a thin diagonal line to it. It's in the max bubbles'
+  colors. The Python app has no block bubbles, so the workout and Musical Cadence Mode screens'
+  parity scenes (`hud_screen`, `cadence_screen`) are meant to differ.
+
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".
 

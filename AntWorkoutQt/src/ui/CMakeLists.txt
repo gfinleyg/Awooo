@@ -40,6 +40,8 @@ add_library(awo_ui STATIC
     screens/SynopsisScreen.hpp
     widgets/AnalogGauge.cpp
     widgets/AnalogGauge.hpp
+    widgets/BlockBubble.cpp
+    widgets/BlockBubble.hpp
     widgets/ColorPicker.hpp
     widgets/FtpColorsEditor.cpp
     widgets/FtpColorsEditor.hpp

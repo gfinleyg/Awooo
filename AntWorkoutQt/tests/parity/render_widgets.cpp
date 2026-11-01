@@ -24,6 +24,7 @@
 #include "AnalogGauge.hpp"
 #include "AntBridge.hpp"
 #include "AppLayout.hpp"
+#include "BlockBubble.hpp"
 #include "CadenceWorkout.hpp"
 #include "FtpColors.hpp"
 #include "FtpColorsEditor.hpp"
@@ -641,8 +642,9 @@ QWidget* sceneWorkoutPicker() {
 }
 
 // The graph's stars at rest (a first goTo puts them straight there) at a time their twinkle is at its middle size,
-// and the bubbles beside them grown in
-void restStars(const QList<std::pair<MaxStar*, QString>>& stars, const QList<MaxBubble*>& bubbles) {
+// and the bubbles beside them (and the block bubble) grown in
+void restStars(const QList<std::pair<MaxStar*, QString>>& stars, const QList<MaxBubble*>& bubbles,
+               const QList<BlockBubble*>& blockBubbles = {}, double target = 0) {
     for (int phase = 0; phase < stars.size(); ++phase) {
         stars[phase].first->step(((3 + phase) * std::numbers::pi - phase * 2.1) / 3.6, phase);
     }
@@ -653,6 +655,7 @@ void restStars(const QList<std::pair<MaxStar*, QString>>& stars, const QList<Max
                 avoid.append(star->sceneBoundingRect());
             }
         }
+        BlockBubble::stepAll(blockBubbles, target, when, avoid);
         for (MaxBubble* bubble : bubbles) {
             bubble->step(when, avoid);
         }
@@ -716,7 +719,7 @@ QWidget* sceneHudScreen() {
     layout->addWidget(hud);
     layout::applyLayout(holder, {{QStringLiteral("Workout"), hud}}, 1.0);
     shown(holder, 1920, 1116);
-    restStars(hud->maxStars(), hud->maxBubbles());
+    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower());
     settle();
     return holder;
 }
@@ -930,7 +933,7 @@ QWidget* sceneCadenceScreen() {
     layout->addWidget(hud);
     layout::applyLayout(holder, {{QStringLiteral("Workout"), hud}}, 1.0);
     shown(holder, 1920, 1116);
-    restStars(hud->maxStars(), hud->maxBubbles());
+    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower());
     settle();
     return holder;
 }
@@ -1058,7 +1061,7 @@ QWidget* viewerScene(const QString& view, const ViewerLook& look = kViewerLooks.
     }
     hud->cadenceGauge()->chainring()->spinTimer()->stop();
     hud->heartRateGauge()->heart()->beatTimer()->stop();
-    restStars(hud->maxStars(), hud->maxBubbles());
+    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower());
     auto* synopsis = qobject_cast<SynopsisScreen*>(display->view(QStringLiteral("Synopsis")));
     for (QTimer* timer : synopsis->findChildren<QTimer*>(Qt::FindDirectChildrenOnly)) {
         timer->stop();

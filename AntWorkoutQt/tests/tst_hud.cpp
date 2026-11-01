@@ -18,6 +18,7 @@
 #include "AppLayout.hpp"
 #include "AppState.hpp"
 #include "AwoParser.hpp"
+#include "BlockBubble.hpp"
 #include "ConfirmEndWorkoutWindow.hpp"
 #include "FakeAnt.hpp"
 #include "FtpTest.hpp"
@@ -26,6 +27,7 @@
 #include "KeyShortcuts.hpp"
 #include "Performance.hpp"
 #include "PowerSpiral.hpp"
+#include "PyCompat.hpp"
 #include "Session.hpp"
 #include "SimulatedRider.hpp"
 #include "TestSupport.hpp"
@@ -33,6 +35,7 @@
 #include "Units.hpp"
 #include "WorkoutData.hpp"
 #include "WorkoutGrading.hpp"
+#include "WorkoutGraph.hpp"
 #include "WorkoutHelpers.hpp"
 #include "ZoneColors.hpp"
 
@@ -548,6 +551,92 @@ private slots:
             for (const RingSample& sample : timeline->samples()) {
                 QVERIFY(sample.seconds >= 0 && sample.seconds <= timeline->duration());
             }
+        }
+    }
+
+    // ---- The block bubbles ----
+
+    // each completed block gets a bubble for the graph with its power and cadence readings' averages; a restart
+    // clears them
+    void blockBubblesShowEachCompletedBlock() {
+        QVERIFY(loadWorkout({"T:Bubbles", "1:120,0.75", "1:120,1.0", "1:120,0.5"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        while (hud.engine().workoutSecondsPassed() < 250) {
+            tickSecond(hud, rider);
+        }
+        QCOMPARE(hud.blockBubbles().size(), qsizetype(2));
+        const BlockBubble* first = hud.blockBubbles().front();
+        QCOMPARE(first->lines().size(), 2);
+        // (the first block's readings, its 120 s up to where it ended)
+        const SavedValues& power = appState().savedPowerVals;
+        double sum = 0;
+        int count = 0;
+        for (qsizetype i = 0; i < power.times.size() && power.times[i] < first->end(); ++i) {
+            if (power.times[i] < first->end() - 120) {
+                continue;
+            }
+            sum += power.values[i];
+            ++count;
+        }
+        QVERIFY(count > 100);
+        QCOMPARE(first->lines()[0], QStringLiteral("Avg Pwr %1W").arg(py::fixed(sum / count, 0)));
+        QVERIFY(first->lines()[1].startsWith(QStringLiteral("Avg Cad ")) && first->lines()[1].endsWith(u"rpm"));
+        hud.restartWorkout();
+        QVERIFY(hud.blockBubbles().isEmpty());
+    }
+
+    // one bubble at a time on the graph as laid out: the latest block's with the target being ridden now, else the
+    // latest block's; inside the graph, reaching no more than 30 s past the time now, and any line to its block
+    // diagonal
+    void blockBubbleShowsOneAtATime_data() {
+        QTest::addColumn<QStringList>("blocks");
+        QTest::addColumn<int>("shown");
+        // (riding the fourth block)
+        QTest::newRow("same target as the first") << QStringList{"0.6", "1.0", "0.8", "0.6"} << 0;
+        QTest::newRow("a new target") << QStringList{"0.6", "1.0", "0.8", "0.7"} << 2;
+        QTest::newRow("same as the latest and an earlier one") << QStringList{"0.6", "1.0", "0.6", "0.6"} << 2;
+    }
+
+    void blockBubbleShowsOneAtATime() {
+        QFETCH(QStringList, blocks);
+        QFETCH(int, shown);
+        QStringList lines{"T:Blocks"};
+        for (const QString& power : blocks) {
+            lines.append(QStringLiteral("1:90,") + power);
+        }
+        QVERIFY(loadWorkout(lines));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        SimulatedRider rider(3);
+        hud.runSimulatedRide(3 * 90 + 30, rider);
+        hud.stopTimers();
+        QCOMPARE(hud.blockBubbles().size(), qsizetype(3));
+        for (const double now : {10.0, 10.0 + BlockBubble::kAppearSeconds}) {
+            QList<QRectF> avoid;
+            BlockBubble::stepAll(hud.blockBubbles(), hud.engine().currentPower(), now, avoid);
+            QCOMPARE(avoid.size(), qsizetype(1));
+        }
+        for (int i = 0; i < 3; ++i) {
+            QCOMPARE(hud.blockBubbles()[i]->isVisible(), i == shown);
+        }
+        const BlockBubble* bubble = hud.blockBubbles()[shown];
+        const plot::ViewBox* vbox = hud.graph()->powerVBox();
+        const QRectF area = vbox->sceneBoundingRect();
+        auto sceneX = [vbox](double t) { return vbox->mapViewToScene(QPointF(t, 0)).x(); };
+        const QRectF rect = bubble->mapRectToScene(bubble->boundingRect()).adjusted(1, 1, -1, -1);
+        QVERIFY(area.adjusted(-0.5, -0.5, 0.5, 0.5).contains(rect));
+        QVERIFY(rect.right() <= sceneX(appState().secondsPassed + BlockBubble::kMaxAheadSeconds) + 0.5);
+        if (bubble->connector()->isVisible()) {
+            const QLineF line(bubble->mapToScene(bubble->connector()->line().p1()),
+                              bubble->mapToScene(bubble->connector()->line().p2()));
+            QVERIFY(line.p2().x() >= sceneX(bubble->start()) - 0.5 && line.p2().x() <= sceneX(bubble->end()) + 0.5);
+            QVERIFY(std::abs(line.dx()) >= 1 && std::abs(line.dy()) >= 1);
         }
     }
 
