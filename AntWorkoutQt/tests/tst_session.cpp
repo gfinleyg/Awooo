@@ -1,5 +1,7 @@
 // The session's rides (src/core/Session): tests/test_session.py and golden/session.json
 
+#include <algorithm>
+
 #include "AppState.hpp"
 #include "Session.hpp"
 #include "TestSupport.hpp"
@@ -140,18 +142,21 @@ private slots:
     }
 
     void ringFromReadings() {
-        const std::pair<QList<double>, QList<double>> power{{0.5, 1.5, 2.5, 3.5}, {100, 200, 300, 400}};
+        const std::pair<QList<double>, QList<double>> power{{0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5},
+                                                            {100, 200, 300, 400, 400, 400, 400}};
         const std::pair<QList<double>, QList<double>> cadence{{0.5, 1.5}, {80, 90}};
-        const Ring ring = session::ringFromReadings(8, power, cadence, true);
-        QCOMPARE(ring.seconds, 8.0);
-        QCOMPARE(ring.samples.size(), 8);
+        const Ring ring = session::ringFromReadings(10, power, cadence, true);
+        QCOMPARE(ring.seconds, 10.0);
+        QCOMPARE(ring.samples.size(), 10);
         // the last 3 seconds' power, the last second's cadence
         QCOMPARE(ring.samples[0], (RingSample{0.5, 100, 80}));
         QCOMPARE(ring.samples[3].power, 300.0);
+        // between pedal strokes: the last cadence
+        QCOMPARE(ring.samples[3].cadence, std::optional<double>(90));
         // the cadence gone quiet with the power still coming in: the lane's outer edge
-        QVERIFY(!ring.samples[3].cadence);
+        QVERIFY(!ring.samples[6].cadence);
         // both quiet: not pedaling
-        QCOMPARE(ring.samples[7], (RingSample{7.5, 0, 0}));
+        QCOMPARE(ring.samples[9], (RingSample{9.5, 0, 0}));
         // no cadence to show
         for (const RingSample& sample : session::ringFromReadings(4, power, {}, false).samples) {
             QVERIFY(!sample.cadence);
@@ -186,18 +191,30 @@ private slots:
             return pair;
         };
         for (const QJsonValue value : all[QStringLiteral("rings")].toArray()) {
+            const auto cadence = readings(value[QStringLiteral("cadence")]);
             const Ring ring = session::ringFromReadings(value[QStringLiteral("length")].toDouble(),
-                                                        readings(value[QStringLiteral("power")]),
-                                                        readings(value[QStringLiteral("cadence")]),
+                                                        readings(value[QStringLiteral("power")]), cadence,
                                                         value[QStringLiteral("hasCadence")].toBool());
             const QJsonArray expectedRing = value[QStringLiteral("ring")].toArray();
             QCOMPARE(ring.seconds, expectedRing[0].toDouble());
             const QJsonArray expectedSamples = expectedRing[1].toArray();
             QCOMPARE(ring.samples.size(), expectedSamples.size());
             for (qsizetype i = 0; i < ring.samples.size(); ++i) {
-                QVERIFY(awotest::sameNumber(expectedSamples[i][0], ring.samples[i].seconds));
-                QVERIFY(awotest::sameNumber(expectedSamples[i][1], ring.samples[i].power));
-                QVERIFY(awotest::sameNumber(expectedSamples[i][2], ring.samples[i].cadence));
+                const RingSample& sample = ring.samples[i];
+                QVERIFY(awotest::sameNumber(expectedSamples[i][0], sample.seconds));
+                QVERIFY(awotest::sameNumber(expectedSamples[i][1], sample.power));
+                if (awotest::sameNumber(expectedSamples[i][2], sample.cadence)) {
+                    continue;
+                }
+                // (CHANGES.md) where the Python app had none (the lane's outer edge): the last cadence reading between
+                // pedal strokes, or 0 with no power
+                QVERIFY(expectedSamples[i][2].isNull() && sample.cadence);
+                const double now = sample.seconds + 0.5;
+                const qsizetype end =
+                    std::upper_bound(cadence.first.begin(), cadence.first.end(), now) - cadence.first.begin();
+                const bool held = end > 0 && now - cadence.first[end - 1] <= session::kRingCadenceHoldSeconds &&
+                                  *sample.cadence == cadence.second[end - 1];
+                QVERIFY(held || (sample.power == 0 && *sample.cadence == 0));
             }
         }
     }

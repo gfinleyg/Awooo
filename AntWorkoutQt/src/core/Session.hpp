@@ -89,6 +89,8 @@ namespace session {
 
 constexpr double kRingPowerSeconds = 3.0;
 constexpr double kRingCadenceSeconds = 1.0;
+// a cadence reading comes only with a pedal stroke (one every 1.5 s at 40 rpm): the last one's kept this long
+constexpr double kRingCadenceHoldSeconds = 4.0;
 
 QList<Ride>& rides();
 // how long the session's rides are, one after the other
@@ -127,6 +129,11 @@ Ring ringFromReadings(double length, const std::pair<QList<double>, QList<double
 // The readings' average over the seconds up to now, the last one if none came in that time, or none after
 // grading::kDropoutSeconds without any
 std::optional<double> recentAverage(const QList<double>& times, const QList<double>& values, double now, double seconds);
+// The cadence the spiral takes now, power the power it takes: the cadence readings' recent average, the last one for
+// kRingCadenceHoldSeconds between pedal strokes, 0 with no power (not pedaling), else none (the cadence sensor gone
+// quiet: the lane's outer edge)
+std::optional<double> ringCadence(const QList<double>& times, const QList<double>& values, double now,
+                                  std::optional<double> power);
 
 }  // namespace session
 

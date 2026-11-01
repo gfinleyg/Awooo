@@ -131,7 +131,6 @@ public:
     static constexpr int kMessageLines = 2;
     // the spiral's power and cadence: each the average over the last this many seconds
     static constexpr double kSpiralAverageSeconds = 3.0;
-    static constexpr double kSpiralCadenceAverageSeconds = 1.0;
 
     // bridge: the ANT connection (its readings go onto the gauges once start() is called); engineClock: the workout
     // engine's (tests: a frozen one, as the Python golden rides had)

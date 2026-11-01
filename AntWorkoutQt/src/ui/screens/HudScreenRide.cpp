@@ -352,11 +352,8 @@ void HudScreen::recordSpiralSample() {
     // (no cadence to show: the spiral's lines at the lanes' outer edges)
     std::optional<double> cadence;
     if (state.showsCadence()) {
-        cadence = recentAverage(state.savedCadenceVals, kSpiralCadenceAverageSeconds);
-        // the cadence sensor gone quiet: the outer edge while the power's still coming, else not pedaling
-        if (!cadence && !power) {
-            cadence = 0;
-        }
+        cadence = session::ringCadence(state.savedCadenceVals.times, state.savedCadenceVals.values,
+                                       state.secondsPassed, power);
     }
     spiralWorkoutProgress_->addSample(engine_->workoutSecondsPassed(), engine_->spiralBlockTime().first,
                                       power.value_or(0), cadence);

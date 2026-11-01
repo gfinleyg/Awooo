@@ -202,10 +202,7 @@ Ring ringFromReadings(double length, const std::pair<QList<double>, QList<double
         const std::optional<double> powerNow = recentAverage(power.first, power.second, now, kRingPowerSeconds);
         std::optional<double> cadenceNow;
         if (hasCadence) {
-            cadenceNow = recentAverage(cadence.first, cadence.second, now, kRingCadenceSeconds);
-            if (!cadenceNow && !powerNow) {
-                cadenceNow = 0;
-            }
+            cadenceNow = ringCadence(cadence.first, cadence.second, now, powerNow);
         }
         ring.samples.append({second + 0.5, powerNow.value_or(0), cadenceNow});
     }
@@ -226,6 +223,21 @@ std::optional<double> recentAverage(const QList<double>& times, const QList<doub
         sum += values[i];
     }
     return sum / static_cast<double>(end - start);
+}
+
+std::optional<double> ringCadence(const QList<double>& times, const QList<double>& values, double now,
+                                  std::optional<double> power) {
+    if (const std::optional<double> cadence = recentAverage(times, values, now, kRingCadenceSeconds)) {
+        return cadence;
+    }
+    if (!power || *power <= 0) {
+        return 0.0;
+    }
+    const qsizetype end = std::upper_bound(times.begin(), times.end(), now) - times.begin();
+    if (end > 0 && now - times[end - 1] <= kRingCadenceHoldSeconds) {
+        return values[end - 1];
+    }
+    return std::nullopt;
 }
 
 }  // namespace session

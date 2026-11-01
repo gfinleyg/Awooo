@@ -207,6 +207,7 @@ private slots:
         QTest::addColumn<double>("expected");   // (-1: none, the lane's outer edge)
         QTest::newRow("no cadence sensor: the outer edge") << false << 9.5 << -1.0 << -1.0;
         QTest::newRow("both coming in: the cadence") << true << 9.5 << 9.5 << 90.0;
+        QTest::newRow("between pedal strokes: the last cadence") << true << 9.5 << 7.0 << 90.0;
         QTest::newRow("the cadence sensor quiet, the power not: the outer edge") << true << 9.5 << 2.0 << -1.0;
         QTest::newRow("both quiet: not pedaling") << true << 2.0 << 2.0 << 0.0;
     }

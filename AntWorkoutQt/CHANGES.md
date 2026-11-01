@@ -43,6 +43,12 @@ Python app's own results (`tests\golden\`).
   background color only as far as it needs to go to be seen against the text (3:1). In the Python app these headers could
   nearly vanish in themes whose text color is close to the top of the window's gradient.
 
+- **The spiral's cadence lines stay where the cadence is between pedal strokes.** A cadence sensor only sends a new
+  reading with a pedal stroke, and the Python app's spiral took more than 2 s without one (while the power kept
+  coming) as the sensor gone quiet, so at a slow cadence or after a missed message its line jumped to the lane's outer
+  edge, as if at the top cadence. The last reading is kept for up to 4 s now; past that it's still the outer edge, and
+  with no power (coasting) it's the inner edge. The synopsis' rings rebuilt from a ride's readings do the same.
+
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".
 
