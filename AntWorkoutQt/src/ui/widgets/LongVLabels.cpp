@@ -11,6 +11,7 @@
 
 #include "AppLayout.hpp"
 #include "AppState.hpp"
+#include "ScrollingLabel.hpp"
 #include "Theme.hpp"
 #include "WorkoutHelpers.hpp"
 #include "ZoneColors.hpp"
@@ -30,7 +31,7 @@ LongVLabels::LongVLabels(const ftpcolors::ZoneRanges& ranges, QWidget* parent)
     // (the labels flush with the Up Next box)
     main->setContentsMargins(0, 0, 0, 0);
     for (int i = 0; i < kWidgetCount; ++i) {
-        auto* label = new QLabel;
+        auto* label = new ScrollingLabel;
         label->setFixedSize(kLabelWidth, 42);
         // (LayoutViewer lists them with the zone colored widgets)
         label->setProperty("awoFtpColored", true);
@@ -45,6 +46,17 @@ LongVLabels::LongVLabels(const ftpcolors::ZoneRanges& ranges, QWidget* parent)
     connect(this, &LongVLabels::textChanged, renderTimer_, qOverload<>(&QTimer::start));
     // redrawn when the zone colors change
     connect(&zones::notifier(), &zones::Notifier::changed, this, &LongVLabels::renderLines);
+}
+
+void LongVLabels::setPinnedStyle(int labelWidth) {
+    setMinimumWidth(labelWidth);
+    for (QLabel* label : labels_) {
+        label->setFixedWidth(labelWidth);
+        label->setAlignment(Qt::AlignCenter);
+        static_cast<ScrollingLabel*>(label)->setScrolling(true);
+    }
+    // (the rows below the ones shown are empty: a block finishing takes the top one away, the rest each move up one)
+    static_cast<QVBoxLayout*>(layout())->addStretch();
 }
 
 // a label's height and the layout's spacing, at the layout scale

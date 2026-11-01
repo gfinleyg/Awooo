@@ -27,6 +27,11 @@ public:
 
     explicit LongVLabels(const ftpcolors::ZoneRanges& ftpRanges = {}, QWidget* parent = nullptr);
 
+    // the workout screen's coming up list and the setup screen's preview: blocks labelWidth wide (design px) from the
+    // top down, so the rest stay where they are as one finishes, each one's text centered, and scrolled across it when
+    // it's too long (ScrollingLabel)
+    void setPinnedStyle(int labelWidth = kLabelWidth);
+
     // the blocks, a line each (an empty list shows none); "DONE" holds the list's size
     void setFullText(const QString& text);
     QString fullText() const { return fullText_; }

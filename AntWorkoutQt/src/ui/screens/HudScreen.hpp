@@ -121,6 +121,14 @@ public:
     static constexpr double kBlinkWindowSeconds = 10;
     static constexpr double kBlinkHalfPeriodSeconds = 0.5;
     static constexpr double kBlinkMinDurationSeconds = 2;
+    // the last block's "Up Next:" and its "last block" note go this far into it
+    static constexpr double kLastBlockNoteSeconds = 30;
+    // the left column's width (design px): the block grades' once the workout's complete, so it's that wide from the
+    // start and the screen doesn't move when they take it over
+    static constexpr int kUpNextWidth = 490;
+    // the lines a workout message under Ride At may use (a longer one is made smaller), kept for it whether there's a
+    // message or not, so Ride At never moves
+    static constexpr int kMessageLines = 2;
     // the spiral's power and cadence: each the average over the last this many seconds
     static constexpr double kSpiralAverageSeconds = 3.0;
     static constexpr double kSpiralCadenceAverageSeconds = 1.0;
@@ -205,6 +213,7 @@ public:
     QLabel* workoutMessageLabel() const { return workoutMessageLabel_; }
     QLabel* blockLabel() const { return blockNonIntLabel_; }
     QLabel* upNextLabel() const { return upNextLabelDescription_; }
+    QLabel* upNextHeader() const { return upNextLabelHeader_; }
     LongVLabels* remainingList() const { return remainingWorkoutList_; }
     ZoneLegend* zoneLegend() const { return zoneLegend_; }
     QLabel* workoutTimeLabel() const { return workoutTime_; }
@@ -280,6 +289,7 @@ private:
     void blockBlinkDefault();
     void blockBlinkOn();
     void updateUpNextRemaining();
+    void hideLastBlockNote();
     void updateRequestedPowerDisplays();
     void updateWorkoutMessage();
     void fitBetweenGauges(QLabel* label, const QString& style, int points, int lines, const QString& text);

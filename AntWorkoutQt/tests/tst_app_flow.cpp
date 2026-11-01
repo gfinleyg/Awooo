@@ -327,8 +327,58 @@ private slots:
             5000);
     }
 
+    // Once the workout screen is built nothing on it moves or changes size, through blocks, ramps, intervals of two
+    // and three, a workout message and on into the grades: only what's shown changes (an interval's labels in place of
+    // a block's, the grades in place of the coming up list)
+    void workoutScreenHoldsStill() {
+        connectSensors();
+        loadWorkout(QStringLiteral("T:Holds Still\n1:30,0.55|Warm up easy and spin those legs nice and smooth|5|20\n"
+                                   "2:20,0.6,0.9\n3:2;1:10,1.05;1:5,0.5;0:5\n1:20,0.75\n3:2;1:5,1.3;0:5\n1:40,0.5\n"));
+        startWorkout();
+        HudScreen* hud = window_->hudScreen();
+        hud->stopTimers();
+        // (Up Next centered, as the blocks under it are)
+        QCOMPARE(hud->upNextLabel()->alignment(), Qt::AlignCenter);
+        QHash<QWidget*, QRect> placed;
+        const auto check = [&] {
+            QApplication::processEvents();
+            QApplication::processEvents();
+            for (QWidget* widget : hud->findChildren<QWidget*>()) {
+                if (!widget->isVisible()) {
+                    continue;
+                }
+                const QRect rect(widget->mapTo(hud, QPoint(0, 0)), widget->size());
+                if (placed.contains(widget) && placed[widget] != rect) {
+                    const auto* label = qobject_cast<QLabel*>(widget);
+                    qWarning().noquote() << widget->metaObject()->className() << (label ? label->text() : QString())
+                                         << placed[widget] << "->" << rect << "at" << appState().secondsPassed;
+                    return false;
+                }
+                placed[widget] = rect;
+            }
+            return true;
+        };
+        QVERIFY(check());
+        bool sawInterval = false;
+        bool sawMessage = false;
+        for (int s = 0; s < 400 && !hud->engine().completeShown(); ++s) {
+            round();
+            QApplication::processEvents();
+            hud->processEvents(1.0);
+            QVERIFY(check());
+            if (const auto& entry = hud->engine().currentEventText()) {
+                sawInterval = sawInterval || entry->type != WorkoutEntry::Type::Block;
+            }
+            sawMessage = sawMessage || !hud->workoutMessageLabel()->text().isEmpty();
+        }
+        QVERIFY(hud->engine().completeShown());
+        QVERIFY(sawInterval && sawMessage);
+        QVERIFY(hud->gradeList()->isVisible());
+    }
+
     // A workout, then a free ride with the FTP changed between them: the synopsis shows both, one after the other,
     // the workout still in the zones it was ridden in; Clear Session forgets them
+
     void sessionKeepsEveryRideUntilCleared() {
         connectSensors();
         SetupScreen* setup = window_->setupScreen();

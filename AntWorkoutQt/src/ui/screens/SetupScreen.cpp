@@ -361,6 +361,8 @@ SetupScreen::SetupScreen(ant::AntBridge* bridge, QWidget* parent)
 
     auto* workoutDisplayLayout = new QVBoxLayout;
     workoutDisplayLabel_ = new LongVLabels(state.ftpRanges);
+    // (as the workout screen's coming up list: from the top, centered, long text scrolled)
+    workoutDisplayLabel_->setPinnedStyle();
     workoutDisplayLabel_->setFixedHeight(900);
     workoutDisplayLayout->addWidget(workoutDisplayLabel_);
     introductoryLayout_->addLayout(workoutDisplayLayout, 0, 2, 14, 1, Qt::AlignHCenter);

@@ -50,7 +50,6 @@ const QString kRideAtLongest = QStringLiteral("Ride At: 1000 Watts");
 constexpr int kRideAtLines = 2;
 const QString kMessageStyle = QStringLiteral("font: 700 %1pt 'Orbitron'; background-color: rgba(0, 0, 0, 0);");
 constexpr int kMessagePoints = 22;
-constexpr int kMessageLines = 3;
 constexpr int kMessageGap = 12;
 
 double steadySeconds(const QElapsedTimer& clock) {
@@ -178,6 +177,9 @@ void HudScreen::showTickEvents(const WorkoutEngine::TickEvents& events) {
     updateWorkoutMessage();
     if (events.upNextChanged) {
         updateUpNextRemaining();
+    }
+    if (events.running) {
+        hideLastBlockNote();
     }
     if (events.difficultyApplied) {
         showDifficultyLabels();
@@ -527,6 +529,7 @@ void HudScreen::updateUpNextRemaining() {
         setLabelColor(upNextLabelDescription_);
         // (nothing is coming up)
         layout::setText(remainingWorkoutHeader_, QString());
+        hideLastBlockNote();
         return;
     }
     QString upNext;
@@ -554,6 +557,19 @@ void HudScreen::updateUpNextRemaining() {
     // (an empty list shows nothing: nothing is "Coming up...")
     layout::setText(remainingWorkoutHeader_, comingUp.isEmpty() ? QString() : QStringLiteral("Coming up..."));
     remainingWorkoutList_->setFullText(comingUp);
+}
+
+// the last block, kLastBlockNoteSeconds into it: "Up Next:" and its "last block" note go, the light blue box too (not
+// in a ramp test: its next block is only added just before this one ends)
+void HudScreen::hideLastBlockNote() {
+    if (upNextLabelDescription_->text() != kLastBlock || engine_->rampTest() || !engine_->started() ||
+        !engine_->currentEventText() ||
+        engine_->spiralBlockTime().first < kLastBlockNoteSeconds) {
+        return;
+    }
+    layout::setText(upNextLabelHeader_, QString());
+    layout::setText(upNextLabelDescription_, QString());
+    theme::setSheet(upNextLabelDescription_, QString());
 }
 
 // the target arc at the power (or cadence) asked for, and Ride At
@@ -591,6 +607,12 @@ void HudScreen::setWorkoutMessage(const QString& text) {
 // their text wraps to stay between them, and only if it still needs more lines than it has does the font shrink
 void HudScreen::fitWorkoutMessage() {
     fitBetweenGauges(rideAtLabel_, kRideAtStyle, kRideAtPoints, kRideAtLines, kRideAtLongest);
+    // (the message's lines kept at the font it's drawn in: the design size scaled can come out a pixel or two short)
+    theme::setSheet(workoutMessageLabel_, kMessageStyle.arg(kMessagePoints));
+    const int kept = kMessageLines * workoutMessageLabel_->fontMetrics().lineSpacing();
+    if (workoutMessageLabel_->minimumHeight() < kept) {
+        workoutMessageLabel_->setMinimumHeight(kept);
+    }
     fitBetweenGauges(workoutMessageLabel_, kMessageStyle, kMessagePoints, kMessageLines, workoutMessageLabel_->text());
 }
 

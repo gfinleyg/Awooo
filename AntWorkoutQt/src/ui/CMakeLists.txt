@@ -53,6 +53,8 @@ add_library(awo_ui STATIC
     widgets/MaxStar.hpp
     widgets/PowerSpiral.cpp
     widgets/PowerSpiral.hpp
+    widgets/ScrollingLabel.cpp
+    widgets/ScrollingLabel.hpp
     widgets/SmoothProgressBar.cpp
     widgets/SmoothProgressBar.hpp
     widgets/SynopsisItems.cpp

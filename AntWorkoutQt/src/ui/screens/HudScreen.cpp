@@ -32,6 +32,7 @@
 #include "PyCompat.hpp"
 #include "ReadingPipeline.hpp"
 #include "SavedSettings.hpp"
+#include "ScrollingLabel.hpp"
 #include "Session.hpp"
 #include "SmoothProgressBar.hpp"
 #include "SolidColoredColumns.hpp"
@@ -59,7 +60,6 @@ const QString kRideAtLongest = QStringLiteral("Ride At: 1000 Watts");
 constexpr int kRideAtLines = 2;
 const QString kMessageStyle = QStringLiteral("font: 700 %1pt 'Orbitron'; background-color: rgba(0, 0, 0, 0);");
 constexpr int kMessagePoints = 22;
-constexpr int kMessageLines = 3;
 constexpr int kMessageGap = 12;
 const QString kWorkoutComplete = QStringLiteral("Workout Complete!\nCooldown, or press END for more options");
 const QString kPressStart = QStringLiteral("Press Start to begin workout");
@@ -323,29 +323,37 @@ HudScreen::~HudScreen() = default;
 
 void HudScreen::buildUpNext() {
     auto* upNext = new QGridLayout;
-    // (the column as wide as its blocks, see LongVLabels::kLabelWidth; its headers are over the window gradient,
-    // with a halo when their text gets lost in it)
+    // (the column as wide as the grades that take it over at the end, see kUpNextWidth, its blocks too; its headers are
+    // over the window gradient, with a halo when their text gets lost in it)
     upNextLabelHeader_ = new HaloLabel(QStringLiteral("Up Next:"));
     theme::setSheet(upNextLabelHeader_, kXlText);
-    upNextLabelHeader_->setMinimumWidth(LongVLabels::kLabelWidth);
+    upNextLabelHeader_->setMinimumWidth(kUpNextWidth);
     upNextLabelHeader_->setMaximumHeight(40);
     upNext->addWidget(upNextLabelHeader_, 0, 0);
-    upNextLabelDescription_ = new QLabel;
+    // (centered as the blocks under it are, a song's title too long for it scrolled across it; its width is the
+    // column's, whatever its text)
+    auto* upNextDescription = new ScrollingLabel;
+    upNextDescription->setScrolling(true);
+    upNextDescription->setAlignment(Qt::AlignCenter);
+    upNextLabelDescription_ = upNextDescription;
     upNextLabelDescription_->setFixedHeight(90);
-    upNextLabelDescription_->setMinimumWidth(LongVLabels::kLabelWidth);
+    upNextLabelDescription_->setMinimumWidth(kUpNextWidth);
+    upNextLabelDescription_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     upNext->addWidget(upNextLabelDescription_, 1, 0, 3, 1);
     remainingWorkoutHeader_ = new HaloLabel(QStringLiteral("Coming up..."));
     remainingWorkoutHeader_->setMaximumHeight(40);
-    remainingWorkoutHeader_->setMinimumWidth(LongVLabels::kLabelWidth);
+    remainingWorkoutHeader_->setMinimumWidth(kUpNextWidth);
     theme::setSheet(remainingWorkoutHeader_, kXlText);
     upNext->addWidget(remainingWorkoutHeader_, 4, 0);
     remainingWorkoutList_ = new LongVLabels(appState().ftpRanges);
-    remainingWorkoutList_->setMinimumWidth(LongVLabels::kLabelWidth);
+    remainingWorkoutList_->setPinnedStyle(kUpNextWidth);
     // (with the zone legend under it, as tall as the list alone was)
     remainingWorkoutList_->setFixedHeight(560 - ZoneLegend::kHeight - 6);
-    upNext->addWidget(remainingWorkoutList_, 5, 0, 21, 1);
+    // (right under "Coming up...", its blocks from the top of it)
+    upNext->addWidget(remainingWorkoutList_, 5, 0, 21, 1, Qt::AlignTop);
     // the zones' colors and where each ends, between the blocks and the graph
     zoneLegend_ = new ZoneLegend;
+    zoneLegend_->setFixedWidth(kUpNextWidth);
     upNext->addWidget(zoneLegend_, 26, 0);
     // once the workout is complete each block's grade takes over the whole column
     workoutGradesHeader_ = new HaloLabel(QStringLiteral("Workout Grades"));
@@ -354,7 +362,7 @@ void HudScreen::buildUpNext() {
     workoutGradesHeader_->hide();
     upNext->addWidget(workoutGradesHeader_, 0, 0);
     workoutGradeList_ = new GradeList;
-    workoutGradeList_->setMinimumWidth(490);
+    workoutGradeList_->setMinimumWidth(kUpNextWidth);
     workoutGradeList_->hide();
     upNext->addWidget(workoutGradeList_, 1, 0, 25, 1);
     hudLayout_->addLayout(upNext, 0, 0, 20, 6);
@@ -395,6 +403,12 @@ void HudScreen::buildCurrentBlock() {
     blockRemainingRadius_ = blockRemainingHeight / 2 - 2;
     timeBlockRemainingValue_->setMinimumHeight(blockRemainingHeight);
     block->addWidget(timeBlockRemainingValue_, 7, 0, 1, 16);
+    // each block's text mustn't widen the screen's columns (a block, an interval's, the other: only this box changes);
+    // text too long for its label is made smaller to fit it
+    for (QLabel* label : intervalLabels() + QList<QLabel*>{blockMultiplierLabel_, blockNonIntLabel_,
+                                                           timeBlockRemainingValue_}) {
+        label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    }
     currentBlockLayoutWidget_->setLayout(block);
     hudLayout_->addWidget(currentBlockLayoutWidget_, 0, 6, 4, 16, Qt::AlignTop);
 }
@@ -483,12 +497,17 @@ void HudScreen::buildGauges() {
     rideAtLabel_->setWordWrap(true);
     rideAtLabel_->setMinimumHeight(rideAtLabel_->fontMetrics().lineSpacing());
     rideAtLabel_->setMinimumWidth(770);
-    // the workout file's timed messages under it, two lines kept for them so Ride At doesn't jump
+    // the workout file's timed messages under it, their lines kept for them so Ride At doesn't jump (measured in the
+    // message font at the design size: the label's own font isn't its style's until it's polished, and is scaled)
     workoutMessageLabel_ = new QLabel;
     theme::setSheet(workoutMessageLabel_, kMessageStyle.arg(kMessagePoints));
     workoutMessageLabel_->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
     workoutMessageLabel_->setWordWrap(true);
-    workoutMessageLabel_->setMinimumHeight(2 * workoutMessageLabel_->fontMetrics().lineSpacing());
+    QFont messageFont(QStringLiteral("Orbitron"));
+    messageFont.setPointSize(kMessagePoints);
+    messageFont.setWeight(QFont::Bold);
+    workoutMessageLabel_->setMinimumHeight(kMessageLines *
+                                           QFontMetrics(theme::current().mapFont(messageFont)).lineSpacing());
     // their widths (and the margins fitWorkoutMessage gives them) mustn't widen the grid's columns; they fit themselves
     for (QLabel* label : {rideAtLabel_, workoutMessageLabel_}) {
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -680,6 +699,10 @@ void HudScreen::buildTimers() {
     remainingWorkoutTime_ = centeredLabel(QStringLiteral("Done in: ") + minimizedDuration(state.workoutDurationSeconds));
     remainingWorkoutTime_->setMinimumHeight(timerBoxHeight);
     duration->addWidget(remainingWorkoutTime_, 14, 0, 1, 1);
+    // (the times as they count mustn't widen the column: "Workout Time:" sets it)
+    for (QLabel* label : {workoutTime_, remainingWorkoutTime_}) {
+        label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    }
     // down through row 14, so the timer boxes sit just above the heart rate gauge (the spiral takes the extra room)
     hudLayout_->addLayout(duration, 0, 22, 15, 8);
 }

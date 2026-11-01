@@ -20,6 +20,7 @@
 #include "Performance.hpp"
 #include "PowerSpiral.hpp"
 #include "PyCompat.hpp"
+#include "ScrollingLabel.hpp"
 #include "SmoothProgressBar.hpp"
 #include "TestSupport.hpp"
 #include "Theme.hpp"
@@ -645,6 +646,69 @@ private slots:
         labels.setFullText({});
         labels.renderLines();
         QVERIFY(!labels.labels()[0]->isVisibleTo(&labels));
+    }
+
+    // the workout screen's and setup screen's lists: their blocks as wide as asked, from the top down, so one finishing
+    // doesn't move the rest; their text centered and scrolled when too long
+    void longLabelsWorkoutScreenStyle() {
+        LongVLabels labels;
+        labels.setPinnedStyle(400);
+        labels.resize(450, 400);
+        labels.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&labels));
+        labels.setFullText(QStringLiteral("100W 5m\n150W 4m\n200W 3m"));
+        labels.renderLines();
+        QApplication::processEvents();
+        QLabel* first = labels.labels()[0];
+        QCOMPARE(first->y(), 0);
+        QCOMPARE(first->width(), 400);
+        QCOMPARE(first->alignment(), Qt::AlignCenter);
+        QVERIFY(static_cast<ScrollingLabel*>(first)->scrolling());
+        const QRect second = labels.labels()[1]->geometry();
+        // a block done: the rest move up a row, the rows stay where they were
+        labels.setFullText(QStringLiteral("150W 4m\n200W 3m"));
+        labels.renderLines();
+        QApplication::processEvents();
+        QCOMPARE(first->y(), 0);
+        QCOMPARE(first->text(), QStringLiteral("150W 4m"));
+        QCOMPARE(labels.labels()[1]->geometry(), second);
+        // (the workout picker's preview stays as it was: its text made smaller to fit, not scrolled)
+        LongVLabels preview;
+        QVERIFY(!static_cast<ScrollingLabel*>(preview.labels()[0])->scrolling());
+    }
+
+    // a line too long for it scrolls along to its end and back, pausing at each; one that fits stays put
+    void scrollingLabelScrollsLongLines() {
+        using L = ScrollingLabel;
+        QCOMPARE(L::offsetAt(0, 90, 30), 0.0);
+        QCOMPARE(L::offsetAt(L::kPauseSeconds - 0.1, 90, 30), 0.0);
+        QCOMPARE(L::offsetAt(L::kPauseSeconds + 1, 90, 30), 30.0);
+        QCOMPARE(L::offsetAt(L::kPauseSeconds + 3 + 0.5, 90, 30), 90.0);
+        QCOMPARE(L::offsetAt(2 * L::kPauseSeconds + 3 + 1, 90, 30), 60.0);
+        QCOMPARE(L::offsetAt(2 * (L::kPauseSeconds + 3), 90, 30), 0.0);
+        QCOMPARE(L::offsetAt(5, 0, 30), 0.0);
+
+        ScrollingLabel label(QStringLiteral("Short"));
+        label.setAlignment(Qt::AlignCenter);
+        label.resize(200, 40);
+        label.setScrolling(true);
+        QVERIFY(label.property("awoOwnFit").toBool());
+        label.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&label));
+        QVERIFY(!label.overflows());
+        QCOMPARE(label.lineOffset(0), 0.0);
+        label.setText(QStringLiteral("A Song : With A Title Far Too Long To Fit In Its Block\n120W 3m"));
+        QVERIFY(label.overflows());
+        QTest::qWait(ScrollingLabel::kStepMs * 3);
+        const QImage start = label.grab().toImage();
+        QTest::qWait(static_cast<int>(ScrollingLabel::kPauseSeconds * 1000) + 600);
+        QVERIFY(label.lineOffset(0) > 0);
+        // (the line that fits doesn't move)
+        QCOMPARE(label.lineOffset(1), 0.0);
+        QVERIFY(label.grab().toImage() != start);
+        label.setScrolling(false);
+        QCOMPARE(label.lineOffset(0), 0.0);
+        QVERIFY(!label.property("awoOwnFit").toBool());
     }
 
     // ---- The zone legend ----

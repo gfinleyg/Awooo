@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QLabel>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QSlider>
@@ -19,6 +20,7 @@
 #include "AwoParser.hpp"
 #include "ConfirmEndWorkoutWindow.hpp"
 #include "FakeAnt.hpp"
+#include "FtpTest.hpp"
 #include "GoldenRides.hpp"
 #include "HudScreen.hpp"
 #include "KeyShortcuts.hpp"
@@ -410,6 +412,58 @@ private slots:
         QVERIFY(hud.endAvailable());
         hud.startEndButton()->click();
         QVERIFY(hud.endPrompt() && !hud.endPrompt()->restartButton());
+    }
+
+    // the last block's "Up Next:" and "last block" note go 30 s into it, a last block 30 s or shorter keeps them
+    void lastBlockNoteGoesAfter30Seconds() {
+        QVERIFY(loadWorkout({"1:10,0.5", "1:40,0.6"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        SimulatedRider rider;
+        hud.startWorkout();
+        // (on to the last block)
+        for (int i = 0; i < 20 && hud.engine().activeWorkout() < 1; ++i) {
+            tickSecond(hud, rider);
+        }
+        QCOMPARE(hud.upNextHeader()->text(), QStringLiteral("Up Next:"));
+        QCOMPARE(hud.upNextLabel()->text(), QStringLiteral("You're on the last block, way to go!"));
+        while (hud.engine().blockSecondsPassed() < 29) {
+            tickSecond(hud, rider);
+        }
+        QCOMPARE(hud.engine().blockSecondsPassed(), 29.0);
+        QCOMPARE(hud.upNextLabel()->text(), QStringLiteral("You're on the last block, way to go!"));
+        tickSecond(hud, rider);
+        QCOMPARE(hud.upNextHeader()->text(), QString());
+        QCOMPARE(hud.upNextLabel()->text(), QString());
+        // a restart brings them back
+        hud.restartWorkout();
+        QCOMPARE(hud.upNextHeader()->text(), QStringLiteral("Up Next:"));
+
+        QVERIFY(loadWorkout({"1:10,0.5", "1:30,0.6"}));
+        HudScreen shortLast(bridge_.get(), nullptr, [] { return 1000.0; });
+        shortLast.stopTimers();
+        shortLast.startWorkout();
+        for (int i = 0; i < 20 && shortLast.engine().activeWorkout() < 1; ++i) {
+            tickSecond(shortLast, rider);
+        }
+        while (shortLast.engine().blockSecondsPassed() < 29) {
+            tickSecond(shortLast, rider);
+        }
+        QCOMPARE(shortLast.upNextLabel()->text(), QStringLiteral("You're on the last block, way to go!"));
+
+        // a ramp test keeps them: its next block comes just before this one ends
+        QVERIFY(loadWorkout(ftptest::workoutLines(QStringLiteral("ramp10"))));
+        appState().ftpTestMode = QStringLiteral("ramp10");
+        HudScreen ramp(bridge_.get(), nullptr, [] { return 1000.0; });
+        ramp.stopTimers();
+        QVERIFY(ramp.engine().rampTest());
+        ramp.startWorkout();
+        while (ramp.engine().blockSecondsPassed() < 40) {
+            tickSecond(ramp, rider);
+        }
+        QCOMPARE(ramp.upNextHeader()->text(), QStringLiteral("Up Next:"));
+        QVERIFY(!ramp.upNextLabel()->text().isEmpty());
+        QCOMPARE(shortLast.upNextLabel()->text(), QStringLiteral("You're on the last block, way to go!"));
     }
 
     // ---- Whole workouts ----

@@ -31,6 +31,7 @@
 #include "Performance.hpp"
 #include "SavedSettings.hpp"
 #include "Session.hpp"
+#include "ScrollingLabel.hpp"
 #include "SetupScreen.hpp"
 #include "TestSupport.hpp"
 #include "Theme.hpp"
@@ -389,6 +390,10 @@ private slots:
         QCOMPARE(appState().workoutDurationSeconds, 360);
         QCOMPARE(setup.workoutInfoLabel()->text(), QStringLiteral("Workout Duration: 6m"));
         QCOMPARE(setup.workoutDisplay()->fullText(), workoutText(appState().workoutList, QStringLiteral("Watts")));
+        // (laid out as the workout screen's coming up list: centered, long text scrolled)
+        auto* block = static_cast<ScrollingLabel*>(setup.workoutDisplay()->labels()[0]);
+        QVERIFY(block->scrolling());
+        QCOMPARE(block->alignment(), Qt::AlignCenter);
         writeText(QStringLiteral("bad.awo"), QStringLiteral("1:300,0.75\n7:10\n"));
         QVERIFY(!setup.loadWorkoutFile(QStringLiteral("bad.awo")));
         QCOMPARE(setup.workoutInfoLabel()->text(),
