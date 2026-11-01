@@ -729,16 +729,22 @@ private slots:
 
     // ---- The zone legend ----
 
-    void zoneLegendNamesWhereEachZoneEnds() {
+    void zoneLegendNamesWhereEachZoneEndsInBothUnits() {
         appState().ftp = 200;
         appState().ftpRanges = ftpcolors::powerRanges(200);
         ZoneLegend legend;
         QCOMPARE(legend.size(), QSize(LongVLabels::kLabelWidth, ZoneLegend::kHeight));
-        QCOMPARE(legend.labelTexts(), QStringList({"72W", "174W", "238W", "374W"}));
-        // Musical Cadence Mode: its cadence zones, in rpm
+        // RPM above the bar, watts below it
+        QCOMPARE(legend.rpmTexts(), QStringList({"40rpm", "65rpm", "90rpm", "115rpm"}));
+        QCOMPARE(legend.powerTexts(), QStringList({"72W", "174W", "238W", "374W"}));
+        QVERIFY(legend.rpmRow().bottom() <= legend.barRect().top());
+        QVERIFY(legend.barRect().bottom() <= legend.powerRow().top());
+        QCOMPARE(legend.powerRow().bottom(), static_cast<double>(legend.height()));
+        // the same in Musical Cadence Mode: the power is still the FTP's zones
         appState().workoutMode = appState().cadenceMode = true;
         appState().ftpRanges = ftpcolors::cadenceRanges(40);
-        QCOMPARE(legend.labelTexts(), QStringList({"40rpm", "65rpm", "90rpm", "115rpm"}));
+        QCOMPARE(legend.rpmTexts(), QStringList({"40rpm", "65rpm", "90rpm", "115rpm"}));
+        QCOMPARE(legend.powerTexts(), QStringList({"72W", "174W", "238W", "374W"}));
     }
 
     void zoneLegendHalosTextThatDoesntStandOut() {
@@ -756,13 +762,16 @@ private slots:
         QImage image(legend.size(), QImage::Format_ARGB32);
         image.fill(QColor(QStringLiteral("#5f6e98")));
         legend.render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
-        int light = 0;
-        for (int y = static_cast<int>(ZoneLegend::kBarHeight + ZoneLegend::kTextGap); y < image.height(); ++y) {
-            for (int x = 0; x < image.width(); ++x) {
-                light += image.pixelColor(x, y).lightness() > 200;
+        // (both rows: above and below the bar)
+        for (const QRectF& row : {legend.rpmRow(), legend.powerRow()}) {
+            int light = 0;
+            for (int y = static_cast<int>(row.top()); y < static_cast<int>(row.bottom()); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    light += image.pixelColor(x, y).lightness() > 200;
+                }
             }
+            QVERIFY(light > 50);
         }
-        QVERIFY(light > 50);
     }
 
     void haloLabelHalosTextThatDoesntStandOut() {

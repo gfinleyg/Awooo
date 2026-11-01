@@ -37,6 +37,12 @@ Python app's own results (`tests\golden\`).
   the filled part seemed to vanish into the background. Both bars and the "Block time remaining" box are rounded now,
   like the workout timer boxes.
 
+- **The workout screen's zone legend shows both units, whatever the mode:** where each zone ends in RPM above its bar
+  (the cadence zones, 40/65/90/115 rpm) and in watts below it (the FTP's power zones). The Python app's legend shows
+  one row under the bar, in the mode's own unit (watts, or rpm in Musical Cadence Mode). The legend is taller for the
+  second row, so the coming up list above it shows one block fewer on some screens. The `zone_legend` pixel comparison
+  scene no longer matches the Python app's.
+
 - **The workout screen's "Up Next:", "Coming up..." and "Workout Grades" headers get a one pixel outline where their
   text doesn't stand out** from the window's gradient behind them (contrast under WCAG AA, 4.5, as the zone legend's
   numbers get their halo). The outline is the window's color behind the text, lightened toward the theme's lightest

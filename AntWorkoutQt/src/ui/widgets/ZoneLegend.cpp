@@ -7,7 +7,6 @@
 
 #include <algorithm>
 
-#include "AppState.hpp"
 #include "GradeWidgets.hpp"
 #include "LongVLabels.hpp"
 #include "PyCompat.hpp"
@@ -27,6 +26,15 @@ QFont labelFont(double scale) {
     return theme::current().mapFont(font, scale);
 }
 
+// where each zone but the top one ends, as the block labels show a target
+QStringList limitTexts(const ftpcolors::ZoneRanges& ranges, const QString& unit) {
+    QStringList texts;
+    for (double limit : ranges.limits) {
+        texts.append(QString::number(static_cast<int>(py::round(limit))) + unit);
+    }
+    return texts;
+}
+
 }  // namespace
 
 ZoneLegend::ZoneLegend(QWidget* parent) : QWidget(parent) {
@@ -38,14 +46,12 @@ ZoneLegend::ZoneLegend(QWidget* parent) : QWidget(parent) {
     connect(&zones::notifier(), &zones::Notifier::changed, this, qOverload<>(&QWidget::update));
 }
 
-QStringList ZoneLegend::labelTexts() const {
-    const QString unit =
-        appState().targetUnit() == u"Watts" ? QStringLiteral("W") : appState().targetUnit().toLower();
-    QStringList texts;
-    for (double limit : zones::appRanges().limits) {
-        texts.append(QString::number(static_cast<int>(py::round(limit))) + unit);
-    }
-    return texts;
+QStringList ZoneLegend::rpmTexts() const {
+    return limitTexts(ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm), QStringLiteral("rpm"));
+}
+
+QStringList ZoneLegend::powerTexts() const {
+    return limitTexts(zones::powerRanges(), QStringLiteral("W"));
 }
 
 // the zones side by side, each fading from its pale end to its color, a hard edge where the next starts
@@ -68,19 +74,25 @@ QColor ZoneLegend::backgroundAt(const QPointF& point) const {
     return zones::windowBackgroundAt(this, point);
 }
 
-QList<QPointF> ZoneLegend::labelCenters(double* textTop, double* textHeight) const {
-    const double top = kBarHeight * theme::widgetScale(this) + kTextGap * theme::widgetScale(this);
-    const double rowHeight = height() - top;
+QRectF ZoneLegend::rpmRow() const {
+    return {0, 0, static_cast<double>(width()), kRowHeight * theme::widgetScale(this)};
+}
+
+QRectF ZoneLegend::barRect() const {
+    const double scale = theme::widgetScale(this);
+    return {0, rpmRow().bottom() + kTextGap * scale, static_cast<double>(width()), kBarHeight * scale};
+}
+
+QRectF ZoneLegend::powerRow() const {
+    const double top = barRect().bottom() + kTextGap * theme::widgetScale(this);
+    return {0, top, static_cast<double>(width()), height() - top};
+}
+
+QList<QPointF> ZoneLegend::labelCenters(const QRectF& row) const {
     const int zones = ftpcolors::kZones;
     QList<QPointF> centers;
     for (int k = 1; k < zones; ++k) {
-        centers.append({width() * static_cast<double>(k) / zones, top + rowHeight / 2});
-    }
-    if (textTop) {
-        *textTop = top;
-    }
-    if (textHeight) {
-        *textHeight = rowHeight;
+        centers.append({row.width() * k / zones, row.center().y()});
     }
     return centers;
 }
@@ -88,7 +100,7 @@ QList<QPointF> ZoneLegend::labelCenters(double* textTop, double* textHeight) con
 bool ZoneLegend::haloed() const {
     const QColor color(theme::current().mapHex(kTextColor));
     double lowest = 21;
-    for (const QPointF& center : labelCenters()) {
+    for (const QPointF& center : labelCenters(rpmRow()) + labelCenters(powerRow())) {
         lowest = std::min(lowest, theme::contrast(color, backgroundAt(center)));
     }
     return lowest < kMinContrast;
@@ -98,27 +110,33 @@ void ZoneLegend::paintEvent(QPaintEvent*) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
     const double scale = theme::widgetScale(this);
-    const QRectF bar(0, 0, width(), kBarHeight * scale);
+    const QRectF bar = barRect();
     painter.setPen(Qt::NoPen);
     painter.setBrush(barGradient(bar));
     painter.drawRoundedRect(bar, bar.height() / 2, bar.height() / 2);
 
-    const QStringList texts = labelTexts();
-    double textTop = 0;
-    double textHeight = 0;
-    const QList<QPointF> centers = labelCenters(&textTop, &textHeight);
+    const QList<std::pair<QRectF, QStringList>> rows{{rpmRow(), rpmTexts()}, {powerRow(), powerTexts()}};
+    // (all the same size: as big as the widest of either row fits in a zone's width)
     QFont font = labelFont(scale);
-    // (all the same size: as big as the widest fits in a zone's width)
     const QFontMetricsF unfitted(font);
-    const QString widest = *std::max_element(texts.begin(), texts.end(), [&](const QString& a, const QString& b) {
-        return unfitted.horizontalAdvance(a) < unfitted.horizontalAdvance(b);
-    });
-    font = fittedFont(font, widest, width() / static_cast<double>(ftpcolors::kZones) * 0.92, textHeight);
+    QString widest;
+    for (const auto& row : rows) {
+        for (const QString& text : row.second) {
+            if (unfitted.horizontalAdvance(text) > unfitted.horizontalAdvance(widest)) {
+                widest = text;
+            }
+        }
+    }
+    font = fittedFont(font, widest, width() / static_cast<double>(ftpcolors::kZones) * 0.92,
+                      std::min(rows[0].first.height(), rows[1].first.height()));
     const QFontMetricsF metrics(font);
-    const double baseline = textTop + (textHeight - metrics.height()) / 2 + metrics.ascent();
     QPainterPath path;
-    for (qsizetype k = 0; k < texts.size() && k < centers.size(); ++k) {
-        path.addText(QPointF(centers[k].x() - metrics.horizontalAdvance(texts[k]) / 2, baseline), font, texts[k]);
+    for (const auto& [row, texts] : rows) {
+        const QList<QPointF> centers = labelCenters(row);
+        const double baseline = row.top() + (row.height() - metrics.height()) / 2 + metrics.ascent();
+        for (qsizetype k = 0; k < texts.size() && k < centers.size(); ++k) {
+            path.addText(QPointF(centers[k].x() - metrics.horizontalAdvance(texts[k]) / 2, baseline), font, texts[k]);
+        }
     }
 
     const QColor color(theme::current().mapHex(kTextColor));

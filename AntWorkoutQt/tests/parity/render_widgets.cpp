@@ -493,7 +493,8 @@ QWidget* sceneLongLabels() {
 }
 
 // The zone legend under the coming up list: the zones side by side, and where each ends (haloed: on its own it's its
-// window, the default theme's black on the gradient's middle)
+// window, the default theme's black on the gradient's middle). Not the Python app's: this one shows the RPM above the
+// bar as well as the watts below it (see CHANGES.md)
 QWidget* sceneZoneLegend() {
     return shown(new ZoneLegend, LongVLabels::kLabelWidth, ZoneLegend::kHeight);
 }
