@@ -59,6 +59,8 @@ add_library(awo_ui STATIC
     widgets/ScrollingLabel.hpp
     widgets/SmoothProgressBar.cpp
     widgets/SmoothProgressBar.hpp
+    widgets/SoapBubble.cpp
+    widgets/SoapBubble.hpp
     widgets/SynopsisItems.cpp
     widgets/SynopsisItems.hpp
     widgets/WorkoutGraph.cpp

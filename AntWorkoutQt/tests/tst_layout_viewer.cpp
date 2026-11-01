@@ -27,6 +27,7 @@
 #include "MusicSelectDialog.hpp"
 #include "PreviewRide.hpp"
 #include "SetupScreen.hpp"
+#include "SoapBubble.hpp"
 #include "TestSupport.hpp"
 #include "Theme.hpp"
 #include "ViewerControls.hpp"
@@ -213,6 +214,17 @@ private slots:
         // the workout graph's stars, which it paints itself
         QVERIFY(colors.contains(MaxStar::kColor.toLower()));
         QVERIFY(controls.usesText(MaxStar::kColor.toLower()).contains(QStringLiteral("Workout")));
+        // and its bubbles' soap film colors, which a theme's colors can change
+        for (const QString& color : soap::colors()) {
+            QVERIFY(colors.contains(color));
+            QVERIFY(controls.usesText(color).contains(QStringLiteral("Workout")));
+        }
+        controls.setColor(soap::kGlintColor, QStringLiteral("#123456"));
+        QCOMPARE(theme::current().colors.value(soap::kGlintColor), QStringLiteral("#123456"));
+        QCOMPARE(theme::current().toJson(QStringLiteral("colors"))[QStringLiteral("colors")].toObject()[soap::kGlintColor].toString(),
+                 QStringLiteral("#123456"));
+        controls.setColor(soap::kGlintColor, std::nullopt);
+        QVERIFY(!theme::current().colors.contains(soap::kGlintColor));
         // the heart rate gauge's hearts' colors, and changing one recolors the hearts
         for (const QString& heart : {kHeartPink, kHeartRed, kHeartDark}) {
             QVERIFY(colors.contains(heart));

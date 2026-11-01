@@ -74,9 +74,18 @@ Python app's own results (`tests\golden\`).
   or else the latest block. It pops in where the lines ended as its block did: under the lowest of the power, heart
   rate and cadence curves and the target bar if it fits there, over the highest if not (the graph's scale grows to
   make room), kept on the graph and never reaching more than 30 s past the time now, and scrolls along with its
-  block. One that isn't under the top of its own block has a thin diagonal line to it. It's in the max bubbles'
-  colors. The Python app has no block bubbles, so the workout and Musical Cadence Mode screens'
-  parity scenes (`hud_screen`, `cadence_screen`) are meant to differ.
+  block. One that isn't under the top of its own block has a thin diagonal line to it. It's a soap bubble like the
+  max bubbles (below), and pops when another block's bubble takes its place. The Python app has no block bubbles, so
+  the workout and Musical Cadence Mode screens' parity scenes (`hud_screen`, `cadence_screen`) are meant to differ.
+
+- **The workout graph's bubbles are soap bubbles**: the max bubbles beside the stars have round ends, and both they
+  and the block bubble are a see-through film in the plot labels' background color with faint rainbow swirls
+  drifting across it, stronger toward a thin iridescent rim, and a glint or two of light. When one pops, its film
+  tears open from a point on its edge and throws off a spray of colored droplets that fall away and fade (0.45 s). The
+  Python app's max bubbles are plain boxes with a black border that swell and fade when they pop. The film's colors
+  (`#ff6ec7`, `#ffd36e`, `#7dffb0`, `#6ecbff`, `#b48cff`) and its glints' white (`#fffffd`) can be changed in a
+  theme's colors, and LayoutViewer lists them. The `hud_graph` parity scene (and the workout screens' scenes) are
+  meant to differ.
 
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".

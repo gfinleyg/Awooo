@@ -73,32 +73,39 @@ void BlockBubble::fit() {
 }
 
 QRectF BlockBubble::boundingRect() const {
-    return {-width_ / 2 - 1, -height_ / 2 - 1, width_ + 2, height_ + 2};
+    const QRectF rect(-width_ / 2 - 1, -height_ / 2 - 1, width_ + 2, height_ + 2);
+    if (!popAt_) {
+        return rect;
+    }
+    const double margin = soap::popMargin(rect);
+    return rect.adjusted(-margin, -margin, margin, margin);
 }
 
-// in the max bubbles' colors: the theme's plot label background, and black for the border and text
+// a soap bubble as the max bubbles are: the theme's plot label background, its text in the theme's black
 void BlockBubble::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
-    painter->setRenderHint(QPainter::Antialiasing);
-    const QColor black(theme::current().mapHex(QStringLiteral("#000000")));
-    QColor border = black;
-    border.setAlpha(215);
-    painter->setPen(QPen(border, 1));
-    painter->setBrush(QColor(theme::current().mapHex(theme::kPlotLabelBg)));
     const QRectF rect(-width_ / 2, -height_ / 2, width_, height_);
-    const double corner = lineHeight_ * kCorner;
-    painter->drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), corner, corner);
-    painter->setPen(black);
-    painter->setFont(font_);
-    const double space = QFontMetricsF(font_).horizontalAdvance(u' ');
-    const double pad = kPad * lineHeight_;
-    for (qsizetype line = 0; line < cells_.size(); ++line) {
-        double x = rect.left() + pad;
-        const double y = rect.top() + pad + line * lineHeight_;
-        for (int i = 0; i < 2; ++i) {
-            const Qt::Alignment align = (i == 1 ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter;
-            painter->drawText(QRectF(x, y, columns_[i], lineHeight_), align, cells_[line][i]);
-            x += columns_[i] + space;
+    const soap::Content text = [this, rect](QPainter* p) {
+        p->setPen(QColor(theme::current().mapHex(QStringLiteral("#000000"))));
+        p->setFont(font_);
+        const double space = QFontMetricsF(font_).horizontalAdvance(u' ');
+        const double pad = kPad * lineHeight_;
+        for (qsizetype line = 0; line < cells_.size(); ++line) {
+            double x = rect.left() + pad;
+            const double y = rect.top() + pad + line * lineHeight_;
+            for (int i = 0; i < 2; ++i) {
+                const Qt::Alignment align = (i == 1 ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter;
+                p->drawText(QRectF(x, y, columns_[i], lineHeight_), align, cells_[line][i]);
+                x += columns_[i] + space;
+            }
         }
+    };
+    const QRectF film = rect.adjusted(0.5, 0.5, -0.5, -0.5);
+    const double corner = lineHeight_ * kCorner;
+    if (popAt_) {
+        const double t = std::clamp((now_ - *popAt_) / kPopSeconds, 0.0, 1.0);
+        soap::paintPop(painter, film, corner, now_, t, static_cast<unsigned>(start_ * 1000) + pops_, text);
+    } else {
+        soap::paintFilm(painter, film, corner, now_, text);
     }
 }
 
@@ -168,6 +175,12 @@ void BlockBubble::step(double now, QList<QRectF>& avoid) {
         return;
     }
     const QRectF rect(left, top(), width_, height_);
+    now_ = now;
+    if (popAt_) {
+        // (picked again mid-pop: a new one)
+        prepareGeometryChange();
+        popAt_.reset();
+    }
     if (!appearAt_) {
         appearAt_ = now;
     }
@@ -179,10 +192,40 @@ void BlockBubble::step(double now, QList<QRectF>& avoid) {
     setScale(0.5 + 0.5 * (1 + (back + 1) * std::pow(t - 1, 3) + back * std::pow(t - 1, 2)));
     setOpacity(std::min(1.0, 2 * t));
     setVisible(true);
+    // (its colors drift)
+    update();
     connect(rect);
 }
 
+// where it was, bursting (see soap::paintPop); hidden once it's gone
+void BlockBubble::leave(double now) {
+    now_ = now;
+    if (!popAt_) {
+        if (!isVisible()) {
+            hide();
+            return;
+        }
+        prepareGeometryChange();
+        popAt_ = now;
+        ++pops_;
+        appearAt_.reset();
+        connector_->setVisible(false);
+        setScale(1.0);
+        setOpacity(1.0);
+    }
+    // (or stepped by another clock since)
+    if (now - *popAt_ >= kPopSeconds || now < *popAt_) {
+        hide();
+        return;
+    }
+    update();
+}
+
 void BlockBubble::hide() {
+    if (popAt_) {
+        prepareGeometryChange();
+        popAt_.reset();
+    }
     setVisible(false);
     appearAt_.reset();
 }
@@ -246,7 +289,7 @@ void BlockBubble::stepAll(const QList<BlockBubble*>& bubbles, double target, dou
     BlockBubble* shown = pick(bubbles, target);
     for (BlockBubble* bubble : bubbles) {
         if (bubble != shown) {
-            bubble->hide();
+            bubble->leave(now);
         }
     }
     if (shown) {

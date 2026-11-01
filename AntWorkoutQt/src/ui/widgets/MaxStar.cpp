@@ -255,23 +255,28 @@ MaxBubble::MaxBubble(MaxStar* star, const QString& format) : star_(star), format
 }
 
 QRectF MaxBubble::boundingRect() const {
-    return {-width_ / 2 - 1, -height_ / 2 - 1, width_ + 2, height_ + 2};
+    const QRectF rect(-width_ / 2 - 1, -height_ / 2 - 1, width_ + 2, height_ + 2);
+    if (state_ != State::Popping) {
+        return rect;
+    }
+    const double margin = soap::popMargin(rect);
+    return rect.adjusted(-margin, -margin, margin, margin);
 }
 
-// in the theme's colors for the plot labels: its background, and black for the border and text
+// a soap bubble in the theme's plot label background, its text in the theme's black
 void MaxBubble::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
-    painter->setRenderHint(QPainter::Antialiasing);
-    const QColor black(theme::current().mapHex(QStringLiteral("#000000")));
-    QColor border = black;
-    border.setAlpha(215);
-    painter->setPen(QPen(border, 1));
-    painter->setBrush(QColor(theme::current().mapHex(theme::kPlotLabelBg)));
     const QRectF rect(-width_ / 2, -height_ / 2, width_, height_);
-    const double corner = height_ * kCorner;
-    painter->drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), corner, corner);
-    painter->setPen(black);
-    painter->setFont(font_);
-    painter->drawText(rect, Qt::AlignCenter, text_);
+    const soap::Content text = [this, rect](QPainter* p) {
+        p->setPen(QColor(theme::current().mapHex(QStringLiteral("#000000"))));
+        p->setFont(font_);
+        p->drawText(rect, Qt::AlignCenter, text_);
+    };
+    const QRectF film = rect.adjusted(0.5, 0.5, -0.5, -0.5);
+    if (state_ == State::Popping) {
+        soap::paintPop(painter, film, height_ * kCorner, now_, popT_, static_cast<unsigned>(qHash(text_)) + pops_, text);
+    } else {
+        soap::paintFilm(painter, film, height_ * kCorner, now_, text);
+    }
 }
 
 // the text in the theme's plot label font, sized to fill the star's height
@@ -300,11 +305,16 @@ void MaxBubble::step(double now, QList<QRectF>& avoid) {
         setVisible(false);
         return;
     }
+    now_ = now;
     if ((state_ == State::Appearing || state_ == State::Shown) && (star->x != x_ || star->y != y_)) {
+        // (room for its spray while it pops)
+        prepareGeometryChange();
         state_ = State::Popping;
         stateStart_ = now;
+        ++pops_;
     }
     if (state_ == State::Popping && now - stateStart_ >= kPopSeconds) {
+        prepareGeometryChange();
         state_ = State::Hidden;
     }
     if (state_ == State::Hidden) {
@@ -359,9 +369,10 @@ void MaxBubble::step(double now, QList<QRectF>& avoid) {
 
     const double t = std::min(1.0, (now - stateStart_) / (state_ == State::Popping ? kPopSeconds : kAppearSeconds));
     if (state_ == State::Popping) {
-        // swells and fades away
-        setScale(1 + kPopGrowth * t);
-        setOpacity(1 - t);
+        // bursts (see soap::paintPop)
+        popT_ = t;
+        setScale(1.0);
+        setOpacity(1.0);
     } else if (state_ == State::Appearing) {
         // grows in, a little past its size and back (ease out back)
         constexpr double back = 1.7;
@@ -371,6 +382,8 @@ void MaxBubble::step(double now, QList<QRectF>& avoid) {
         setScale(1.0);
         setOpacity(1.0);
     }
+    // (its colors drift)
+    update();
     setVisible(area.contains(point));
 }
 

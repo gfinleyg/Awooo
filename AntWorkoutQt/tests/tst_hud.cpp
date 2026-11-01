@@ -638,6 +638,19 @@ private slots:
             QVERIFY(line.p2().x() >= sceneX(bubble->start()) - 0.5 && line.p2().x() <= sceneX(bubble->end()) + 0.5);
             QVERIFY(std::abs(line.dx()) >= 1 && std::abs(line.dy()) >= 1);
         }
+        // another block's bubble taking its place (the second block's target is no other's): it pops, and is gone
+        // once it has
+        const double other = hud.blockBubbles()[1]->target();
+        for (const double now : {11.0, 11.0 + BlockBubble::kPopSeconds / 2}) {
+            QList<QRectF> avoid;
+            BlockBubble::stepAll(hud.blockBubbles(), other, now, avoid);
+            QVERIFY(bubble->isVisible() && bubble->popping());
+            QVERIFY(!bubble->connector()->isVisible());
+            QVERIFY(hud.blockBubbles()[1]->isVisible());
+        }
+        QList<QRectF> avoid;
+        BlockBubble::stepAll(hud.blockBubbles(), other, 11.01 + BlockBubble::kPopSeconds, avoid);
+        QVERIFY(!bubble->isVisible() && !bubble->popping());
     }
 
     // ---- An FE-C trainer ----

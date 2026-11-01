@@ -5,8 +5,8 @@
 // drawn to the new max: still at both ends and fastest halfway (smoothstep), hugging the line on the way, then
 // settling back just over the max, as close as it can without touching the line (or a marker there), where it
 // twinkles. Its owner says where the max is (goTo), steps it about every frame (step) and keeps room for it at the
-// graph's top (topWithRoom). MaxBubble: the max's value in a small box beside a star at rest, popping when the max
-// moves.
+// graph's top (topWithRoom). MaxBubble: the max's value in a small soap bubble (SoapBubble) beside a star at rest,
+// popping when the max moves.
 
 #include <QFont>
 #include <QGraphicsPathItem>
@@ -15,6 +15,7 @@
 #include <optional>
 
 #include "PlotItems.hpp"
+#include "SoapBubble.hpp"
 #include "ViewBox.hpp"
 
 namespace awo {
@@ -103,11 +104,11 @@ class MaxBubble : public QGraphicsItem {
 public:
     // pixels between it and its star
     static constexpr double kGap = 3;
-    // its text's side padding, and its corners' radius, as shares of its height
-    static constexpr double kPad = 0.3;
-    static constexpr double kCorner = 0.3;
-    static constexpr double kPopSeconds = 0.22;
-    // how much bigger it gets by the end of its pop
+    // its text's side padding, and its corners' radius, as shares of its height (round ends)
+    static constexpr double kPad = 0.42;
+    static constexpr double kCorner = 0.5;
+    static constexpr double kPopSeconds = soap::kPopSeconds;
+    // the room kept over it at the graph's top for its pop's spray, as a share of its height
     static constexpr double kPopGrowth = 0.35;
     static constexpr double kAppearSeconds = 0.28;
 
@@ -137,6 +138,9 @@ private:
     double width_ = 0, height_ = 0;
     State state_ = State::Hidden;
     double stateStart_ = 0;
+    // the time it was last stepped at (its colors drift with it), and how far through a pop it is
+    double now_ = 0, popT_ = 0;
+    unsigned pops_ = 0;
     std::optional<double> x_, y_;
     int side_ = 1;
 };

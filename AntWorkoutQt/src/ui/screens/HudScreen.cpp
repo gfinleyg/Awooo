@@ -35,6 +35,7 @@
 #include "ScrollingLabel.hpp"
 #include "Session.hpp"
 #include "SmoothProgressBar.hpp"
+#include "SoapBubble.hpp"
 #include "SolidColoredColumns.hpp"
 #include "SoundEffects.hpp"
 #include "Theme.hpp"
@@ -667,7 +668,7 @@ void HudScreen::buildGraph() {
     }
     connect(progressGraph_->vb(), &plot::ViewBox::resized, this, &HudScreen::fitGraphTops);
     // (LayoutViewer lists them with the colors a theme can change)
-    theme::setPaintedColors(this, {MaxStar::kColor, MaxStar::kEdgeColor, theme::kPlotLabelBg});
+    theme::setPaintedColors(this, QStringList{MaxStar::kColor, MaxStar::kEdgeColor, theme::kPlotLabelBg} + soap::colors());
     graphLayout->addWidget(progressGraph_);
     hudLayout_->addLayout(graphLayout, 20, 0, 4, 30);
 }
