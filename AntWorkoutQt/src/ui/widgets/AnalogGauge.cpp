@@ -678,7 +678,9 @@ void AnalogGauge::drawOuterCircle() {
     painter.drawPolygon(ring);
 }
 
-// the target arc, centered on arcCenterValue, wider the higher it is
+// the target arc, centered on arcCenterValue, wider the higher it is: from the center's edge (the outermost ring's, as
+// it swells on a beat; a gear's, just under the floor of the gaps between its teeth, so it fills them) out to the outer
+// ring's, which the widget's edge doesn't cut off when it points straight up
 void AnalogGauge::drawNewArc() {
     QPainter painter(paintTarget_);
     painter.setRenderHint(QPainter::Antialiasing);
@@ -694,8 +696,15 @@ void AnalogGauge::drawNewArc() {
     }
     painter.translate(width() / 2.0, height() / 2.0);
     painter.setPen(Qt::NoPen);
-    const QPolygonF arc = createPolygonPie(widgetDiameter_ / 1.95 - pen_.width(), widgetDiameter_ / 6, start, arcWidth,
-                                           false);
+    const double center = centerRadius();
+    double inner = center;
+    if (centerRings_ && centerRings_->first.size() >= 2) {
+        inner = ringRadius(0, center);
+        if (centerGearAngle_) {
+            inner -= center * kCenterRingSpread / (ringCount() - 1) * kCenterGearDepth + 1;
+        }
+    }
+    const QPolygonF arc = createPolygonPie(widgetDiameter_ / 2 - pen_.width(), inner, start, arcWidth, false);
     QRadialGradient grad(QPointF(0, 0), width());
     for (const auto& [position, color] : newArcColors) {
         grad.setColorAt(position, color);
@@ -761,7 +770,7 @@ void AnalogGauge::paintEvent(QPaintEvent*) {
 }
 
 // the cached face under and over the band, then every frame the band and everything that moves over them, in the order
-// the whole gauge was always drawn in
+// the whole gauge was always drawn in, but for the arc: under the center, whose gear's teeth stand over it
 void AnalogGauge::drawFaceUnder() {
     drawOuterCircle();
 }
@@ -792,15 +801,15 @@ void AnalogGauge::drawFrame() {
     if (enableNeedlePolygon_) {
         drawNeedle();
     }
+    if (enableDrawNewArc_) {
+        drawNewArc();
+    }
     if (enableCenterPoint_) {
         drawBigNeedleCenterPoint();
     }
     if (enableValueText_) {
         createValuesText();
         createUnitsText();
-    }
-    if (enableDrawNewArc_) {
-        drawNewArc();
     }
 }
 

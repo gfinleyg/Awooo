@@ -71,6 +71,12 @@ Python app's own results (`tests\golden\`).
   theme's colors (`#ffb3c6`, `#e8102a`, `#800014`), and LayoutViewer lists them. The Python app's resting/beating
   heart image and its small red-to-pink hearts are gone, so the `hr_gauge` parity scene is meant to differ.
 
+- **The power and RPM gauges' target arc runs from the edge of the center rings to the edge of the scale.** The Python
+  app's started inside the rings, over their outer part, and ran past the gauge's edge, so it was cut off flat against
+  the block info above when it pointed up. It's now drawn under the center, and on the RPM gauge it starts just under
+  the gear, filling the gaps between the teeth. Scenes with an arc (`power_gauge`, `cadence_mode_gauge`, the workout and
+  Musical Cadence screens', `ftp_colors_tab`, `ftp_mockup`) are meant to differ from the Python app's.
+
 - **The RPM gauge has a band of the cadence zones' colors in every mode,** filled up to the needle like the power
   gauge's (the chainring shrunk to sit inside it): the same zones as Musical Cadence Mode's (40/65/90/115 rpm) and the
   same fades, from the theme's zone colors. The Python app's RPM gauge had no band outside Musical Cadence Mode, so the

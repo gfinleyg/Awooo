@@ -288,7 +288,8 @@ QGradientStops arcColors(const std::pair<QString, QString>& colors) {
     return {{0, QColor(QStringLiteral("#88") + colors.first)}, {.5, QColor(QStringLiteral("#88") + colors.second)}};
 }
 
-// The HUD's power gauge at 230 W, a 250 W target arc, rings for the last few blocks
+// The HUD's power gauge at 230 W, a 250 W target arc (deliberately unlike the Python app's: from the rings' edge to the
+// outer ring's, see CHANGES.md), rings for the last few blocks
 QWidget* scenePowerGauge() {
     auto* gauge = new Gauge;
     AnalogGauge* w = gauge->gauge();

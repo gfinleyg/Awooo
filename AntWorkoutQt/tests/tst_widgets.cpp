@@ -446,6 +446,69 @@ private slots:
         QVERIFY(qFuzzyCompare(gauge.valueGradientPosition(500), 136.0 / 360));
     }
 
+    // the target arc only between the rings' edge (swollen on a beat too) and the widget's, pointing straight up
+    void gaugeArcStartsAtTheRingsAndStaysInside() {
+        for (const double level : {0.0, 1.0}) {
+            AnalogGauge gauge;
+            gauge.setGaugeTheme(3);
+            gauge.bigNeedleCenterSize = 5;
+            gauge.setValue(0);
+            gauge.resize(400, 400);
+            gauge.setCenterRings(QList<QColor>{QColor(Qt::blue), QColor(Qt::cyan)}, level);
+            const auto picture = [&gauge] {
+                QImage image(gauge.size(), QImage::Format_ARGB32);
+                image.fill(Qt::white);
+                gauge.render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
+                return image;
+            };
+            const QImage without = picture();
+            gauge.setArc(500, {{0, QColor(Qt::red)}});
+            const QImage with = picture();
+            // (a 200 radius and an 80 center less half the big ticks' 2 wide pen, swelling 4% on a full beat)
+            const double inner = 79 * (1 + 0.04 * level);
+            double nearest = 1000, farthest = 0;
+            for (int y = 0; y < 400; ++y) {
+                for (int x = 0; x < 400; ++x) {
+                    if (with.pixel(x, y) != without.pixel(x, y)) {
+                        const double r = std::hypot(x + 0.5 - 200, y + 0.5 - 200);
+                        nearest = std::min(nearest, r);
+                        farthest = std::max(farthest, r);
+                    }
+                }
+            }
+            QVERIFY2(std::abs(nearest - inner) < 1, qPrintable(QString::number(nearest)));
+            QVERIFY2(farthest > 195 && farthest <= 199, qPrintable(QString::number(farthest)));
+        }
+    }
+
+    // with the center's outermost ring a gear, the target arc fills the gaps between its teeth and stays under them
+    void gaugeArcFillsTheGearsGaps() {
+        AnalogGauge gauge;
+        gauge.setGaugeTheme(3);
+        gauge.bigNeedleCenterSize = 5;
+        gauge.setValue(0);
+        gauge.resize(400, 400);
+        gauge.setCenterRings(QList<QColor>{QColor(Qt::blue), QColor(Qt::cyan)});
+        gauge.setCenterGearAngle(0);
+        const auto picture = [&gauge] {
+            QImage image(gauge.size(), QImage::Format_ARGB32);
+            image.fill(Qt::white);
+            gauge.render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
+            return image;
+        };
+        const QImage without = picture();
+        gauge.setArc(500, {{0, QColor(Qt::red)}});
+        const QImage with = picture();
+        // (the arc covers 256 to 284 degrees. The teeth reach 79 and their gaps 71: at 75, 260 to 267 degrees is a gap's
+        // floor, 270 to 277 a tooth's tip)
+        const auto at = [](double angle) {
+            const double radians = angle * std::numbers::pi / 180;
+            return QPoint(static_cast<int>(200 + 75 * std::cos(radians)), static_cast<int>(200 + 75 * std::sin(radians)));
+        };
+        QVERIFY(with.pixel(at(263.5)) != without.pixel(at(263.5)));
+        QCOMPARE(with.pixel(at(273.5)), without.pixel(at(273.5)));
+    }
+
     void gaugeRingsFitItsSize() {
         AnalogGauge gauge;
         gauge.bigNeedleCenterSize = 5;

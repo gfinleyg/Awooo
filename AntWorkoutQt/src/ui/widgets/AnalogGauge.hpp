@@ -102,7 +102,7 @@ public:
     // (0 fps: only along with whatever else redraws it)
     void setCenterGearAngle(std::optional<double> angle);
     std::optional<double> centerGearAngle() const { return centerGearAngle_; }
-    // the target arc: centered on arcCenterValue, wider for a higher value
+    // the target arc: centered on arcCenterValue, wider for a higher value, from the center's edge to the scale's
     void setArc(double centerValue, const QGradientStops& colors);
 
     QString units = QStringLiteral("℃");
