@@ -203,7 +203,7 @@ QWidget* sceneHudGraph() {
     const double now = 300;
     state.secondsPassed = now;
     const double diff = std::max(0.0, now - (state.graphSecondsShown - state.graphBreakpoint));
-    graph->setXRange(diff, diff + state.graphSecondsShown);
+    graph->setXRange(diff, diff + state.graphSecondsShown, 0.0);
     nowLine->setValue(now);
     const QList<double> blocks = {0, 120, 300, 420, 600, 720};
     const QList<double> watts = {120, 200, 150, 260, 180};
@@ -644,7 +644,8 @@ QWidget* sceneWorkoutPicker() {
 // The graph's stars at rest (a first goTo puts them straight there) at a time their twinkle is at its middle size,
 // and the bubbles beside them (and the block bubble) grown in
 void restStars(const QList<std::pair<MaxStar*, QString>>& stars, const QList<MaxBubble*>& bubbles,
-               const QList<BlockBubble*>& blockBubbles = {}, double target = 0) {
+               const QList<BlockBubble*>& blockBubbles = {}, double target = 0,
+               std::optional<double> upcoming = std::nullopt) {
     for (int phase = 0; phase < stars.size(); ++phase) {
         stars[phase].first->step(((3 + phase) * std::numbers::pi - phase * 2.1) / 3.6, phase);
     }
@@ -655,7 +656,7 @@ void restStars(const QList<std::pair<MaxStar*, QString>>& stars, const QList<Max
                 avoid.append(star->sceneBoundingRect());
             }
         }
-        BlockBubble::stepAll(blockBubbles, target, when, avoid);
+        BlockBubble::stepAll(blockBubbles, target, when, avoid, upcoming);
         for (MaxBubble* bubble : bubbles) {
             bubble->step(when, avoid);
         }
@@ -719,7 +720,8 @@ QWidget* sceneHudScreen() {
     layout->addWidget(hud);
     layout::applyLayout(holder, {{QStringLiteral("Workout"), hud}}, 1.0);
     shown(holder, 1920, 1116);
-    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower());
+    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower(),
+              hud->upcomingBubbleTarget());
     settle();
     return holder;
 }
@@ -933,7 +935,8 @@ QWidget* sceneCadenceScreen() {
     layout->addWidget(hud);
     layout::applyLayout(holder, {{QStringLiteral("Workout"), hud}}, 1.0);
     shown(holder, 1920, 1116);
-    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower());
+    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower(),
+              hud->upcomingBubbleTarget());
     settle();
     return holder;
 }
@@ -1061,7 +1064,8 @@ QWidget* viewerScene(const QString& view, const ViewerLook& look = kViewerLooks.
     }
     hud->cadenceGauge()->chainring()->spinTimer()->stop();
     hud->heartRateGauge()->heart()->beatTimer()->stop();
-    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower());
+    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower(),
+              hud->upcomingBubbleTarget());
     auto* synopsis = qobject_cast<SynopsisScreen*>(display->view(QStringLiteral("Synopsis")));
     for (QTimer* timer : synopsis->findChildren<QTimer*>(Qt::FindDirectChildrenOnly)) {
         timer->stop();

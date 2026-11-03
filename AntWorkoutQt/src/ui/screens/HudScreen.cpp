@@ -587,7 +587,7 @@ void HudScreen::buildGraph() {
     progressGraph_->viewport()->setFocusPolicy(Qt::NoFocus);
     progressGraph_->updateViews();
     connect(progressGraph_->vb(), &plot::ViewBox::resized, progressGraph_, &WorkoutGraph::updateViews);
-    progressGraph_->setXRange(0, state.graphSecondsShown);
+    progressGraph_->setXRange(0, state.graphSecondsShown, 0.0);
     progressGraph_->setYRange(0, 1000, 0.0);
     progressGraph_->setMaximumHeight(200);
     progressGraph_->plotScreen()->setTitle(std::nullopt);

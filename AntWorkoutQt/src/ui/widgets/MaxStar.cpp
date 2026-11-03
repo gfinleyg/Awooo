@@ -112,6 +112,10 @@ double MaxStar::headroom() const {
     return restOffset() + kRadius * theme::uiScale() * (1 + kTwinkle) + kEdgeWidth / 2 + kGap;
 }
 
+double MaxStar::halfWidth() const {
+    return kRadius * theme::uiScale() * (1 + kTwinkle) * std::cos(radians(18)) + kEdgeWidth / 2;
+}
+
 QRectF MaxStar::restRect(const QPointF& point) const {
     const double radius = kRadius * theme::uiScale() * 1.3;
     const QPointF center(point.x(), point.y() - restOffset());
@@ -213,6 +217,28 @@ std::pair<QList<double>, QList<double>> MaxStar::tripPath() const {
     return {sx, sy};
 }
 
+QList<QRectF> MaxStar::tripClearance(double now) const {
+    QList<QRectF> rects;
+    if (!x || !onGraph || progress(now) >= 1) {
+        return rects;
+    }
+    const auto [xs, ys] = tripPath();
+    const QList<double> lengths = cumulativeLengths(xs, ys);
+    const double along = ease(progress(now)) * lengths.back();
+    const double width = halfWidth();
+    const double radius = kRadius * theme::uiScale() * (1 + kTwinkle) + kEdgeWidth / 2;
+    const double above = restOffset() + radius;
+    double next = along;
+    for (qsizetype i = 0; i < xs.size(); ++i) {
+        // (one a half width or so apart, and its end)
+        if ((lengths[i] >= along && lengths[i] >= next) || i == xs.size() - 1) {
+            rects.append(QRectF(xs[i] - width, ys[i] - above, 2 * width, above + radius));
+            next = lengths[i] + width;
+        }
+    }
+    return rects;
+}
+
 void MaxStar::step(double now, int phase) {
     if (!x || !onGraph) {
         setVisible(false);
@@ -298,7 +324,7 @@ double MaxBubble::headroom() const {
     return std::max(star_->headroom(), above + 1 + MaxStar::kGap);
 }
 
-void MaxBubble::step(double now, QList<QRectF>& avoid) {
+void MaxBubble::step(double now, QList<QRectF>& avoid, const QList<QRectF>& keepOff) {
     MaxStar* star = star_;
     if (!star->x || !star->onGraph) {
         state_ = State::Hidden;
@@ -306,12 +332,33 @@ void MaxBubble::step(double now, QList<QRectF>& avoid) {
         return;
     }
     now_ = now;
-    if ((state_ == State::Appearing || state_ == State::Shown) && (star->x != x_ || star->y != y_)) {
-        // (room for its spray while it pops)
-        prepareGeometryChange();
-        state_ = State::Popping;
-        stateStart_ = now;
-        ++pops_;
+    const QRectF area = star->vbox()->sceneBoundingRect();
+    const double scale = MaxStar::kRadius * theme::uiScale();
+    // where the star rests over the max it's beside now (held down from the graph's top as the star is, see
+    // MaxStar::step)
+    const auto starAt = [&](const QPointF& point) {
+        return QPointF(point.x(), std::max(point.y() - star->offset.value_or(star->restOffset()), area.top() + scale));
+    };
+    // its rect at offset from level with that star, the star's height top to bottom
+    const auto rectAt = [&](const QPointF& point, const QPointF& offset) {
+        const QPointF center = starAt(point) + QPointF(0, scale * (MaxStar::kBelow - 1) / 2) + offset;
+        return QRectF(center.x() - width_ / 2, center.y() - height_ / 2, width_, height_);
+    };
+    const auto touches = [](const QRectF& rect, const QList<QRectF>& others) {
+        return std::any_of(others.begin(), others.end(), [&](const QRectF& other) { return rect.intersects(other); });
+    };
+    const QRectF inArea = area.adjusted(-0.5, -0.5, 0.5, 0.5);
+    if (state_ == State::Appearing || state_ == State::Shown) {
+        // its max moved, the graph's edge reached, or a star or a bubble placed before it touching it: pops, and a new
+        // one comes in clear of them
+        const QRectF rect = rectAt(star->vbox()->mapViewToScene(QPointF(*x_, *y_)), offset_);
+        if (star->x != x_ || star->y != y_ || rect.left() <= area.left() || !inArea.contains(rect) || touches(rect, avoid)) {
+            // (room for its spray while it pops)
+            prepareGeometryChange();
+            state_ = State::Popping;
+            stateStart_ = now;
+            ++pops_;
+        }
     }
     if (state_ == State::Popping && now - stateStart_ >= kPopSeconds) {
         prepareGeometryChange();
@@ -322,10 +369,39 @@ void MaxBubble::step(double now, QList<QRectF>& avoid) {
             setVisible(false);
             return;
         }
-        // the star has arrived: a new one over its max
+        // the star has arrived: a new one over its max, beside the star if it can be, else over, under or to a corner
+        // of it (none clear of them: none, until there's one)
+        const QPointF point = star->vbox()->mapViewToScene(QPointF(*star->x, *star->y));
+        fit(format_.arg(py::fixed(*star->y, 0)));
+        const double beside = star->halfWidth() + kGap + width_ / 2;
+        const double over = scale * (1 + MaxStar::kTwinkle) + MaxStar::kEdgeWidth / 2 + kGap + height_ / 2 +
+                            scale * (MaxStar::kBelow - 1) / 2;
+        const double under = scale * MaxStar::kBelow * (1 + MaxStar::kTwinkle) + MaxStar::kEdgeWidth / 2 + kGap +
+                             height_ / 2 - scale * (MaxStar::kBelow - 1) / 2;
+        const double corner = height_ + kGap;
+        const QList<QPointF> offsets = {
+            {side_ * beside, 0},       {-side_ * beside, 0},      {0, -over},
+            {0, under},                {side_ * beside, -corner}, {side_ * beside, corner},
+            {-side_ * beside, -corner}, {-side_ * beside, corner},
+        };
+        const QList<QRectF> obstacles = avoid + keepOff;
+        bool placed = false;
+        for (const QPointF& offset : offsets) {
+            const QRectF rect = rectAt(point, offset);
+            if (rect.left() > area.left() && inArea.contains(rect) &&
+                !touches(rect.adjusted(-kClear, -kClear, kClear, kClear), obstacles)) {
+                offset_ = offset;
+                side_ = offset.x() < 0 ? -1 : offset.x() > 0 ? 1 : side_;
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) {
+            setVisible(false);
+            return;
+        }
         x_ = star->x;
         y_ = star->y;
-        fit(format_.arg(py::fixed(*y_, 0)));
         state_ = State::Appearing;
         stateStart_ = now;
     }
@@ -333,39 +409,14 @@ void MaxBubble::step(double now, QList<QRectF>& avoid) {
         state_ = State::Shown;
     }
 
-    // level with where the star rests over its max (the old one while popping; held down from the graph's top as
-    // the star is, see MaxStar::step), the star's height top to bottom
+    // (the old max's place while popping)
     const QPointF point = star->vbox()->mapViewToScene(QPointF(*x_, *y_));
-    const double scale = MaxStar::kRadius * theme::uiScale();
-    const QRectF area = star->vbox()->sceneBoundingRect();
-    const double offset = star->offset.value_or(star->restOffset());
-    const double centerY = std::max(point.y() - offset, area.top() + scale) + scale * (MaxStar::kBelow - 1) / 2;
-    // (the star's half width)
-    const double reach = scale * std::cos(radians(18)) + MaxStar::kEdgeWidth / 2 + kGap;
-    auto rectOn = [&](int side) {
-        const double centerX = point.x() + side * (reach + width_ / 2);
-        return QRectF(centerX - width_ / 2, centerY - height_ / 2, width_, height_);
-    };
-    QList<int> fits;
-    for (const int side : {side_, -side_}) {
-        if (area.contains(rectOn(side))) {
-            fits.append(side);
-        }
+    rect_ = rectAt(point, offset_);
+    // (one popping is on its way out: others needn't keep clear of it)
+    if (state_ != State::Popping) {
+        avoid.append(rect_);
     }
-    if (fits.isEmpty()) {
-        fits = {side_};
-    }
-    side_ = fits.front();
-    for (const int side : fits) {
-        const QRectF rect = rectOn(side);
-        if (std::none_of(avoid.begin(), avoid.end(), [&](const QRectF& other) { return rect.intersects(other); })) {
-            side_ = side;
-            break;
-        }
-    }
-    const QRectF rect = rectOn(side_);
-    avoid.append(rect);
-    setPos(rect.center());
+    setPos(rect_.center());
 
     const double t = std::min(1.0, (now - stateStart_) / (state_ == State::Popping ? kPopSeconds : kAppearSeconds));
     if (state_ == State::Popping) {

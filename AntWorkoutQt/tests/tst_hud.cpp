@@ -25,6 +25,7 @@
 #include "GoldenRides.hpp"
 #include "HudScreen.hpp"
 #include "KeyShortcuts.hpp"
+#include "MaxStar.hpp"
 #include "Performance.hpp"
 #include "PowerSpiral.hpp"
 #include "PyCompat.hpp"
@@ -117,6 +118,8 @@ QString scratchpad(const QString& name) {
 }
 
 // one tick of the screen's clock, a second long
+constexpr double BubbleLead = HudScreen::kBubbleLeadSeconds;
+
 void tickSecond(HudScreen& hud, SimulatedRider& rider) {
     hud.processEvents(1.0);
     const double t = appState().secondsPassed;
@@ -589,8 +592,7 @@ private slots:
     }
 
     // one bubble at a time on the graph as laid out: the latest block's with the target being ridden now, else the
-    // latest block's; inside the graph, reaching no more than 30 s past the time now, and any line to its block
-    // diagonal
+    // latest block's; in the middle of its block, its bottom edge on the graph's bottom
     void blockBubbleShowsOneAtATime_data() {
         QTest::addColumn<QStringList>("blocks");
         QTest::addColumn<int>("shown");
@@ -632,12 +634,9 @@ private slots:
         const QRectF rect = bubble->mapRectToScene(bubble->boundingRect()).adjusted(1, 1, -1, -1);
         QVERIFY(area.adjusted(-0.5, -0.5, 0.5, 0.5).contains(rect));
         QVERIFY(rect.right() <= sceneX(appState().secondsPassed + BlockBubble::kMaxAheadSeconds) + 0.5);
-        if (bubble->connector()->isVisible()) {
-            const QLineF line(bubble->mapToScene(bubble->connector()->line().p1()),
-                              bubble->mapToScene(bubble->connector()->line().p2()));
-            QVERIFY(line.p2().x() >= sceneX(bubble->start()) - 0.5 && line.p2().x() <= sceneX(bubble->end()) + 0.5);
-            QVERIFY(std::abs(line.dx()) >= 1 && std::abs(line.dy()) >= 1);
-        }
+        QVERIFY(std::abs(rect.center().x() - (sceneX(bubble->start()) + sceneX(bubble->end())) / 2) <= 1);
+        QVERIFY(rect.left() >= sceneX(bubble->start()) && rect.right() <= sceneX(bubble->end()));
+        QVERIFY(std::abs(rect.bottom() - area.bottom()) <= 1);
         // another block's bubble taking its place (the second block's target is no other's): it pops, and is gone
         // once it has
         const double other = hud.blockBubbles()[1]->target();
@@ -645,12 +644,393 @@ private slots:
             QList<QRectF> avoid;
             BlockBubble::stepAll(hud.blockBubbles(), other, now, avoid);
             QVERIFY(bubble->isVisible() && bubble->popping());
-            QVERIFY(!bubble->connector()->isVisible());
             QVERIFY(hud.blockBubbles()[1]->isVisible());
         }
         QList<QRectF> avoid;
         BlockBubble::stepAll(hud.blockBubbles(), other, 11.01 + BlockBubble::kPopSeconds, avoid);
         QVERIFY(!bubble->isVisible() && !bubble->popping());
+    }
+
+    // the graph's times edge to edge, once it scrolls too
+    void graphHasNoPadding() {
+        QVERIFY(loadWorkout({"T:Edges", "1:600,0.75"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        QCOMPARE(hud.graph()->vb()->xRange(), (plot::Range{0, double(appState().graphSecondsShown)}));
+        hud.startWorkout();
+        while (appState().secondsPassed < 500) {
+            hud.processEvents(1.0);
+        }
+        const double start = appState().secondsPassed - (appState().graphSecondsShown - appState().graphBreakpoint);
+        QVERIFY(start > 0);
+        QCOMPARE(hud.graph()->vb()->xRange(), (plot::Range{start, start + appState().graphSecondsShown}));
+    }
+
+    // a long block's bubble stays in its middle, then at the graph's left edge inside the block, moving right along it,
+    // and pops when it no longer fits there
+    void blockBubbleMovesRightThenPops() {
+        QVERIFY(loadWorkout({"T:Edge", "1:200,0.6", "1:900,1.0"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        const plot::ViewBox* vbox = hud.graph()->powerVBox();
+        auto sceneX = [vbox](double t) { return vbox->mapViewToScene(QPointF(t, 0)).x(); };
+        const double left = vbox->sceneBoundingRect().left();
+        double now = 10;
+        QRectF last;
+        bool popped = false, pushed = false;
+        while (!popped && appState().secondsPassed < 900) {
+            tickSecond(hud, rider);
+            now += 1;
+            QList<QRectF> avoid;
+            BlockBubble::stepAll(hud.blockBubbles(), hud.engine().currentPower(), now, avoid);
+            if (hud.blockBubbles().isEmpty()) {
+                continue;
+            }
+            const BlockBubble* bubble = hud.blockBubbles().front();
+            popped = bubble->popping();
+            if (!popped) {
+                QVERIFY(bubble->isVisible());
+                last = bubble->mapRectToScene(bubble->boundingRect()).adjusted(1, 1, -1, -1);
+                QVERIFY(last.left() >= left - 0.5);
+                QVERIFY(last.right() <= sceneX(bubble->end()) + 0.5);
+                const double middle = (sceneX(bubble->start()) + sceneX(bubble->end())) / 2;
+                if (std::abs(last.center().x() - middle) > 1) {
+                    QVERIFY(std::abs(last.left() - left) <= 1);
+                    pushed = true;
+                }
+            }
+        }
+        QVERIFY(popped);
+        QVERIFY(pushed);
+        // (from the step before it stopped fitting: within a second of the block's end by then)
+        const double perSecond = sceneX(1) - sceneX(0);
+        QVERIFY(sceneX(hud.blockBubbles().front()->end()) - last.right() <= 1.5 * perSecond);
+    }
+
+    // one wider than its block stays in its middle, and pops when its left edge reaches the graph's
+    void shortBlockBubblePopsAtTheLeftEdge() {
+        QVERIFY(loadWorkout({"T:Edge", "1:100,0.8", "1:5,0.6", "1:900,1.0"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        const plot::ViewBox* vbox = hud.graph()->powerVBox();
+        auto sceneX = [vbox](double t) { return vbox->mapViewToScene(QPointF(t, 0)).x(); };
+        double now = 10;
+        QRectF last;
+        bool popped = false;
+        while (!popped && appState().secondsPassed < 900) {
+            tickSecond(hud, rider);
+            now += 1;
+            QList<QRectF> avoid;
+            BlockBubble::stepAll(hud.blockBubbles(), hud.engine().currentPower(), now, avoid);
+            if (hud.blockBubbles().size() < 2) {
+                continue;
+            }
+            const BlockBubble* bubble = hud.blockBubbles()[1];
+            popped = bubble->popping();
+            if (!popped) {
+                QVERIFY(bubble->isVisible());
+                last = bubble->mapRectToScene(bubble->boundingRect()).adjusted(1, 1, -1, -1);
+                QVERIFY(std::abs(last.center().x() - (sceneX(bubble->start()) + sceneX(bubble->end())) / 2) <= 1);
+            }
+        }
+        QVERIFY(popped);
+        const double left = vbox->sceneBoundingRect().left();
+        QVERIFY(last.left() >= left - 0.5);
+        QVERIFY(last.left() - left <= 1.5 * (sceneX(1) - sceneX(0)));
+    }
+
+    // 10 s before the next block, a block on the graph with its target takes the bubble: only from a block of 10 s or
+    // more, and not for a free ride
+    void blockBubbleMovesAheadOfTheNextBlock_data() {
+        QTest::addColumn<QString>("current");
+        QTest::addColumn<QString>("next");
+        QTest::addColumn<int>("seconds");
+        QTest::addColumn<bool>("moves");
+        QTest::newRow("matching block") << "0.8" << "1:60,0.6" << 60 << true;
+        QTest::newRow("a block of exactly 10 s") << "0.8" << "1:60,0.6" << 10 << true;
+        QTest::newRow("a shorter block") << "0.8" << "1:60,0.6" << 9 << false;
+        QTest::newRow("a ramp starting at the match") << "0.8" << "2:60,0.6,0.9" << 60 << true;
+        QTest::newRow("an interval starting at the match") << "0.8" << "3:2;1:30,0.6;1:30,0.7" << 60 << true;
+        QTest::newRow("no block to match") << "0.8" << "1:60,0.7" << 60 << false;
+        QTest::newRow("a free ride") << "0.8" << "0:60" << 60 << false;
+    }
+
+    void blockBubbleMovesAheadOfTheNextBlock() {
+        QFETCH(QString, current);
+        QFETCH(QString, next);
+        QFETCH(int, seconds);
+        QFETCH(bool, moves);
+        QVERIFY(loadWorkout({"T:Ahead", "1:60,0.6", "1:60,1.0", QStringLiteral("1:%1,%2").arg(seconds).arg(current), next}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        const auto stepped = [&](double now) {
+            QList<QRectF> avoid;
+            BlockBubble::stepAll(hud.blockBubbles(), hud.engine().currentPower(), now, avoid, hud.upcomingBubbleTarget());
+        };
+        // (the second block's bubble there once it's ended)
+        while (hud.engine().workoutSecondsPassed() < std::max(121.0, 120 + seconds - BubbleLead - 2)) {
+            tickSecond(hud, rider);
+        }
+        QCOMPARE(hud.blockBubbles().size(), qsizetype(2));
+        const BlockBubble* first = hud.blockBubbles()[0];
+        const BlockBubble* second = hud.blockBubbles()[1];
+        // (a block of 10 s or less is in its last 10 s from its start)
+        const bool waits = seconds > BubbleLead;
+        stepped(10);
+        if (waits) {
+            QVERIFY(second->isVisible() && !second->popping());
+            QVERIFY(!first->isVisible());
+        }
+        while (hud.engine().workoutSecondsPassed() < 120 + seconds - BubbleLead + 2) {
+            tickSecond(hud, rider);
+        }
+        stepped(11);
+        if (moves) {
+            QVERIFY(first->isVisible() && !first->popping());
+            if (waits) {
+                QVERIFY(second->isVisible() && second->popping());
+            }
+        } else {
+            QVERIFY(second->isVisible() && !second->popping());
+            QVERIFY(!first->isVisible());
+        }
+    }
+
+    // no shown bubble ever touches a star or another bubble: over a whole ride, and with stars sliding along their
+    // lines
+    void bubblesNeverTouch() {
+        QVERIFY(loadWorkout({"T:Touch", "1:40,0.6", "1:60,1.0", "1:40,0.6", "1:90,1.3", "1:30,0.6", "1:400,0.9", "1:300,0.6"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        const auto check = [&] {
+            QList<QRectF> shown;
+            for (const BlockBubble* bubble : hud.blockBubbles()) {
+                if (bubble->isVisible() && !bubble->popping()) {
+                    shown.append(bubble->placedRect());
+                }
+            }
+            for (const MaxBubble* bubble : hud.maxBubbles()) {
+                if (bubble->isVisible() && !bubble->popping()) {
+                    shown.append(bubble->placedRect());
+                }
+            }
+            for (qsizetype i = 0; i < shown.size(); ++i) {
+                for (const auto& [star, name] : hud.maxStars()) {
+                    if (star->isVisible() && shown[i].intersects(star->sceneBoundingRect())) {
+                        return false;
+                    }
+                }
+                for (qsizetype j = i + 1; j < shown.size(); ++j) {
+                    if (shown[i].intersects(shown[j])) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+        // (past the star clock the ride's trips start on, so they're over)
+        double now = 1000;
+        while (appState().secondsPassed < 800) {
+            tickSecond(hud, rider);
+            for (int step = 0; step < 3; ++step) {
+                now += 0.2;
+                hud.stepGraphMarkers(now);
+                QVERIFY2(check(), qPrintable(QStringLiteral("touching at %1 s").arg(appState().secondsPassed)));
+            }
+        }
+        // each star slid along its whole line and back
+        for (const auto& [star, name] : hud.maxStars()) {
+            const SavedValues& saved = name == u"power" ? appState().savedPowerVals
+                                       : name == u"hr"  ? appState().savedHRVals
+                                                        : appState().savedCadenceVals;
+            for (const qsizetype index : {qsizetype(30), saved.times.size() - 1}) {
+                star->goTo(saved.times[index], saved.values[index], now);
+                for (int step = 0; step < 100; ++step) {
+                    now += 0.016;
+                    hud.stepGraphMarkers(now);
+                    QVERIFY2(check(), qPrintable(name));
+                }
+            }
+        }
+    }
+
+    // a star touching a max bubble pops it, and a new one comes in clear of it
+    void maxBubblePopsAndMovesWhenTouched() {
+        QVERIFY(loadWorkout({"T:Touch", "1:600,0.75"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        while (appState().secondsPassed < 200) {
+            tickSecond(hud, rider);
+        }
+        double now = 1000;
+        hud.stepGraphMarkers(now);
+        now += MaxBubble::kAppearSeconds + 0.1;
+        hud.stepGraphMarkers(now);
+        MaxBubble* bubble = hud.maxBubbles().front();
+        QVERIFY(bubble->isVisible() && !bubble->popping());
+        const QRectF was = bubble->placedRect();
+        const QList<QRectF> star{QRectF(was.center(), QSizeF(4, 4))};
+        QList<QRectF> avoid = star;
+        bubble->step(now, avoid);
+        QVERIFY(bubble->popping());
+        QCOMPARE(avoid.size(), star.size());
+        now += MaxBubble::kPopSeconds + 0.01;
+        avoid = star;
+        bubble->step(now, avoid);
+        QVERIFY(bubble->isVisible() && !bubble->popping());
+        QVERIFY(!bubble->placedRect().intersects(star.front()));
+        QVERIFY(bubble->placedRect() != was);
+    }
+
+    // a star touching a block bubble pops it, and a new one comes in clear of it, still in its block
+    void blockBubblePopsAndMovesWhenTouched() {
+        QVERIFY(loadWorkout({"T:Touch", "1:200,0.6", "1:400,0.6"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        while (hud.blockBubbles().isEmpty()) {
+            tickSecond(hud, rider);
+        }
+        const plot::ViewBox* vbox = hud.graph()->powerVBox();
+        auto sceneX = [vbox](double t) { return vbox->mapViewToScene(QPointF(t, 0)).x(); };
+        double now = 1000;
+        QList<QRectF> avoid;
+        const double target = hud.engine().currentPower();
+        BlockBubble::stepAll(hud.blockBubbles(), target, now, avoid);
+        const BlockBubble* bubble = hud.blockBubbles().front();
+        QVERIFY(bubble->isVisible());
+        const QRectF was = bubble->placedRect();
+        const QList<QRectF> star{QRectF(was.center(), QSizeF(4, 4))};
+        now += 1;
+        avoid = star;
+        BlockBubble::stepAll(hud.blockBubbles(), target, now, avoid);
+        QVERIFY(bubble->popping());
+        // (held while it pops)
+        now += BlockBubble::kPopSeconds / 2;
+        avoid = star;
+        BlockBubble::stepAll(hud.blockBubbles(), target, now, avoid);
+        QVERIFY(bubble->popping());
+        now += BlockBubble::kPopSeconds;
+        avoid = star;
+        BlockBubble::stepAll(hud.blockBubbles(), target, now, avoid);
+        avoid = star;
+        BlockBubble::stepAll(hud.blockBubbles(), target, now, avoid);
+        QVERIFY(bubble->isVisible() && !bubble->popping());
+        const QRectF rect = bubble->placedRect();
+        QVERIFY(!rect.intersects(star.front()));
+        QVERIFY(rect.left() >= sceneX(bubble->start()) && rect.right() <= sceneX(bubble->end()));
+        // (stays there, scrolling with its block)
+        now += 1;
+        avoid.clear();
+        BlockBubble::stepAll(hud.blockBubbles(), target, now, avoid);
+        QVERIFY(!bubble->popping());
+        QCOMPARE(bubble->placedRect(), rect);
+    }
+
+    // a max star moves on when its left edge reaches the graph's; a max bubble on its left pops when its own does, and
+    // a new one comes in on the star's right
+    void maxStarAndBubbleLeaveAtTheLeftEdge() {
+        QVERIFY(loadWorkout({"T:Edge", "1:1200,0.75"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        while (appState().secondsPassed < 300) {
+            tickSecond(hud, rider);
+        }
+        // a max that stays the max
+        SavedValues& power = appState().savedPowerVals;
+        power.values.back() = 5000;
+        const double spike = power.times.back();
+        tickSecond(hud, rider);
+
+        MaxBubble* bubble = nullptr;
+        for (MaxBubble* candidate : hud.maxBubbles()) {
+            if (candidate->star()->y == 5000.0) {
+                bubble = candidate;
+            }
+        }
+        QVERIFY(bubble);
+        MaxStar* star = bubble->star();
+        QCOMPARE(*star->x, spike);
+        const plot::ViewBox* vbox = star->vbox();
+        auto sceneX = [vbox](double t) { return vbox->mapViewToScene(QPointF(t, 0)).x(); };
+        const double perSecond = sceneX(1) - sceneX(0);
+        const double left = vbox->sceneBoundingRect().left();
+        double now = 1000;
+        // (the right side taken, to put it on the left)
+        const auto stepOnLeft = [&] {
+            QList<QRectF> avoid{QRectF(sceneX(spike), -5000, 10000, 10000)};
+            bubble->step(now, avoid);
+        };
+        stepOnLeft();
+        now += MaxBubble::kAppearSeconds + 1;
+        stepOnLeft();
+        QVERIFY(bubble->isVisible() && !bubble->popping());
+        QVERIFY(bubble->scenePos().x() < sceneX(spike));
+
+        while (!bubble->popping()) {
+            QVERIFY(appState().secondsPassed < 720);
+            tickSecond(hud, rider);
+            now += 1;
+            stepOnLeft();
+        }
+        // (its max still on the graph, and the star's still over it)
+        QCOMPARE(*star->x, spike);
+        QVERIFY(sceneX(spike) - star->halfWidth() > left);
+        QList<QRectF> avoid;
+        now += MaxBubble::kPopSeconds + 0.01;
+        bubble->step(now, avoid);
+        QVERIFY(!bubble->popping());
+        QVERIFY(bubble->scenePos().x() > sceneX(spike));
+
+        while (star->x == spike) {
+            QVERIFY(appState().secondsPassed < 780);
+            // (still clear of the edge, to within a tick)
+            QVERIFY(sceneX(spike) - star->halfWidth() > left - perSecond);
+            tickSecond(hud, rider);
+        }
+        QVERIFY(sceneX(spike) - star->halfWidth() <= left + perSecond);
+        QVERIFY(sceneX(*star->x) - star->halfWidth() > left);
     }
 
     // ---- An FE-C trainer ----

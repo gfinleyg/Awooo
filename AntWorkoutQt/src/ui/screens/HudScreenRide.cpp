@@ -1053,9 +1053,10 @@ void HudScreen::hudGraphDataUpdate() {
             }
         }
     }
-    // one formula for the x window the whole ride (clamped to 0 before the breakpoint), so it never snaps
+    // one formula for the x window the whole ride (clamped to 0 before the breakpoint), so it never snaps; no padding,
+    // so the curves start at the graph's left edge and the targets run to its right edge
     diff = std::max(0.0, state.secondsPassed - window);
-    progressGraph_->setXRange(diff, diff + state.graphSecondsShown);
+    progressGraph_->setXRange(diff, diff + state.graphSecondsShown, 0.0);
     nowLine_->setValue(state.secondsPassed);
     updateMaxStars(diff);
 
@@ -1137,12 +1138,18 @@ void HudScreen::plotSavedVals(const QString& savedName, plot::CurveItem* curve, 
     }
 }
 
-// each sensor's star to its highest reading on the graph (from start on): the latest of equal ones, unless the one
-// it's over still is one
-void HudScreen::updateMaxStars(double start) {
+// each sensor's star to its highest reading on the graph: the latest of equal ones, unless the one it's over still is
+// one. Once the graph scrolls, only readings a star's left edge would be clear of the graph's left edge over: it moves
+// on as its left edge gets there
+void HudScreen::updateMaxStars(double graphStart) {
     const double now = steadySeconds(starClock_);
     for (const auto& [star, name] : maxStars_) {
         const SavedValues& saved = savedValues(name);
+        double start = graphStart;
+        const double perSecond = star->vbox()->mapViewToScene(QPointF(1, 0)).x() - star->vbox()->mapViewToScene(QPointF(0, 0)).x();
+        if (graphStart > 0 && perSecond > 0) {
+            start += star->halfWidth() / perSecond;
+        }
         const auto first = std::lower_bound(saved.times.begin(), saved.times.end(), start) - saved.times.begin();
         star->onGraph = first < saved.times.size();
         if (!star->onGraph) {
@@ -1179,12 +1186,6 @@ void HudScreen::fitGraphTops() {
                 rooms.append({bubble->headroom(), *bubble->star()->y});
             }
         }
-        // (and the block bubbles over the lines)
-        for (const BlockBubble* bubble : blockBubbles_) {
-            if (const std::optional<BlockBubble::Room> room = bubble->room(); room && room->vbox == vbox) {
-                rooms.append({room->headroom, room->value});
-            }
-        }
         vbox->setYRange(0, MaxStar::topWithRoom(vbox, top.first, rooms), 0.0);
     }
 }
@@ -1193,26 +1194,44 @@ void HudScreen::stepMaxStars() {
     if (!isVisible()) {
         return;
     }
-    const double now = steadySeconds(starClock_);
+    stepGraphMarkers(steadySeconds(starClock_));
+}
+
+void HudScreen::stepGraphMarkers(double now) {
     for (int phase = 0; phase < maxStars_.size(); ++phase) {
         maxStars_[phase].first->step(now, phase);
     }
-    // the block bubble, then the max bubbles beside their stars, each clear of the stars and of the bubbles placed
-    // before it
-    QList<QRectF> avoid;
+    // the block bubble, then the max bubbles: each pops if a star or a bubble before it touches it, and comes in again
+    // clear of the stars, the rest of their trips, and the other bubbles
+    QList<QRectF> avoid, trips;
     for (const auto& [star, name] : maxStars_) {
         if (star->isVisible()) {
             avoid.append(star->sceneBoundingRect());
         }
+        trips += star->tripClearance(now);
     }
-    BlockBubble::stepAll(blockBubbles_, engine_->currentPower(), now, avoid);
+    BlockBubble::stepAll(blockBubbles_, engine_->currentPower(), now, avoid, upcomingBubbleTarget(), trips);
     for (MaxBubble* bubble : maxBubbles_) {
-        bubble->step(now, avoid);
+        QList<QRectF> keepOff = trips;
+        for (const MaxBubble* other : maxBubbles_) {
+            if (other != bubble && other->isVisible() && !other->popping()) {
+                keepOff.append(other->placedRect());
+            }
+        }
+        bubble->step(now, avoid, keepOff);
     }
 }
 
-// the block's average power and cadence over its readings, at the lines' ends now (a curve's latest reading, 0 through a
-// dropout, as it's drawn; the target bar's last target)
+std::optional<double> HudScreen::upcomingBubbleTarget() const {
+    if (!engine_->started() || engine_->blockDuration() < kBubbleLeadSeconds ||
+        engine_->blockDuration() - engine_->blockSecondsPassed() > kBubbleLeadSeconds) {
+        return std::nullopt;
+    }
+    const std::optional<int> next = engine_->nextBlockPower();
+    return next ? std::optional<double>(*next) : std::nullopt;
+}
+
+// the block's average power and cadence over its readings
 void HudScreen::finishBlockBubble() {
     if (!blockStart_) {
         return;
@@ -1221,46 +1240,35 @@ void HudScreen::finishBlockBubble() {
     const double start = *blockStart_;
     const double end = state.secondsPassed;
     blockStart_.reset();
-    plot::ViewBox* targetVBox = cadenceMode_ ? progressGraph_->hrCadenceVBox() : progressGraph_->powerVBox();
-    QList<BlockBubble::LineEnd> ends;
     QList<BlockBubble::Row> rows;
-    // (heart rate has no line, but its curve's end is kept clear too)
     struct Sensor {
         QString name, label, unit;
-        plot::ViewBox* vbox;
-        bool shown, row;
+        bool shown;
     };
     const QList<Sensor> sensors = {
-        {QStringLiteral("power"), QStringLiteral("Avg Pwr"), QStringLiteral("W"), progressGraph_->powerVBox(), true, true},
-        {QStringLiteral("cadence"), QStringLiteral("Avg Cad"), QStringLiteral("rpm"), progressGraph_->hrCadenceVBox(),
-         state.showsCadence(), true},
-        {QStringLiteral("hr"), QString(), QString(), progressGraph_->hrCadenceVBox(), state.antHRM, false},
+        {QStringLiteral("power"), QStringLiteral("Avg Pwr"), QStringLiteral("W"), true},
+        {QStringLiteral("cadence"), QStringLiteral("Avg Cad"), QStringLiteral("rpm"), state.showsCadence()},
     };
     for (const Sensor& sensor : sensors) {
         if (!sensor.shown) {
             continue;
         }
         const SavedValues& saved = savedValues(sensor.name);
-        if (sensor.row) {
-            BlockBubble::Row row{sensor.label, sensor.unit, std::nullopt};
-            double sum = 0;
-            int count = 0;
-            for (qsizetype i = std::lower_bound(saved.times.begin(), saved.times.end(), start) - saved.times.begin();
-                 i < saved.times.size() && saved.times[i] < end; ++i) {
-                sum += saved.values[i];
-                ++count;
-            }
-            if (count) {
-                row.avg = sum / count;
-            }
-            rows.append(row);
+        BlockBubble::Row row{sensor.label, sensor.unit, std::nullopt};
+        double sum = 0;
+        int count = 0;
+        for (qsizetype i = std::lower_bound(saved.times.begin(), saved.times.end(), start) - saved.times.begin();
+             i < saved.times.size() && saved.times[i] < end; ++i) {
+            sum += saved.values[i];
+            ++count;
         }
-        if (!saved.times.isEmpty() && saved.times.back() >= start) {
-            ends.append({sensor.vbox, end - saved.times.back() > kDropoutZeroSeconds ? 0.0 : saved.values.back()});
+        if (count) {
+            row.avg = sum / count;
         }
+        rows.append(row);
     }
     const AppState* rideState = &state;
-    auto* bubble = new BlockBubble(start, end, rows, {targetVBox, lastTarget_}, ends, progressGraph_->powerVBox(),
+    auto* bubble = new BlockBubble(start, end, rows, lastTarget_, progressGraph_->powerVBox(),
                                    [rideState] { return rideState->secondsPassed; });
     progressGraph_->scene()->addItem(bubble);
     blockBubbles_.append(bubble);

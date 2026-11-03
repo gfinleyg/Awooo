@@ -6,7 +6,8 @@
 // settling back just over the max, as close as it can without touching the line (or a marker there), where it
 // twinkles. Its owner says where the max is (goTo), steps it about every frame (step) and keeps room for it at the
 // graph's top (topWithRoom). MaxBubble: the max's value in a small soap bubble (SoapBubble) beside a star at rest,
-// popping when the max moves.
+// popping when the max moves, its left edge reaches the graph's, or a star or another bubble touches it, and coming in
+// again where it's clear of them.
 
 #include <QFont>
 #include <QGraphicsPathItem>
@@ -65,6 +66,8 @@ public:
     // how far above its max it reaches, in pixels: the room it needs at the top of the graph
     double headroom() const;
     QRectF restRect(const QPointF& point) const;
+    // how far it reaches either side of its max (at a twinkle's biggest), in pixels
+    double halfWidth() const;
 
     // a y range top (from 0) of at least top, high enough for each (headroom, value): that resting over a max of
     // value fits under it, and under reserved pixels along the graph's top
@@ -76,6 +79,8 @@ public:
     // the max is at (x, y) now (seconds on the monotonic clock): off there along the curve if it moved
     void goTo(double x, double y, double now);
     double progress(double now) const;
+    // the rects the rest of its trip passes through (scene coordinates; none at rest): for bubbles to be placed clear of
+    QList<QRectF> tripClearance(double now) const;
     // moves it to where it is at now (seconds); phase: its twinkle's, to keep stars out of step
     void step(double now, int phase = 0);
 
@@ -111,6 +116,8 @@ public:
     // the room kept over it at the graph's top for its pop's spray, as a share of its height
     static constexpr double kPopGrowth = 0.35;
     static constexpr double kAppearSeconds = 0.28;
+    // pixels kept clear around it when it's placed (it grows in a little past its size)
+    static constexpr double kClear = 3;
 
     // star: the MaxStar it goes with; format: its text, with %1 for the max's value (e.g. "Max Pwr: %1 W"). Add it to
     // the graph's scene
@@ -118,11 +125,14 @@ public:
 
     MaxStar* star() const { return star_; }
     QString text() const { return text_; }
+    bool popping() const { return state_ == State::Popping; }
+    // where it's placed (scene coordinates), at its full size
+    QRectF placedRect() const { return rect_; }
     // how far above its max it and its star reach, in pixels (it at a pop's biggest)
     double headroom() const;
-    // places it at now beside its star, on a side with room that keeps clear of the rects in avoid (scene
-    // coordinates: the other stars and bubbles), and adds its own rect to avoid
-    void step(double now, QList<QRectF>& avoid);
+    // at now: pops if a rect in avoid (scene coordinates: the stars and the bubbles placed before it) touches it, and
+    // comes in again by its star clear of those and of keepOff (what's on its way there); adds its own rect to avoid
+    void step(double now, QList<QRectF>& avoid, const QList<QRectF>& keepOff = {});
 
     QRectF boundingRect() const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
@@ -143,6 +153,9 @@ private:
     unsigned pops_ = 0;
     std::optional<double> x_, y_;
     int side_ = 1;
+    // its center from level with its star, and its rect
+    QPointF offset_;
+    QRectF rect_;
 };
 
 }  // namespace awo

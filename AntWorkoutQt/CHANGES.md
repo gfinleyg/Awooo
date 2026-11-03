@@ -71,12 +71,14 @@ Python app's own results (`tests\golden\`).
 - **The workout screen's graph shows a completed block's stats in a bubble**: its average power and cadence
   ("Avg Pwr 245W", "Avg Cad 88rpm"; no cadence line without a cadence sensor, "--" for one with no readings in the
   block). One shows at a time: the latest block still on the graph with the same target as the block being ridden,
-  or else the latest block. It pops in where the lines ended as its block did: under the lowest of the power, heart
-  rate and cadence curves and the target bar if it fits there, over the highest if not (the graph's scale grows to
-  make room), kept on the graph and never reaching more than 30 s past the time now, and scrolls along with its
-  block. One that isn't under the top of its own block has a thin diagonal line to it. It's a soap bubble like the
-  max bubbles (below), and pops when another block's bubble takes its place. The Python app has no block bubbles, so
-  the workout and Musical Cadence Mode screens' parity scenes (`hud_screen`, `cadence_screen`) are meant to differ.
+  or else the latest block. In the last 10 s of a block at least 10 s long, if a block on the graph has the next
+  block's starting target (a free ride has none), it moves there ahead of time. It sits in the middle of its block with
+  its bottom edge on the graph's bottom, and scrolls along with its block. Once scrolling would take it off the graph
+  it stays at the left edge, moving right inside a long block, and pops as soon as it no longer fits inside the block
+  there. One wider than its block stays in its block's middle, and pops when its left edge reaches the graph's. It's a
+  soap bubble like the max bubbles (below), and pops when another block's bubble takes its place. The Python app has
+  no block bubbles, so the workout and Musical Cadence Mode screens' parity scenes (`hud_screen`, `cadence_screen`)
+  are meant to differ.
 
 - **The workout graph's bubbles are soap bubbles**: the max bubbles beside the stars have round ends, and both they
   and the block bubble are a see-through film in the plot labels' background color with faint rainbow swirls
@@ -86,6 +88,25 @@ Python app's own results (`tests\golden\`).
   (`#ff6ec7`, `#ffd36e`, `#7dffb0`, `#6ecbff`, `#b48cff`) and its glints' white (`#fffffd`) can be changed in a
   theme's colors, and LayoutViewer lists them. The `hud_graph` parity scene (and the workout screens' scenes) are
   meant to differ.
+
+- **The workout graph has no empty strips at its sides**: the power, heart rate and cadence lines start at its left
+  edge (to within a reading: up to about a second, or 3 pixels) and the expected power runs to its right edge. The
+  Python app's graph pads its 12 minutes by about 2% on each side (about 40 pixels at 1800 wide). The `hud_graph`
+  parity scene (and the workout screens' scenes) are meant to differ.
+
+- **The workout graph's stars and bubbles leave at its left edge, not after it**: once the graph scrolls, a star moves
+  to the next highest reading as soon as its left edge reaches the graph's (the Python app's waits for the max itself
+  to scroll off), and its max bubble pops with it. A max bubble on its star's left pops when its own left edge gets
+  there, and a new one comes in on the star's right. Before the graph scrolls, nothing's moving toward the edge, so
+  stars can sit against it.
+
+- **The workout graph's bubbles never touch a star or each other**: one that a star (sliding along its line or
+  scrolling into it) or another bubble touches pops, and a new one comes in where it's clear of them all, and of where
+  a sliding star is still to go. A max bubble goes beside its star if it can, else over, under or to a corner of it. A
+  block bubble goes in the middle of its block on the graph's bottom if it can, else along the bottom of its block,
+  else higher up in it; one wider than its block only in its middle. With no clear spot it stays away until there's
+  one. Max bubbles used to change sides without popping. The `hud_graph` parity scene (and the workout screens' scenes)
+  are meant to differ.
 
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".

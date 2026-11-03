@@ -631,6 +631,22 @@ std::pair<QList<double>, QList<double>> WorkoutEngine::upcomingGraph(double coll
     return {times, powers};
 }
 
+std::optional<int> WorkoutEngine::nextBlockPower() const {
+    const QList<WorkoutEntry>& list = appState().workoutList;
+    for (qsizetype index = activeWorkout_ + 1; index < list.size(); ++index) {
+        const WorkoutEntry& entry = list[index];
+        // (the rest of a ramp being ridden, and an interval's header)
+        if (entry.type == WorkoutEntry::Type::RampStep || entry.type == WorkoutEntry::Type::Interval) {
+            continue;
+        }
+        if (entry.block.type == BlockType::FreeRide) {
+            return std::nullopt;
+        }
+        return entry.block.power[activeDifficulty_];
+    }
+    return std::nullopt;
+}
+
 QString WorkoutEngine::difficultyFtpText(int value) {
     const int ftp = appState().ftp;
     if (ftp == 0) {

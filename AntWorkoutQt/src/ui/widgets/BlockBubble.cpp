@@ -31,16 +31,13 @@ QFont bubbleFont() {
 
 }  // namespace
 
-BlockBubble::BlockBubble(double start, double end, const QList<Row>& rows, const LineEnd& target,
-                         const QList<LineEnd>& curveEnds, const plot::ViewBox* timeBox, std::function<double()> rideSeconds)
-    : start_(start), end_(end), rows_(rows), target_(target), ends_(QList<LineEnd>{target} + curveEnds),
-      timeBox_(timeBox), rideSeconds_(std::move(rideSeconds)), connector_(new QGraphicsLineItem(this)) {
+BlockBubble::BlockBubble(double start, double end, const QList<Row>& rows, double target, const plot::ViewBox* timeBox,
+                         std::function<double()> rideSeconds)
+    : start_(start), end_(end), rows_(rows), target_(target), timeBox_(timeBox), rideSeconds_(std::move(rideSeconds)) {
     setAcceptedMouseButtons(Qt::NoButton);
-    // (under the max stars and their bubbles; its line under it)
+    // (under the max stars and their bubbles)
     setZValue(990);
     setVisible(false);
-    connector_->setFlag(QGraphicsItem::ItemStacksBehindParent);
-    connector_->setVisible(false);
     for (const Row& row : rows_) {
         cells_.append({row.name, value(row.avg, row.unit)});
     }
@@ -113,77 +110,105 @@ double BlockBubble::sceneX(double seconds) const {
     return timeBox_->mapViewToScene(QPointF(seconds, 0)).x();
 }
 
-// its block's end on the graph
+// the middle of its block (see findSpot for where else), kept on the graph (so moved right as a long block's middle goes
+// off it) and from reaching more than kMaxAheadSeconds past the time now
+double BlockBubble::naturalLeft() const {
+    return (sceneX(start_) + sceneX(end_)) / 2 - width_ / 2 + shift_ * (sceneX(1) - sceneX(0));
+}
+
+double BlockBubble::left() const {
+    const QRectF area = timeBox_->sceneBoundingRect();
+    const double right = std::min(area.right(), sceneX(rideSeconds_() + kMaxAheadSeconds));
+    return std::min(std::max(naturalLeft(), area.left()), right - width_);
+}
+
+// its block's end on the graph, and once the graph scrolls, either where it's placed in its block (one narrower than it
+// too) or moved right and still inside its block
 bool BlockBubble::onGraph() const {
     const QRectF area = timeBox_->sceneBoundingRect();
-    const double x = sceneX(end_);
-    return x >= area.left() && x <= area.right();
+    if (sceneX(end_) > area.right()) {
+        return false;
+    }
+    return timeBox_->xRange().min <= 0 || naturalLeft() >= area.left() || area.left() + width_ <= sceneX(end_);
 }
 
-// under the lowest line end, or over the highest when there's no room under it (above: whether over them)
-double BlockBubble::top(bool* above) const {
+// its bottom edge lift_ over the graph's bottom
+QRectF BlockBubble::placed() const {
     const QRectF area = timeBox_->sceneBoundingRect();
-    double lowest = area.top(), highest = area.bottom();
-    for (const auto& [vbox, y] : ends_) {
-        const double sceneY = vbox->mapViewToScene(QPointF(end_, y)).y();
-        lowest = std::max(lowest, sceneY);
-        highest = std::min(highest, sceneY);
-    }
-    double top = lowest + kGap;
-    const bool over = top + height_ > area.bottom();
-    if (over) {
-        top = std::max(area.top(), highest - kGap - height_);
-    }
-    if (above) {
-        *above = over;
-    }
-    return top;
+    return {left(), std::max(area.top(), area.bottom() - lift_ - height_), width_, height_};
 }
 
-std::optional<BlockBubble::Room> BlockBubble::room() const {
-    bool above = false;
-    top(&above);
-    if (!isVisible() || !above) {
-        return std::nullopt;
-    }
-    // the highest line end's
-    const LineEnd* highest = &ends_.front();
-    double highestY = highest->first->mapViewToScene(QPointF(end_, highest->second)).y();
-    for (const LineEnd& lineEnd : ends_) {
-        const double y = lineEnd.first->mapViewToScene(QPointF(end_, lineEnd.second)).y();
-        if (y < highestY) {
-            highest = &lineEnd;
-            highestY = y;
+// the first spot clear of obstacles: the middle of its block on the graph's bottom, else along the bottom of its block
+// (one narrower than it: only its middle), else the same higher up
+bool BlockBubble::findSpot(const QList<QRectF>& obstacles) {
+    const QRectF area = timeBox_->sceneBoundingRect();
+    shift_ = 0;
+    lift_ = 0;
+    const double middle = naturalLeft();
+    const double base = left();
+    const double lowest = std::max(area.left(), sceneX(start_));
+    const double highest = std::min({area.right(), sceneX(end_), sceneX(rideSeconds_() + kMaxAheadSeconds)}) - width_;
+    QList<double> lefts{base};
+    for (double step = width_ / 2; step > 0 && (base + step <= highest || base - step >= lowest); step += width_ / 2) {
+        if (base + step <= highest) {
+            lefts.append(base + step);
+        }
+        if (base - step >= lowest) {
+            lefts.append(base - step);
         }
     }
-    // (and a pixel for its outline)
-    return Room{highest->first, kGap + height_ + 1, highest->second};
+    const double perSecond = sceneX(1) - sceneX(0);
+    for (double lift = 0; area.bottom() - lift - height_ >= area.top(); lift += height_ + kGap) {
+        for (const double x : lefts) {
+            const QRectF rect(x, area.bottom() - lift - height_, width_, height_);
+            const QRectF clear = rect.adjusted(-kClear, -kClear, kClear, kClear);
+            if (std::none_of(obstacles.begin(), obstacles.end(), [&](const QRectF& other) { return clear.intersects(other); })) {
+                shift_ = x == base || perSecond <= 0 ? 0.0 : (x - middle) / perSecond;
+                lift_ = lift;
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
-// centered on its block's end, kept on the graph and from reaching more than kMaxAheadSeconds past the time now
-// (hidden while it can't be: the time now too near the workout's start)
-void BlockBubble::step(double now, QList<QRectF>& avoid) {
+// where it's placed; one that a rect in avoid touches pops, and comes in again where findSpot says (hidden while there's
+// no spot, or it can't be kept on the graph: the time now too near the workout's start)
+void BlockBubble::step(double now, QList<QRectF>& avoid, const QList<QRectF>& keepOff) {
     // (again in a new theme's font or scale)
     if (bubbleFont() != font_) {
         fit();
     }
-    const QRectF area = timeBox_->sceneBoundingRect();
-    const double right = std::min(area.right(), sceneX(rideSeconds_() + kMaxAheadSeconds));
-    const double left = std::min(std::max(sceneX(end_) - width_ / 2, area.left()), right - width_);
-    if (left < area.left() - 0.5) {
+    now_ = now;
+    if (replacing_) {
+        leave(now);
+        return;
+    }
+    if (left() < timeBox_->sceneBoundingRect().left() - 0.5) {
         hide();
         return;
     }
-    const QRectF rect(left, top(), width_, height_);
-    now_ = now;
     if (popAt_) {
         // (picked again mid-pop: a new one)
         prepareGeometryChange();
         popAt_.reset();
     }
-    if (!appearAt_) {
+    if (appearAt_) {
+        const QRectF rect = placed();
+        if (std::any_of(avoid.begin(), avoid.end(), [&](const QRectF& other) { return rect.intersects(other); })) {
+            replacing_ = true;
+            leave(now);
+            return;
+        }
+    } else {
+        if (!findSpot(avoid + keepOff)) {
+            hide();
+            return;
+        }
         appearAt_ = now;
     }
+    const QRectF rect = placed();
+    rect_ = rect;
     avoid.append(rect);
     setPos(rect.center());
     // grows in, a little past its size and back (ease out back), as a max bubble does
@@ -194,7 +219,6 @@ void BlockBubble::step(double now, QList<QRectF>& avoid) {
     setVisible(true);
     // (its colors drift)
     update();
-    connect(rect);
 }
 
 // where it was, bursting (see soap::paintPop); hidden once it's gone
@@ -209,7 +233,6 @@ void BlockBubble::leave(double now) {
         popAt_ = now;
         ++pops_;
         appearAt_.reset();
-        connector_->setVisible(false);
         setScale(1.0);
         setOpacity(1.0);
     }
@@ -228,48 +251,12 @@ void BlockBubble::hide() {
     }
     setVisible(false);
     appearAt_.reset();
+    replacing_ = false;
 }
 
-// a thin line from it to the top of its block, unless it's under the top of its block already: diagonal (45 degrees,
-// as far as its edge allows), to stand out from the graph's upright grid lines and bar edges
-void BlockBubble::connect(const QRectF& rect) {
-    const QRectF area = timeBox_->sceneBoundingRect();
-    const double blockLeft = std::max(sceneX(start_), area.left());
-    const double blockRight = sceneX(end_);
-    const double blockTop = target_.first->mapViewToScene(QPointF(end_, target_.second)).y();
-    if (rect.right() > blockLeft && rect.left() < blockRight && rect.top() >= blockTop - 0.5) {
-        connector_->setVisible(false);
-        return;
-    }
-    QPointF to(std::clamp(rect.center().x(), blockLeft, blockRight), blockTop);
-    // (from its nearest edge, clear of the rounded corners)
-    const double corner = lineHeight_ * kCorner;
-    const double inLeft = rect.left() + corner, inRight = rect.right() - corner;
-    QPointF from;
-    if (to.y() > rect.bottom() || to.y() < rect.top()) {
-        const double edge = to.y() > rect.bottom() ? rect.bottom() : rect.top();
-        const double rise = std::abs(to.y() - edge);
-        // across toward the side of it with more room
-        const double side = inRight - to.x() >= to.x() - inLeft ? 1 : -1;
-        from = {std::clamp(to.x() + side * rise, inLeft, inRight), edge};
-        if (std::abs(from.x() - to.x()) < 1) {
-            // (its block's top right under its middle and no room across: the block's end then)
-            to.setX(to.x() == blockRight ? blockLeft : blockRight);
-        }
-    } else {
-        from = {to.x() < rect.left() ? rect.left() : rect.right(), std::clamp(to.y() - corner, rect.top(), rect.bottom())};
-    }
-    QColor color(theme::current().mapHex(QStringLiteral("#000000")));
-    color.setAlpha(215);
-    QPen pen(color, 1);
-    pen.setCosmetic(true);
-    connector_->setPen(pen);
-    connector_->setLine(QLineF(mapFromScene(from), mapFromScene(to)));
-    connector_->setVisible(true);
-}
-
-BlockBubble* BlockBubble::pick(const QList<BlockBubble*>& bubbles, double target) {
+BlockBubble* BlockBubble::pick(const QList<BlockBubble*>& bubbles, double target, std::optional<double> upcoming) {
     BlockBubble* latest = nullptr;
+    BlockBubble* sameTarget = nullptr;
     for (auto it = bubbles.rbegin(); it != bubbles.rend(); ++it) {
         BlockBubble* bubble = *it;
         if (!bubble->onGraph()) {
@@ -278,22 +265,26 @@ BlockBubble* BlockBubble::pick(const QList<BlockBubble*>& bubbles, double target
         if (!latest) {
             latest = bubble;
         }
-        if (bubble->target_.second == target) {
+        if (upcoming && bubble->target_ == *upcoming) {
             return bubble;
         }
+        if (!sameTarget && bubble->target_ == target) {
+            sameTarget = bubble;
+        }
     }
-    return latest;
+    return sameTarget ? sameTarget : latest;
 }
 
-void BlockBubble::stepAll(const QList<BlockBubble*>& bubbles, double target, double now, QList<QRectF>& avoid) {
-    BlockBubble* shown = pick(bubbles, target);
+void BlockBubble::stepAll(const QList<BlockBubble*>& bubbles, double target, double now, QList<QRectF>& avoid,
+                          std::optional<double> upcoming, const QList<QRectF>& keepOff) {
+    BlockBubble* shown = pick(bubbles, target, upcoming);
     for (BlockBubble* bubble : bubbles) {
         if (bubble != shown) {
             bubble->leave(now);
         }
     }
     if (shown) {
-        shown->step(now, avoid);
+        shown->step(now, avoid, keepOff);
     }
 }
 

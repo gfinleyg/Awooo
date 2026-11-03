@@ -217,6 +217,12 @@ public:
     const QList<MaxBubble*>& maxBubbles() const { return maxBubbles_; }
     // each completed block's average power and cadence for the graph, oldest first (one shown at a time)
     const QList<BlockBubble*>& blockBubbles() const { return blockBubbles_; }
+    // in the last kBubbleLeadSeconds of a block at least that long: the target the next block starts at, for the block
+    // bubbles to move to a block with that target ahead of it
+    static constexpr double kBubbleLeadSeconds = 10;
+    std::optional<double> upcomingBubbleTarget() const;
+    // the graph's stars and bubbles to where they are at now (seconds on their clock)
+    void stepGraphMarkers(double now);
 
     // ---- What's on it (tests, LayoutViewer, the theme picker's preview) ----
 
@@ -316,7 +322,7 @@ private:
     void unitsChanged();
     void zeroGaugesOnDropout();
     void plotSavedVals(const QString& savedName, plot::CurveItem* curve, const QString& color);
-    void updateMaxStars(double start);
+    void updateMaxStars(double graphStart);
     void fitGraphTops();
     void stepMaxStars();
     // the block being ridden (from blockStart_) ended now: its bubble on the graph

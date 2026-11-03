@@ -84,6 +84,8 @@ public:
     int currentIntervalBlockIndex() const { return currentIntervalBlockIndex_; }
     double blockDuration() const { return blockDuration_; }
     double blockSecondsPassed() const { return blockSecondsPassed_; }
+    // the target the block after the one being ridden starts at (none: it's a free ride, or there isn't one)
+    std::optional<int> nextBlockPower() const;
     double workoutSecondsPassed() const { return workoutSecondsPassed_; }
     double eventTimerSeconds() const { return eventTimerSeconds_; }
     double timeDelta() const { return timeDelta_; }
