@@ -151,6 +151,23 @@ Python app's own results (`tests\golden\`).
 
 ## Sensors
 
+- **Only one copy of the app runs at a time.** Starting it again brings up the window that's already open. Starting it
+  while the last copy is still closing (its window is gone but it still has the stick for a moment) waits for that copy
+  to finish, so a quick close and reopen gets the stick. The Python app started a second copy that couldn't open the
+  stick. If the ANT shutdown gets stuck, the app now really exits after its 3 seconds, where it used to stay running
+  unseen, with the stick.
+- **A stick in use by another program connects by itself once it's free.** When the stick is there but won't open
+  (usually because AntWorkout was started twice), the setup screen says it's in use, and the app keeps quietly trying
+  it. The Python app only ever looked for a newly plugged in stick, so the stick had to be unplugged and plugged back
+  in, even after the other program had closed. The log's "New ANT USB stick detected" is now "ANT USB stick available".
+- **The stick is reset when the app closes, and packets from before a launch are thrown away.** Closing used to leave
+  the stick scanning with nobody listening. The next launch read that backlog (and an `EVENT_SERIAL_QUE_OVERFLOW`) as
+  if it was live, so sensors that had long since gone to sleep showed as found, got auto-selected and connected to, and
+  were then reported lost, which could set off a stick reset. Devices now only count as found when they're heard after
+  the stick's reset at startup.
+- **A sensor's pairing bit isn't read as part of its device type.** A sensor that set it while waking up was logged as
+  a new device (a speed/cadence sensor as type 249 rather than 121), and its packets went to that device until the bit
+  cleared. This is in AntNative, so the Python app gets it too if it's given a new AntNative build.
 - **A battery whose voltage reads low is warned about before the device says so.** Devices go on reporting "Ok" at
   2.7V and below on a 3V coin cell, so under 2.75V (cleared again at 2.85V) the setup, workout and synopsis screens
   show "... low battery voltage (2.70V)", and the log line says "- low battery voltage". Once the device itself says

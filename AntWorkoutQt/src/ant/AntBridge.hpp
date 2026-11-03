@@ -125,6 +125,9 @@ public:
     static constexpr int kInitAttempts = 4;
     static const QList<double> kInitRetryDelays;
     static constexpr double kStickPollSeconds = 2.0;
+    // after opening the stick, what it sends ahead of its startup message is discarded (it's from before the reset),
+    // for this long at most
+    static constexpr double kStaleMessageSeconds = 1.0;
     // how long the scan channel has listened before the setup screen auto-selects: ANT+ sensors send about 4 times
     // a second, so by then every device in range has been heard and a slot with two candidates is a choice to make
     static constexpr double kScanSettleSeconds = 5.0;
@@ -200,7 +203,8 @@ public:
     // empty on success, otherwise the last error (the stick left closed)
     std::optional<QString> initializeWithRetries();
     std::optional<QString> initializeAnt();
-    bool waitForNewStick();
+    // stickInUse: the stick that's there wouldn't open, so being able to open it counts too
+    bool waitForNewStick(bool stickInUse = false);
     std::set<std::tuple<unsigned, unsigned, unsigned long>> stickIds();
     void processPendingRequest();
     void serviceCalibration();
@@ -261,6 +265,7 @@ private:
     void wake();
     // waits until woken or seconds pass; true if woken
     bool waitForWake(double seconds);
+    bool stickOpens();
     void openDeviceChannels();
     void checkTrainerMessage(const antnative::Sensor& sensor);
     void checkCalibrationMessage(const antnative::DecodedMessage& message, const antnative::Sensor& sensor);
@@ -287,6 +292,7 @@ private:
     Selection selected_;
     bool connected_ = false;
     bool initialized_ = false;
+    std::optional<double> discardMessagesUntil_;
     std::optional<QString> error_;
     std::optional<QString> waitingMessage_;
     bool connectRequested_ = false;

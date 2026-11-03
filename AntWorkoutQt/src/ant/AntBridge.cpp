@@ -31,6 +31,12 @@ const std::map<Role, QString> kBatteryNames = {
 };
 const QString kTrainerBatteryName = QStringLiteral("Trainer");
 
+const QString kFailedToOpen = QStringLiteral("Failed to open ANT USB stick");
+// (the stick's "just reset" message: what's queued ahead of it is from before the reset)
+constexpr int kStartupMessageId = 0x6F;
+// as Manager::open's default
+constexpr std::uint32_t kStickBaudrate = 57600;
+
 QString batteryStatusName(int status) {
     switch (status) {
     case 1:
@@ -452,13 +458,19 @@ void AntBridge::run() {
         if (!error) {
             break;
         }
+        // There but it wouldn't open: another program has it, most likely another AntWorkout, and it's free again when
+        // that closes
+        const bool stickInUse = *error == kFailedToOpen && !stickIds().empty();
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            waitingMessage_ = *error + QStringLiteral("\nPlug in an ANT USB stick, it will be detected automatically");
+            waitingMessage_ = *error + (stickInUse ? QStringLiteral("\nIt's in use, is AntWorkout already open? It will "
+                                                                    "connect as soon as it's free")
+                                                   : QStringLiteral("\nPlug in an ANT USB stick, it will be detected "
+                                                                    "automatically"));
             error_ = error;
         }
         emit errorOccurred(*error);
-        if (!waitForNewStick()) {
+        if (!waitForNewStick(stickInUse)) {
             shutdown();
             return;
         }
@@ -466,8 +478,8 @@ void AntBridge::run() {
             std::lock_guard<std::mutex> lock(mutex_);
             waitingMessage_.reset();
         }
-        log::event(QStringLiteral("ANT"), QStringLiteral("New ANT USB stick detected, initializing"));
-        emit statusMessage(QStringLiteral("New ANT USB stick detected, initializing"));
+        log::event(QStringLiteral("ANT"), QStringLiteral("ANT USB stick available, initializing"));
+        emit statusMessage(QStringLiteral("ANT USB stick available, initializing"));
     }
 
     recovery_->start();
@@ -570,7 +582,13 @@ std::optional<QString> AntBridge::initializeAnt() {
     try {
         log::event(QStringLiteral("ANT"), QStringLiteral("Opening ANT USB stick..."));
         if (!manager_->open()) {
-            return QStringLiteral("Failed to open ANT USB stick");
+            return kFailedToOpen;
+        }
+        {
+            // A stick that wasn't reset when it was last closed has been scanning since, with its queue full of
+            // whatever it heard then: those devices may be long gone, and mustn't count as found now
+            std::lock_guard<std::mutex> lock(mutex_);
+            discardMessagesUntil_ = clock_() + kStaleMessageSeconds;
         }
         manager_->configure_scan(kNetworkKey, 0, 0, 57);
         manager_->start();
@@ -592,9 +610,23 @@ std::set<std::tuple<unsigned, unsigned, unsigned long>> AntBridge::stickIds() {
     return ids;
 }
 
-bool AntBridge::waitForNewStick() {
+bool AntBridge::stickOpens() {
+    try {
+        for (const antnative::UsbDeviceInfo& device : transport_->list_devices()) {
+            if (transport_->open(kStickBaudrate, static_cast<int>(device.index))) {
+                transport_->close();
+                return true;
+            }
+        }
+    } catch (...) {
+    }
+    return false;
+}
+
+bool AntBridge::waitForNewStick(bool stickInUse) {
     // Only a stick that wasn't there before starts another initialization: one that's there but failing isn't
-    // retried over and over
+    // retried over and over. The exception is one that wouldn't open at all, which is tried quietly (nothing is
+    // sent to it, or logged) until whatever has it lets go
     auto present = stickIds();
     while (running_) {
         waitForWake(stickPollSeconds_);
@@ -606,6 +638,9 @@ bool AntBridge::waitForNewStick() {
             if (!present.contains(id)) {
                 return true;
             }
+        }
+        if (stickInUse && stickOpens()) {
+            return true;
         }
         // (an unplugged stick drops out here, so plugging it back in counts as new)
         present = current;
@@ -855,6 +890,11 @@ void AntBridge::shutdown() {
     }
     try {
         manager_->stop();
+        // Reset before letting go: closing alone leaves the stick scanning, its queue overflowing with packets for
+        // the next launch to read
+        if (transport_->is_open()) {
+            transport_->reset();
+        }
         manager_->close();
     } catch (...) {
     }
@@ -863,6 +903,17 @@ void AntBridge::shutdown() {
 // ---- The message pump ----
 
 void AntBridge::handleMessage(const antnative::DecodedMessage& message) {
+    {
+        // (the time limit only in case the startup message was lost: nothing is dropped for long)
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (discardMessagesUntil_) {
+            if (message.message_id != kStartupMessageId && clock_() < *discardMessagesUntil_) {
+                return;
+            }
+            discardMessagesUntil_.reset();
+        }
+    }
+
     // Channel events go to the watchdog first (they come without a device), which only records them: reacting here,
     // on the message pump's own thread, could deadlock a later stick reset against it. Every one is logged apart
     // from the routine ones, so the log shows what the channels are doing, not just what set off a recovery

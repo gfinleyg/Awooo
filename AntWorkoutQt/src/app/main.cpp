@@ -9,6 +9,7 @@
 #include "Logger.hpp"
 #include "MainWindow.hpp"
 #include "SavedSettings.hpp"
+#include "SingleInstance.hpp"
 #include "SoundEffects.hpp"
 #include "Theme.hpp"
 #include "Units.hpp"
@@ -21,6 +22,17 @@ int main(int argc, char* argv[]) {
     QDir::setCurrent(QCoreApplication::applicationDirPath());
     // Qt's warnings, uncaught exceptions and crashes go to the log: the app runs without a console
     log::installErrorLogging();
+
+    // one copy at a time, before anything goes near the stick
+    SingleInstance instance;
+    const SingleInstance::Start started = instance.start();
+    if (started == SingleInstance::Start::ShownOther) {
+        log::event(QStringLiteral("APP"), QStringLiteral("AntWorkout is already running, showing it instead of starting again"));
+        return 0;
+    }
+    if (started == SingleInstance::Start::TimedOut) {
+        log::event(QStringLiteral("APP"), QStringLiteral("Another AntWorkout didn't finish closing, starting anyway"));
+    }
 
     // a key for every button, Ctrl shows them
     keys::install(&app);
@@ -62,6 +74,13 @@ int main(int argc, char* argv[]) {
 
     MainWindow window;
     window.show();
+    instance.answer([&window] {
+        if (window.isMinimized()) {
+            window.showMaximized();
+        }
+        window.raise();
+        window.activateWindow();
+    });
     const int code = app.exec();
     sound::shutdown();
     return code;

@@ -38,6 +38,9 @@ public:
     std::deque<int> sendResults;
     int defaultSendResult = antnative::kFramerPass;
     std::vector<Send> sends;
+    // what's in the stick's queue when it's reset, delivered ahead of its startup message
+    std::vector<antnative::RawMessage> staleMessages;
+    bool sendsStartupMessage = true;
 
     int count(const std::string& name) const {
         std::lock_guard<std::mutex> lock(mutex);
@@ -66,7 +69,21 @@ public:
         opened = false;
     }
     bool is_open() override { return opened; }
-    bool reset() override { return call("reset"); }
+    bool reset() override {
+        const bool ok = call("reset");
+        if (ok && sink) {
+            for (const antnative::RawMessage& stale : std::exchange(staleMessages, {})) {
+                sink(stale);
+            }
+            if (sendsStartupMessage) {
+                antnative::RawMessage startup;
+                startup.message_id = 0x6F;
+                startup.data = {0x20};
+                sink(startup);
+            }
+        }
+        return ok;
+    }
     bool set_network_key(int, const std::vector<std::uint8_t>&) override { return call("set_network_key"); }
     bool assign_channel(int, int, int) override { return call("assign_channel"); }
     bool unassign_channel(int) override { return call("unassign_channel"); }

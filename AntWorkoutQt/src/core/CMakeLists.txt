@@ -24,6 +24,8 @@ add_library(awo_core STATIC
     Session.hpp
     SimulatedRider.cpp
     SimulatedRider.hpp
+    SingleInstance.cpp
+    SingleInstance.hpp
     Units.cpp
     Units.hpp
     WorkoutData.cpp

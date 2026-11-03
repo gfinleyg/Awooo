@@ -320,9 +320,11 @@ DecodedMessage decode_message(const RawMessage& event) {
             message.device_number =
                 static_cast<unsigned int>(id[0]) |
                 (static_cast<unsigned int>(id[1]) << 8);
-            message.device_type = static_cast<int>(id[2]);
+            // (the top bit is the pairing bit, not part of the type: a sensor
+            // can set it for a moment as it wakes up)
+            message.device_type = static_cast<int>(id[2] & 0x7F);
             message.transmission_type = static_cast<int>(id[3]);
-            decoded_device_type = static_cast<int>(id[2]);
+            decoded_device_type = static_cast<int>(id[2] & 0x7F);
             cursor += 4;
         }
 
@@ -345,7 +347,7 @@ DecodedMessage decode_message(const RawMessage& event) {
         message.device_number =
             static_cast<unsigned int>(event.data[1]) |
             (static_cast<unsigned int>(event.data[2]) << 8);
-        message.device_type = static_cast<int>(event.data[3]);
+        message.device_type = static_cast<int>(event.data[3] & 0x7F);
         message.transmission_type = static_cast<int>(event.data[4]);
     }
 

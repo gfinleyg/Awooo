@@ -159,6 +159,94 @@ private slots:
         QVERIFY(!bridge->waitForNewStick());
     }
 
+    void aStickInUseIsTakenOnceItsFree() {
+        ant_->stick->fail.insert("open");
+        auto bridge = ant_->makeBridge();
+        bridge->setRetryTiming({0.001, 0.001, 0.001}, 0.001);
+        // (on the bridge's own thread, as the stick's calls are)
+        std::atomic<int> listing = 0;
+        ant_->stick->listDevicesHook = [this, &listing] {
+            if (++listing == 40) {
+                ant_->stick->fail.erase("open");
+            }
+            return ant_->stick->sticks;
+        };
+        bridge->start();
+        QTRY_VERIFY_WITH_TIMEOUT(bridge->isInitialized(), 5000);
+        QVERIFY(listing >= 40);
+        QCOMPARE(bridge->takeError(), std::optional<QString>(QStringLiteral("Failed to open ANT USB stick")));
+        QVERIFY(!bridge->waitingForStick());
+        bridge->stop();
+        QVERIFY(bridge->wait(5000));
+    }
+
+    void waitingSaysAStickIsInUse() {
+        ant_->stick->fail.insert("open");
+        auto bridge = ant_->makeBridge();
+        bridge->setRetryTiming({0.001, 0.001, 0.001}, 0.01);
+        bridge->start();
+        QTRY_VERIFY_WITH_TIMEOUT(bridge->waitingForStick().has_value(), 5000);
+        QVERIFY(bridge->waitingForStick()->contains(QStringLiteral("in use")));
+        bridge->stop();
+        QVERIFY(bridge->wait(5000));
+    }
+
+    void aStickThatOpensButFailsIsntRetried() {
+        ant_->stick->fail.insert("reset");
+        auto bridge = ant_->makeBridge();
+        bridge->setRetryTiming({0.001, 0.001, 0.001}, 0.001);
+        bridge->start();
+        QTRY_VERIFY_WITH_TIMEOUT(bridge->waitingForStick().has_value(), 5000);
+        QVERIFY(bridge->waitingForStick()->contains(QStringLiteral("Plug in an ANT USB stick")));
+        QTest::qWait(50);
+        QCOMPARE(ant_->stick->count("open"), AntBridge::kInitAttempts);
+        bridge->stop();
+        QVERIFY(bridge->wait(5000));
+    }
+
+    void shutdownResetsTheStickBeforeClosing() {
+        auto bridge = ant_->makeBridge();
+        bridge->start();
+        QTRY_VERIFY_WITH_TIMEOUT(bridge->isInitialized(), 5000);
+        const int resets = ant_->stick->count("reset");
+        bridge->stop();
+        QVERIFY(bridge->wait(5000));
+        QCOMPARE(ant_->stick->count("reset"), resets + 1);
+        QCOMPARE(ant_->stick->callsCopy().back(), std::string("close"));
+        // and only the once, the stick closed by then
+        bridge.reset();
+        QCOMPARE(ant_->stick->count("reset"), resets + 1);
+    }
+
+    void packetsFromBeforeTheResetDontCount() {
+        ant_->stick->staleMessages = {awotest::powerPage(100, 200), awotest::channelEvent(0, 0x34)};
+        initialized();
+        QVERIFY(bridge_->foundDevices().isEmpty());
+        QVERIFY(bridge_->manager().get_devices().empty());
+        QVERIFY(!logText().contains(QStringLiteral("EVENT_SERIAL_QUE_OVERFLOW")));
+        // heard now
+        ant_->stick->deliver(awotest::powerPage(100, 200));
+        QCOMPARE(bridge_->foundDevices(), QStringList{QStringLiteral("11 100")});
+    }
+
+    void aLostStartupMessageDropsPacketsOnlyBriefly() {
+        ant_->stick->sendsStartupMessage = false;
+        initialized();
+        ant_->stick->deliver(awotest::powerPage(100, 200));
+        QVERIFY(bridge_->foundDevices().isEmpty());
+        ant_->clock.advance(AntBridge::kStaleMessageSeconds);
+        ant_->stick->deliver(awotest::powerPage(100, 200));
+        QCOMPARE(bridge_->foundDevices(), QStringList{QStringLiteral("11 100")});
+    }
+
+    void thePairingBitIsntPartOfTheDeviceType() {
+        initialized();
+        ant_->stick->deliver(awotest::message(0x80 | 121, 60161, {0, 0, 0, 0, 0, 0, 0, 0}));
+        QCOMPARE(bridge_->foundDevices(), QStringList{QStringLiteral("121 60161")});
+        ant_->stick->deliver(awotest::message(121, 60161, {1, 0, 0, 0, 0, 0, 0, 0}));
+        QCOMPARE(bridge_->manager().get_devices().size(), std::size_t{1});
+    }
+
     void stickIdsSurviveAListingError() {
         auto bridge = ant_->makeBridge();
         ant_->stick->listDevicesHook = []() -> std::vector<antnative::UsbDeviceInfo> { throw std::runtime_error("usb"); };

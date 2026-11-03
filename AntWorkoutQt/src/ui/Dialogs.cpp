@@ -14,6 +14,8 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include <cstdlib>
+
 #include "AntBridge.hpp"
 #include "AppLayout.hpp"
 #include "AppStyle.hpp"
@@ -21,6 +23,7 @@
 #include "KeyShortcuts.hpp"
 #include "Logger.hpp"
 #include "Performance.hpp"
+#include "SingleInstance.hpp"
 #include "Theme.hpp"
 #include "Units.hpp"
 
@@ -68,6 +71,10 @@ ConfirmExitWindow::ConfirmExitWindow(ant::AntBridge* bridge) : bridge_(bridge) {
 }
 
 void ConfirmExitWindow::exitProgram() {
+    // a launch from here on waits for this copy to end
+    if (SingleInstance* instance = SingleInstance::current()) {
+        instance->stopAnswering();
+    }
     // every window hidden first, so the app disappears the moment Yes is clicked: the ANT shutdown can take a second
     // or more (the SDK's USB receive thread only notices the stop between 1 s reads)
     for (QWidget* window : QApplication::topLevelWidgets()) {
@@ -78,6 +85,8 @@ void ConfirmExitWindow::exitProgram() {
         bridge_->stop();
         if (!bridge_->wait(3000)) {
             log::event(QStringLiteral("ANT"), QStringLiteral("ANT bridge did not shut down within 3s, exiting anyway"));
+            // for real: an orderly quit would wait on the stuck thread, an invisible process keeping hold of the stick
+            std::_Exit(0);
         }
     }
     QApplication::quit();
