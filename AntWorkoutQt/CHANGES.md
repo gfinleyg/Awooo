@@ -28,6 +28,14 @@ Python app's own results (`tests\golden\`).
 
 ## Screens
 
+- **The block grades take over the left column 30 s into a last block longer than that**, when "Up Next:" and its
+  "last block" note go, instead of leaving the column empty until the workout ends. What's still being ridden shows a
+  blinking `?` for its grade, filled in when it's set: a last block's at the end, each repeat of a last interval's as
+  it ends (each interval block's own grade once all its repeats have theirs), a Musical Cadence Mode song's at the
+  end. The workout average at the bottom, its grade and its percentage, is a blinking `?` too until the end of the
+  workout. The list opens scrolled to its end, and the
+  zone legend goes with the rest of the column. FTP tests aren't graded, so they're the same as before.
+
 - **Text that was shrunk to fit grows back when shorter text replaces it**, in fixed size labels too. The Python app
   measured a label against Qt's size hint, which is never smaller than the label's own minimum size, so a fixed size
   label looked exactly full and its shrunk text stayed small until the next full refit (a resize or a theme change).

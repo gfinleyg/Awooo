@@ -309,6 +309,65 @@ private slots:
         }
     }
 
+    // the last block being ridden: a row for it with its grades still to come
+    void rowsPending() {
+        Block rest;
+        rest.seconds = 30;
+        // a block on its own
+        QList<WorkoutEntry> workout(2, WorkoutEntry::ofBlock(steady(200)));
+        Grades grades;
+        grades.set({0, 0, 0}, record(95, 60, QStringLiteral("200W 1m")));
+        QList<GradeRow> rows = workoutRows(workout, grades, {}, PendingBlock{1, {QStringLiteral("200W 2m")}});
+        QCOMPARE(rows.size(), 2);
+        QCOMPARE(rows[0].grade, QStringLiteral("A"));
+        QCOMPARE(rows[1].kind, GradeRow::Kind::Block);
+        QCOMPARE(rows[1].label, QStringLiteral("200W 2m"));
+        QCOMPARE(rows[1].grade, kPendingGrade);
+        QVERIFY(!rows[1].pct);
+        // its grade set takes over
+        grades.set({1, 0, 0}, record(85, 60, QStringLiteral("200W 1m")));
+        rows = workoutRows(workout, grades, {}, PendingBlock{1, {QStringLiteral("200W 2m")}});
+        QCOMPARE(rows[1].grade, QStringLiteral("B"));
+        QCOMPARE(rows[1].label, QStringLiteral("200W 1m"));
+
+        // an interval: its repeats so far, and its blocks' own once every repeat has its grade
+        workout = {WorkoutEntry::interval(2, {steady(200), rest, steady(100)})};
+        grades.clear();
+        const PendingBlock interval{0, {QStringLiteral("200W 1m"), QString(), QStringLiteral("100W 1m")}};
+        // (the middle block's not graded: no row)
+        rows = workoutRows(workout, grades, {}, interval);
+        QCOMPARE(rows.size(), 3);
+        QCOMPARE(rows[0].kind, GradeRow::Kind::Interval);
+        QCOMPARE(rows[1].label, QStringLiteral("200W 1m"));
+        QCOMPARE(rows[1].grade, kPendingGrade);
+        QCOMPARE(rows[1].note, QStringLiteral("? · ?"));
+        QCOMPARE(rows[2].label, QStringLiteral("100W 1m"));
+        grades.set({0, 0, 0}, record(101, 60, QStringLiteral("200W 1m")));
+        rows = workoutRows(workout, grades, {}, interval);
+        QCOMPARE(rows[1].grade, kPendingGrade);
+        QCOMPARE(rows[1].note, QStringLiteral("S · ?"));
+        QVERIFY(!rows[1].pct);
+        grades.set({0, 0, 1}, record(85, 60, QStringLiteral("200W 1m")));
+        rows = workoutRows(workout, grades, {}, interval);
+        QCOMPARE(rows[1].note, QStringLiteral("S · B"));
+        QVERIFY(near(rows[1].pct, 93));
+        QCOMPARE(rows[2].grade, kPendingGrade);
+
+        // a song: still to come while its last block is, even with none of its blocks graded yet
+        workout = QList<WorkoutEntry>(3, WorkoutEntry::ofBlock(steady(90)));
+        grades.clear();
+        grades.set({0, 0, 0}, record(100, 60, QStringLiteral("90rpm 1m")));
+        grades.set({1, 0, 0}, record(80, 60, QStringLiteral("90rpm 1m")));
+        const QMap<int, QString> songs = {{0, QStringLiteral("Band - First")}, {2, QStringLiteral("Band - Second")}};
+        rows = workoutRows(workout, grades, songs, PendingBlock{2, {QStringLiteral("90rpm 1m")}});
+        QCOMPARE(rows.size(), 5);
+        QVERIFY(near(rows[0].pct, 90));
+        QCOMPARE(rows[3].kind, GradeRow::Kind::Song);
+        QCOMPARE(rows[3].grade, kPendingGrade);
+        QCOMPARE(rows[4].grade, kPendingGrade);
+        QVERIFY(rows[4].indent);
+    }
+
     void average() {
         QVERIFY(!workoutAverage(Grades()));
         Grades one;

@@ -23,6 +23,7 @@
 #include "FakeAnt.hpp"
 #include "FtpTest.hpp"
 #include "GoldenRides.hpp"
+#include "GradeWidgets.hpp"
 #include "HudScreen.hpp"
 #include "KeyShortcuts.hpp"
 #include "MaxStar.hpp"
@@ -200,8 +201,12 @@ private slots:
         if (QTest::currentTestFailed()) {
             return;
         }
-        // a workout ridden to its end shows its grades (an FTP test its result, on the synopsis)
-        QCOMPARE(hud.showingGrades(), golden[QStringLiteral("completed")].toBool() && appState().ftpTestMode.isEmpty());
+        // a workout ridden to its end shows its grades (an FTP test its result, on the synopsis), and so does one
+        // ridden well into its last block (not as the Python app, which waits for the end: see CHANGES.md)
+        const bool intoLastBlock = hud.engine().upcoming().isEmpty() &&
+                                   hud.engine().spiralBlockTime().first >= HudScreen::kLastBlockNoteSeconds;
+        QCOMPARE(hud.showingGrades(), (golden[QStringLiteral("completed")].toBool() || intoLastBlock) &&
+                                          appState().ftpTestMode.isEmpty());
     }
 
     // ---- What the spiral gets ----
@@ -489,6 +494,122 @@ private slots:
         QCOMPARE(ramp.upNextHeader()->text(), QStringLiteral("Up Next:"));
         QVERIFY(!ramp.upNextLabel()->text().isEmpty());
         QCOMPARE(shortLast.upNextLabel()->text(), QStringLiteral("You're on the last block, way to go!"));
+    }
+
+    // the grades take over the left column as the note goes, the last block's a blinking question mark until it's set
+    void lastBlockGradesShowEarly() {
+        QVERIFY(loadWorkout({"1:10,0.5", "1:40,0.6"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        hud.show();
+        SimulatedRider rider;
+        hud.startWorkout();
+        for (int i = 0; i < 20 && hud.engine().activeWorkout() < 1; ++i) {
+            tickSecond(hud, rider);
+        }
+        QVERIFY(!hud.showingGrades());
+        QVERIFY(!hud.gradeList()->isVisible());
+        while (hud.engine().blockSecondsPassed() < 30) {
+            tickSecond(hud, rider);
+        }
+        QVERIFY(hud.showingGrades());
+        QVERIFY(hud.gradeList()->isVisible());
+        QVERIFY(!hud.upNextLabel()->isVisible());
+        QCOMPARE(hud.gradeList()->rows().size(), 2);
+        QVERIFY(hud.gradeList()->rows()[0].grade != grading::kPendingGrade);
+        QCOMPARE(hud.gradeList()->rows()[1].grade, grading::kPendingGrade);
+        QVERIFY(hud.gradeList()->blinking());
+        // the average's still to come too: its grade and percentage blink, the text beside them stays put
+        QVERIFY(hud.gradeList()->averagePending());
+        QVERIFY(!hud.gradeList()->average());
+        QTRY_VERIFY(hud.gradeList()->pendingMarkShown());
+        const QImage markOn = hud.gradeList()->grab().toImage();
+        QTRY_VERIFY(!hud.gradeList()->pendingMarkShown());
+        const QImage markOff = hud.gradeList()->grab().toImage();
+        const double scale = theme::uiScale();
+        const int averageTop = markOn.height() - static_cast<int>(GradeList::kAverageHeight * scale);
+        const int badge = static_cast<int>(GradeList::kBadgeWidth * scale);
+        const int percent = static_cast<int>(60 * scale);
+        const auto part = [&](const QImage& image, int x, int width) {
+            return image.copy(x, averageTop, width, markOn.height() - averageTop);
+        };
+        QVERIFY(part(markOn, 0, badge) != part(markOff, 0, badge));
+        QVERIFY(part(markOn, markOn.width() - percent, percent) != part(markOff, markOn.width() - percent, percent));
+        QCOMPARE(part(markOn, badge, markOn.width() - percent - badge), part(markOff, badge, markOn.width() - percent - badge));
+        // set at the end
+        while (hud.engine().started()) {
+            tickSecond(hud, rider);
+        }
+        QVERIFY(hud.showingGrades());
+        QCOMPARE(hud.gradeList()->rows().size(), 2);
+        QVERIFY(hud.gradeList()->rows()[1].grade != grading::kPendingGrade);
+        QVERIFY(!hud.gradeList()->blinking());
+        QVERIFY(!hud.gradeList()->averagePending());
+        QVERIFY(hud.gradeList()->average());
+        QVERIFY(hud.gradeList()->average() == grading::workoutAverage(appState().blockGrades));
+        // a restart brings the column back
+        hud.restartWorkout();
+        QVERIFY(!hud.showingGrades());
+        QVERIFY(!hud.gradeList()->isVisible());
+        QVERIFY(hud.upNextLabel()->isVisible());
+        QVERIFY(!hud.gradeList()->blinking());
+    }
+
+    // a last interval: each repeat's grade as it ends, each block's own once all its repeats have theirs
+    void lastIntervalGradesFillIn() {
+        QVERIFY(loadWorkout({"1:10,0.5", "3:2;1:20,0.8;1:20,0.6"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        SimulatedRider rider;
+        hud.startWorkout();
+        while (hud.engine().spiralBlockTime().first < 30 || hud.engine().currentKind() != 3) {
+            tickSecond(hud, rider);
+        }
+        QVERIFY(hud.showingGrades());
+        QList<GradeList::Row> rows = hud.gradeList()->rows();
+        // (the first block, "2x", and the interval's two blocks: 30 s in, the first's first repeat is done)
+        QCOMPARE(rows.size(), 4);
+        QCOMPARE(rows[1].kind, GradeList::Row::Kind::Interval);
+        QCOMPARE(rows[2].grade, grading::kPendingGrade);
+        QVERIFY(rows[2].note.endsWith(QStringLiteral(" · ?")));
+        QVERIFY(!rows[2].note.startsWith(grading::kPendingGrade));
+        QCOMPARE(rows[3].grade, grading::kPendingGrade);
+        QCOMPARE(rows[3].note, QStringLiteral("? · ?"));
+        // the first block's second repeat ends: its own grade set, the second block's still to come
+        while (hud.engine().spiralBlockTime().first < 61) {
+            tickSecond(hud, rider);
+        }
+        rows = hud.gradeList()->rows();
+        QVERIFY(rows[2].grade != grading::kPendingGrade);
+        QVERIFY(!rows[2].note.contains(grading::kPendingGrade));
+        QCOMPARE(rows[3].grade, grading::kPendingGrade);
+        QVERIFY(hud.gradeList()->blinking());
+        // (the average waits for all of them, not just the blocks that are done)
+        QVERIFY(hud.gradeList()->averagePending());
+        while (hud.engine().started()) {
+            tickSecond(hud, rider);
+        }
+        rows = hud.gradeList()->rows();
+        QVERIFY(rows[3].grade != grading::kPendingGrade);
+        QVERIFY(!rows[3].note.contains(grading::kPendingGrade));
+        QVERIFY(!hud.gradeList()->blinking());
+        QVERIFY(!hud.gradeList()->averagePending());
+    }
+
+    // an FTP test isn't graded: the column just clears, the same as before
+    void ftpTestShowsNoGradesEarly() {
+        QVERIFY(loadWorkout({"1:10,0.5", "1:40,0.6"}));
+        appState().ftpTestMode = QStringLiteral("20m");
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        SimulatedRider rider;
+        hud.startWorkout();
+        while (hud.engine().activeWorkout() < 1 || hud.engine().blockSecondsPassed() < 31) {
+            tickSecond(hud, rider);
+        }
+        QCOMPARE(hud.upNextLabel()->text(), QString());
+        QVERIFY(!hud.showingGrades());
+        QVERIFY(!hud.engine().pendingBlock());
     }
 
     // ---- Whole workouts ----

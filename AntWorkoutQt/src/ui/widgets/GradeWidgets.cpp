@@ -251,8 +251,13 @@ std::pair<QPainterPath, double> GradeOverlay::textShape(const QString& text, con
 
 // ---- GradeList ----
 
-GradeList::GradeList(QWidget* parent) : QWidget(parent) {
+GradeList::GradeList(QWidget* parent) : QWidget(parent), blinkTimer_(new QTimer(this)) {
     setMinimumHeight(200);
+    blinkTimer_->setInterval(kBlinkHalfPeriodMs);
+    connect(blinkTimer_, &QTimer::timeout, this, [this] {
+        pendingMarkShown_ = !pendingMarkShown_;
+        update();
+    });
     connect(&zones::notifier(), &zones::Notifier::changed, this, qOverload<>(&QWidget::update));
     connect(&theme::notifier(), &theme::Notifier::changed, this, qOverload<>(&QWidget::update));
 }
@@ -262,6 +267,10 @@ void GradeList::refresh() {
 }
 
 void GradeList::refresh(const grading::Grades& grades) {
+    refresh(grades, std::nullopt);
+}
+
+void GradeList::refresh(const grading::Grades& grades, const std::optional<grading::PendingBlock>& pending) {
     scrollOffset_ = 0;
     const AppState& state = appState();
     // (Musical Cadence Mode's song headers are "<length> : <Artist> - <Title>")
@@ -273,11 +282,13 @@ void GradeList::refresh(const grading::Grades& grades) {
         }
     }
     rows_.clear();
-    for (const grading::GradeRow& row : grading::workoutRows(state.workoutList, grades, songs)) {
+    for (const grading::GradeRow& row : grading::workoutRows(state.workoutList, grades, songs, pending)) {
         rows_.append(toRow(row));
     }
-    average_ = grading::workoutAverage(grades);
+    averagePending_ = pending.has_value();
+    average_ = averagePending_ ? std::nullopt : grading::workoutAverage(grades);
     averageText_ = QStringLiteral("Workout Average");
+    updateBlink();
     update();
 }
 
@@ -309,8 +320,10 @@ void GradeList::refresh(const QList<const Ride*>& rides) {
             }
         }
     }
+    averagePending_ = false;
     average_ = grading::riddenAverage(records);
     averageText_ = graded > 1 ? QStringLiteral("Session Average") : QStringLiteral("Workout Average");
+    updateBlink();
     update();
 }
 
@@ -318,8 +331,31 @@ void GradeList::setRows(const QList<Row>& rows, std::optional<double> average, c
     scrollOffset_ = 0;
     rows_ = rows;
     average_ = average;
+    averagePending_ = false;
     averageText_ = averageText;
+    updateBlink();
     update();
+}
+
+bool GradeList::blinking() const {
+    return blinkTimer_->isActive();
+}
+
+void GradeList::updateBlink() {
+    const bool pending = averagePending_ || std::any_of(rows_.begin(), rows_.end(), [](const Row& row) {
+        return row.grade == grading::kPendingGrade;
+    });
+    if (!pending) {
+        blinkTimer_->stop();
+        pendingMarkShown_ = true;
+    } else if (!blinkTimer_->isActive()) {
+        // (a blink under way carries on through a grade filled in)
+        blinkTimer_->start();
+    }
+}
+
+QString GradeList::shownGrade(const QString& grade) const {
+    return grade == grading::kPendingGrade && !pendingMarkShown_ ? QString() : grade;
 }
 
 double GradeList::scaled(double value) {
@@ -432,13 +468,13 @@ void GradeList::paintEvent(QPaintEvent*) {
                 break;
             }
             case Row::Kind::Song:
-                drawBadge(painter, QRectF(0, y, badgeWidth, rowHeight), row.grade, 17);
+                drawBadge(painter, QRectF(0, y, badgeWidth, rowHeight), shownGrade(row.grade), 17);
                 drawLabel(painter, labelRect, QStringLiteral("♪ ") + row.label, labelFont,
                           themeColor(kSongColors.first), themeColor(kSongColors.second), {},
                           themeColor(theme::kLightText));
                 break;
             default: {
-                drawBadge(painter, QRectF(0, y, badgeWidth, rowHeight), row.grade, 17);
+                drawBadge(painter, QRectF(0, y, badgeWidth, rowHeight), shownGrade(row.grade), 17);
                 const auto [start, end] = labelGradientColors(row.label, row.ranges);
                 drawLabel(painter, labelRect, row.label, labelFont, start, end, row.note);
                 break;
@@ -466,8 +502,21 @@ void GradeList::drawLabel(QPainter& painter, const QRectF& rect, const QString& 
         const QFont noteFont = themeFont(QStringLiteral("Orbitron"), 10);
         const QFontMetricsF noteMetrics(noteFont);
         const double noteWidth = std::min(noteMetrics.horizontalAdvance(note), inner.width() * 0.45);
+        const QString shownNote = noteMetrics.elidedText(note, Qt::ElideRight, noteWidth);
         painter.setFont(noteFont);
-        painter.drawText(inner, Qt::AlignVCenter | Qt::AlignRight, noteMetrics.elidedText(note, Qt::ElideRight, noteWidth));
+        if (pendingMarkShown_ || !shownNote.contains(grading::kPendingGrade)) {
+            painter.drawText(inner, Qt::AlignVCenter | Qt::AlignRight, shownNote);
+        } else {
+            // the question marks blinked off: the rest stays where it is, each piece put where it would be
+            const double left = inner.right() - noteMetrics.horizontalAdvance(shownNote);
+            qsizetype at = 0;
+            for (const QString& piece : shownNote.split(grading::kPendingGrade)) {
+                const double x = left + noteMetrics.horizontalAdvance(shownNote.left(at));
+                painter.drawText(QRectF(x, inner.top(), inner.right() - x, inner.height()),
+                                 Qt::AlignVCenter | Qt::AlignLeft, piece);
+                at += piece.size() + grading::kPendingGrade.size();
+            }
+        }
         inner.setRight(inner.right() - noteWidth - scaled(8));
     }
     painter.setFont(font);
@@ -482,7 +531,8 @@ void GradeList::drawAverage(QPainter& painter) {
     painter.setPen(QPen(QColor(255, 255, 255, 150), std::max(1.0, scaled(3))));
     painter.drawLine(QPointF(0, top - scaled(kRowGap)), QPointF(width(), top - scaled(kRowGap)));
     const double badgeWidth = scaled(kBadgeWidth);
-    drawBadge(painter, QRectF(0, top, badgeWidth, height), grading::letter(average_), 24);
+    drawBadge(painter, QRectF(0, top, badgeWidth, height),
+              averagePending_ ? shownGrade(grading::kPendingGrade) : grading::letter(average_), 24);
     const QRectF rect(badgeWidth + scaled(6), top, width() - badgeWidth - scaled(6), height);
     const double radius = scaled(15);
     painter.setPen(Qt::NoPen);
@@ -492,8 +542,13 @@ void GradeList::drawAverage(QPainter& painter) {
     const QFont font = themeFont(QStringLiteral("Orbitron"), 16);
     painter.setFont(font);
     painter.setPen(themeColor(QStringLiteral("#000000")));
-    const QString pctText = average_ ? py::fixed(*average_, 1) + u'%' : QString();
-    painter.drawText(inner, Qt::AlignVCenter | Qt::AlignRight, pctText);
+    const QString pctText = averagePending_ ? grading::kPendingGrade
+                            : average_      ? py::fixed(*average_, 1) + u'%'
+                                            : QString();
+    // (its room kept while it's blinked off, so the text beside it stays where it is)
+    if (!averagePending_ || pendingMarkShown_) {
+        painter.drawText(inner, Qt::AlignVCenter | Qt::AlignRight, pctText);
+    }
     inner.setRight(inner.right() - QFontMetricsF(font).horizontalAdvance(pctText) - scaled(10));
     painter.drawText(inner, Qt::AlignVCenter | Qt::AlignLeft,
                      QFontMetricsF(font).elidedText(averageText_, Qt::ElideRight, inner.width()));

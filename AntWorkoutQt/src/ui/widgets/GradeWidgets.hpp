@@ -6,8 +6,9 @@
 //                 or, during an FTP test's effort, its average power (showValue)
 //   GradeList     each ridden block's grade beside its usual colored block label (Musical Cadence Mode: each song's,
 //                 its blocks beneath it), with the workout's average grade pinned at the bottom: the workout screen's
-//                 left column once the workout is complete, and the synopsis' Block Grades view (there, every ride of
-//                 the session under its own heading, see Session)
+//                 left column once the workout is complete or well into its last block (grades still to come a
+//                 blinking question mark), and the synopsis' Block Grades view (there, every ride of the session under
+//                 its own heading, see Session)
 //
 // Both draw themselves at the layout scale (theme::uiScale), in the theme's fonts and colors.
 
@@ -96,6 +97,8 @@ public:
     static constexpr double kColumnWidth = 604;
     static constexpr double kMinColumnWidth = 320;
     static constexpr double kColumnGap = 12;
+    // how long a grade still to come's question mark is shown, then not
+    static constexpr int kBlinkHalfPeriodMs = 500;
 
     // a row as shown: a grade row, a ride's heading (the synopsis' session) or "more..."
     struct Row {
@@ -116,6 +119,8 @@ public:
     // these grades (AppState's blockGrades by default), in the app's workout order
     void refresh();
     void refresh(const grading::Grades& grades);
+    // these grades, with the last block's still to come (and so the workout's average, until they're all in)
+    void refresh(const grading::Grades& grades, const std::optional<grading::PendingBlock>& pending);
     // the session's rides: each under a heading with its own average, the graded ones' blocks in the zones they were
     // ridden in, and the average of all of them at the bottom
     void refresh(const QList<const Ride*>& rides);
@@ -125,9 +130,14 @@ public:
                  const QString& averageText = QStringLiteral("Workout Average"));
     const QList<Row>& rows() const { return rows_; }
     std::optional<double> average() const { return average_; }
+    // whether the average is still to come
+    bool averagePending() const { return averagePending_; }
     QString averageText() const { return averageText_; }
     // the rows in view (with "more..." in the top/bottom slot when rows are out of view that way)
     QList<Row> shownRows();
+    // whether a grade still to come's question mark is blinking, and if it's showing now
+    bool blinking() const;
+    bool pendingMarkShown() const { return pendingMarkShown_; }
     int scrollOffset() const { return scrollOffset_; }
     void scrollTo(int offset);
 
@@ -157,15 +167,22 @@ private:
     void drawLabel(QPainter& painter, const QRectF& rect, const QString& text, const QFont& font, const QColor& start,
                    const QColor& end, const QString& note = {}, const std::optional<QColor>& textColor = {});
     void drawAverage(QPainter& painter);
+    // the blinking started, or stopped, for the rows now
+    void updateBlink();
+    // what a row's badge shows now
+    QString shownGrade(const QString& grade) const;
 
     QList<Row> rows_;
     std::optional<double> average_;
+    bool averagePending_ = false;
     QString averageText_ = QStringLiteral("Workout Average");
     int scrollOffset_ = 0;
     bool columnFlow_ = false;
     int wheelRemainder_ = 0;
     std::optional<double> dragStartY_;
     int dragStartOffset_ = 0;
+    QTimer* blinkTimer_;
+    bool pendingMarkShown_ = true;
 };
 
 }  // namespace awo

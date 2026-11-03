@@ -86,6 +86,9 @@ public:
     double blockSecondsPassed() const { return blockSecondsPassed_; }
     // the target the block after the one being ridden starts at (none: it's a free ride, or there isn't one)
     std::optional<int> nextBlockPower() const;
+    // the workout's last block while it's being ridden, for a grade list shown before the end (none: not on it yet,
+    // nothing in it is graded, or it's an FTP test)
+    std::optional<grading::PendingBlock> pendingBlock() const;
     double workoutSecondsPassed() const { return workoutSecondsPassed_; }
     double eventTimerSeconds() const { return eventTimerSeconds_; }
     double timeDelta() const { return timeDelta_; }

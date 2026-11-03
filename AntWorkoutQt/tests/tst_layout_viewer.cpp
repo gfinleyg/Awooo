@@ -17,10 +17,13 @@
 #include <QTabWidget>
 #include <QtTest>
 
+#include <algorithm>
+
 #include "AnalogGauge.hpp"
 #include "AppLayout.hpp"
 #include "AppState.hpp"
 #include "CustomTitleBar.hpp"
+#include "GradeWidgets.hpp"
 #include "HaloLabel.hpp"
 #include "HudScreen.hpp"
 #include "MaxStar.hpp"
@@ -171,6 +174,22 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(hud->engine().workoutSecondsPassed() > before + 1, 5000);
         display.pause();
         QVERIFY(*hud->simulatedMusic() > before + 1);
+    }
+
+    // frozen well into the workout's last block, the grades show with its still to come
+    void lastBlockGradesShowInTheWorkoutView() {
+        DisplayWindow display;
+        display.build(QStringLiteral("workout"), kWorkoutFile, 99);
+        HudScreen* hud = display.workoutHud();
+        QVERIFY(hud->engine().started());
+        QVERIFY(hud->showingGrades());
+        const QList<GradeList::Row> rows = hud->gradeList()->rows();
+        QVERIFY(std::any_of(rows.begin(), rows.end(), [](const GradeList::Row& row) { return row.grade == grading::kPendingGrade; }));
+        QVERIFY(hud->gradeList()->blinking());
+        QVERIFY(hud->gradeList()->averagePending());
+        // part way through, the column as usual
+        display.build(QStringLiteral("workout"), kWorkoutFile, 40);
+        QVERIFY(!display.workoutHud()->showingGrades());
     }
 
     void screenSizesAndTheFitReport() {

@@ -9,6 +9,7 @@ namespace awo::grading {
 
 const QString kNoGrade = QStringLiteral("--");
 const QString kNoGradeColor = QStringLiteral("#9fc5d1");
+const QString kPendingGrade = QStringLiteral("?");
 
 namespace {
 
@@ -270,11 +271,13 @@ std::optional<double> workoutAverage(const Grades& grades) {
     return riddenAverage(all);
 }
 
-QList<GradeRow> workoutRows(const QList<WorkoutEntry>& entries, const Grades& grades, const QMap<int, QString>& songs) {
+QList<GradeRow> workoutRows(const QList<WorkoutEntry>& entries, const Grades& grades, const QMap<int, QString>& songs,
+                            const std::optional<PendingBlock>& pending) {
     QList<GradeRow> rows;
-    // the song row being filled (an index into rows), and each song row's grades
+    // the song row being filled (an index into rows), each song row's grades, and the one with a grade still to come
     qsizetype songRow = -1;
     QMap<qsizetype, QList<const Grade*>> songGrades;
+    qsizetype pendingSongRow = -1;
     for (qsizetype i = 0; i < entries.size(); ++i) {
         const int index = static_cast<int>(i);
         if (songs.contains(index)) {
@@ -290,10 +293,16 @@ QList<GradeRow> workoutRows(const QList<WorkoutEntry>& entries, const Grades& gr
             }
         }
         const WorkoutEntry& entry = entries[i];
+        const QStringList pendingLabels = pending && pending->index == index ? pending->labels : QStringList();
+        if (!pendingLabels.isEmpty()) {
+            pendingSongRow = songRow;
+        }
         if (entry.type == WorkoutEntry::Type::Block) {
             if (const Grade* grade = grades.find({index, 0, 0})) {
                 rows.append({GradeRow::Kind::Block, grade->label, grade->pct, letter(grade->pct),
                              grade->endedEarly ? QStringLiteral("ended early") : QString(), songRow >= 0});
+            } else if (!pendingLabels.value(0).isEmpty()) {
+                rows.append({GradeRow::Kind::Block, pendingLabels[0], std::nullopt, kPendingGrade, QString(), songRow >= 0});
             }
         } else if (entry.type == WorkoutEntry::Type::Interval) {
             QList<GradeRow> subRows;
@@ -304,7 +313,8 @@ QList<GradeRow> workoutRows(const QList<WorkoutEntry>& entries, const Grades& gr
                         records.append(grade);
                     }
                 }
-                if (records.isEmpty()) {
+                const QString pendingLabel = pendingLabels.value(sub);
+                if (records.isEmpty() && pendingLabel.isEmpty()) {
                     continue;
                 }
                 double riddenSum = 0;
@@ -326,6 +336,15 @@ QList<GradeRow> workoutRows(const QList<WorkoutEntry>& entries, const Grades& gr
                 for (const Grade* record : records) {
                     letters << letter(record->pct);
                 }
+                // (the block's average once every repeat has its grade)
+                if (!pendingLabel.isEmpty() && records.size() < entry.repeats) {
+                    for (qsizetype rep = records.size(); rep < entry.repeats; ++rep) {
+                        letters << kPendingGrade;
+                    }
+                    subRows.append({GradeRow::Kind::Sub, records.isEmpty() ? pendingLabel : records.first()->label,
+                                    std::nullopt, kPendingGrade, letters.join(QStringLiteral(" · "))});
+                    continue;
+                }
                 QString note = letters.join(QStringLiteral(" · "));
                 if (records.last()->endedEarly) {
                     note += QStringLiteral(" (ended)");
@@ -341,6 +360,10 @@ QList<GradeRow> workoutRows(const QList<WorkoutEntry>& entries, const Grades& gr
     // (a song none of whose blocks were ridden has no row)
     for (qsizetype i = rows.size() - 1; i >= 0; --i) {
         if (rows[i].kind != GradeRow::Kind::Song) {
+            continue;
+        }
+        if (i == pendingSongRow) {
+            rows[i].grade = kPendingGrade;
             continue;
         }
         const QList<const Grade*>& records = songGrades[i];

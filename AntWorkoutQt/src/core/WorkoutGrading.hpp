@@ -29,6 +29,7 @@
 #include <QList>
 #include <QMap>
 #include <QString>
+#include <QStringList>
 
 #include <optional>
 #include <tuple>
@@ -69,6 +70,8 @@ constexpr double kFreeRideMinWatts = 10;
 
 extern const QString kNoGrade;
 extern const QString kNoGradeColor;
+// a grade still to come (a grade list shown while the last block is being ridden)
+extern const QString kPendingGrade;
 
 // The letter grade for a score in %, kNoGrade for none
 QString letter(std::optional<double> pct);
@@ -166,6 +169,7 @@ private:
 //   Interval  an interval's header ("3x"), then its blocks as Sub rows: their average over the repeats ridden, and
 //             each repeat's grade in "note" ("S · A · B+")
 //   Song      Musical Cadence Mode: a song ridden, graded by its blocks' average; its blocks are indented under it
+// A grade still to come is kPendingGrade, in "note" for each repeat still to come.
 struct GradeRow {
     enum class Kind { Block, Interval, Sub, Song };
 
@@ -177,9 +181,17 @@ struct GradeRow {
     bool indent = false;
 };
 
-// The rows for a grade list in workout order, only for what was ridden. songs: Musical Cadence Mode's {entry index:
-// song title} of each song's first block
-QList<GradeRow> workoutRows(const QList<WorkoutEntry>& entries, const Grades& grades, const QMap<int, QString>& songs = {});
+// The workout's last block while it's being ridden: its entry, and the text its grade will carry (an interval: each
+// of its blocks', "" for a block that isn't graded)
+struct PendingBlock {
+    int index = 0;
+    QStringList labels;
+};
+
+// The rows for a grade list in workout order, only for what was ridden (and pending, with its grades still to come).
+// songs: Musical Cadence Mode's {entry index: song title} of each song's first block
+QList<GradeRow> workoutRows(const QList<WorkoutEntry>& entries, const Grades& grades, const QMap<int, QString>& songs = {},
+                            const std::optional<PendingBlock>& pending = std::nullopt);
 
 // Scores weighted by how long each block was ridden, over the graded ones; none if none
 std::optional<double> riddenAverage(const QList<const Grade*>& grades);

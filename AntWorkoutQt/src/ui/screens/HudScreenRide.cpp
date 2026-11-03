@@ -194,6 +194,10 @@ void HudScreen::showTickEvents(const WorkoutEngine::TickEvents& events) {
     if (events.difficultyApplied) {
         showDifficultyLabels();
     }
+    // the last block being ridden: each of an interval's repeats' grade as it's set, what's to come at the difficulty
+    if (workoutGraded_ && !events.completed && (events.intervalBlockStarted || events.difficultyApplied)) {
+        refreshWorkoutGrades();
+    }
 }
 
 // the end of the workout: the block labels to one, the grades in the left column, everything stopped where it is
@@ -567,7 +571,8 @@ void HudScreen::updateUpNextRemaining() {
 }
 
 // the last block, kLastBlockNoteSeconds into it: "Up Next:" and its "last block" note go, the light blue box too (not
-// in a ramp test: its next block is only added just before this one ends)
+// in a ramp test: its next block is only added just before this one ends), and the grades take over the column, with
+// the end of the list in view: the last block's grades are still to come (an FTP test isn't graded)
 void HudScreen::hideLastBlockNote() {
     if (upNextLabelDescription_->text() != kLastBlock || engine_->rampTest() || !engine_->started() ||
         !engine_->currentEventText() ||
@@ -577,6 +582,10 @@ void HudScreen::hideLastBlockNote() {
     layout::setText(upNextLabelHeader_, QString());
     layout::setText(upNextLabelDescription_, QString());
     theme::setSheet(upNextLabelDescription_, QString());
+    if (!workoutGraded_ && !engine_->ftpTest()) {
+        showWorkoutGrades(true);
+        workoutGradeList_->scrollTo(static_cast<int>(workoutGradeList_->rows().size()));
+    }
 }
 
 // the target arc at the power (or cadence) asked for, and Ride At
@@ -675,8 +684,17 @@ void HudScreen::showWorkoutGrades(bool show) {
     workoutGradesHeader_->setVisible(show);
     workoutGradeList_->setVisible(show);
     if (show) {
-        workoutGradeList_->refresh();
+        refreshWorkoutGrades();
+    } else {
+        workoutGradeList_->setRows({}, std::nullopt);
     }
+}
+
+// (where the list is scrolled to stays: this can come while the rider's looking through it)
+void HudScreen::refreshWorkoutGrades() {
+    const int scrolled = workoutGradeList_->scrollOffset();
+    workoutGradeList_->refresh(appState().blockGrades, engine_->pendingBlock());
+    workoutGradeList_->scrollTo(scrolled);
 }
 
 // the spiral's middle through an FTP test's effort: the FTP its average works out to

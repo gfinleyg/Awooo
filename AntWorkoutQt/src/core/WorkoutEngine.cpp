@@ -406,6 +406,38 @@ std::optional<QString> WorkoutEngine::finishGrading(bool endedEarly) {
     return grading::letter(result.pct);
 }
 
+std::optional<grading::PendingBlock> WorkoutEngine::pendingBlock() const {
+    if (!started_ || ftpTest_) {
+        return std::nullopt;
+    }
+    const AppState& state = appState();
+    // (the last block or interval: the entries after it are its ramp steps and interval blocks)
+    qsizetype index = state.workoutList.size() - 1;
+    while (index >= 0 && state.workoutList[index].type != WorkoutEntry::Type::Block &&
+           state.workoutList[index].type != WorkoutEntry::Type::Interval) {
+        --index;
+    }
+    if (index < 0 || activeWorkout_ < index) {
+        return std::nullopt;
+    }
+    const WorkoutEntry& entry = state.workoutList[index];
+    const QList<Block> blocks = entry.type == WorkoutEntry::Type::Interval ? entry.intervalBlocks : QList<Block>{entry.block};
+    grading::PendingBlock pending{static_cast<int>(index), {}};
+    bool graded = false;
+    for (int sub = 0; sub < blocks.size(); ++sub) {
+        QString label;
+        // (the one being graded keeps its text from when it began, as its grade will)
+        if (grader_ && gradeKey_.index == index && gradeKey_.sub == sub) {
+            label = gradeLabel_;
+        } else if (blocks[sub].position != SwitchSingleLeg) {
+            label = blockText(blocks[sub], activeDifficulty_, state.targetUnit());
+        }
+        graded = graded || !label.isEmpty();
+        pending.labels.append(label);
+    }
+    return graded ? std::optional(pending) : std::nullopt;
+}
+
 // ---- The FTP test ----
 
 void WorkoutEngine::resetFtpTest() {

@@ -134,9 +134,9 @@ public:
     static constexpr double kBlinkWindowSeconds = 10;
     static constexpr double kBlinkHalfPeriodSeconds = 0.5;
     static constexpr double kBlinkMinDurationSeconds = 2;
-    // the last block's "Up Next:" and its "last block" note go this far into it
+    // the last block's "Up Next:" and its "last block" note go this far into it, the block grades taking their place
     static constexpr double kLastBlockNoteSeconds = 30;
-    // the left column's width (design px): the block grades' once the workout's complete, so it's that wide from the
+    // the left column's width (design px): the block grades' when they take it over, so it's that wide from the
     // start and the screen doesn't move when they take it over
     static constexpr int kUpNextWidth = 490;
     // the lines a workout message under Ride At may use (a longer one is made smaller), kept for it whether there's a
@@ -314,6 +314,7 @@ private:
     void updateWorkoutMessage();
     void fitBetweenGauges(QLabel* label, const QString& style, int points, int lines, const QString& text);
     void showWorkoutGrades(bool show);
+    void refreshWorkoutGrades();
     void showEffortAverage();
     void updateRampPauseCountdown();
     void updateTrainerTarget();

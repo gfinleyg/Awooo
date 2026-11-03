@@ -388,7 +388,7 @@ void HudScreen::buildUpNext() {
     zoneLegend_ = new ZoneLegend;
     zoneLegend_->setFixedWidth(kUpNextWidth);
     upNext->addWidget(zoneLegend_, 26, 0);
-    // once the workout is complete each block's grade takes over the whole column
+    // well into the last block (or at the end of the workout) each block's grade takes over the whole column
     workoutGradesHeader_ = new HaloLabel(QStringLiteral("Workout Grades"));
     theme::setSheet(workoutGradesHeader_, kXlText);
     workoutGradesHeader_->setMaximumHeight(40);

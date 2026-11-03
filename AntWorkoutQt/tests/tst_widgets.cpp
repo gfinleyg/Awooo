@@ -618,6 +618,38 @@ private slots:
         QCOMPARE(overlay.title(), QStringLiteral("Avg"));
     }
 
+    // a grade still to come's question mark blinks, the grade set stopping it; nothing else moves as it does
+    void gradeListBlinksPendingGrades() {
+        GradeList list;
+        list.resize(490, 400);
+        QList<GradeList::Row> rows(1);
+        rows[0].label = QStringLiteral("200W 1m");
+        rows[0].grade = QStringLiteral("A");
+        list.setRows(rows, std::nullopt);
+        QVERIFY(!list.blinking());
+        rows[0].grade = grading::kPendingGrade;
+        rows[0].note = QStringLiteral("A · ?");
+        list.setRows(rows, std::nullopt);
+        QVERIFY(list.blinking());
+        QVERIFY(list.pendingMarkShown());
+        const QImage shown = list.grab().toImage();
+        QTRY_VERIFY(!list.pendingMarkShown());
+        const QImage hidden = list.grab().toImage();
+        QVERIFY(shown != hidden);
+        // the badge and the note's end change, the row's label and the note's grade so far don't
+        const int labelEnd = static_cast<int>(GradeList::kBadgeWidth) + 100;
+        QCOMPARE(shown.copy(static_cast<int>(GradeList::kBadgeWidth), 0, 100, 42),
+                 hidden.copy(static_cast<int>(GradeList::kBadgeWidth), 0, 100, 42));
+        QVERIFY(shown.copy(0, 0, static_cast<int>(GradeList::kBadgeWidth), 42) !=
+                hidden.copy(0, 0, static_cast<int>(GradeList::kBadgeWidth), 42));
+        QVERIFY(shown.copy(labelEnd, 0, list.width() - labelEnd, 42) != hidden.copy(labelEnd, 0, list.width() - labelEnd, 42));
+        rows[0].grade = QStringLiteral("A");
+        rows[0].note = QStringLiteral("A · A");
+        list.setRows(rows, std::nullopt);
+        QVERIFY(!list.blinking());
+        QVERIFY(list.pendingMarkShown());
+    }
+
     void gradeListScrollsWithMoreRows() {
         GradeList list;
         list.resize(600, 400);
