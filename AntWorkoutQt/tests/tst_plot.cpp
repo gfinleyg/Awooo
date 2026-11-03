@@ -6,6 +6,9 @@
 #include <QJsonObject>
 #include <QtTest>
 
+#include <algorithm>
+#include <cmath>
+
 #include "AxisItem.hpp"
 #include "MaxStar.hpp"
 #include "PlotItems.hpp"
@@ -45,6 +48,30 @@ bool sameNumbers(const QList<double>& a, const QList<double>& b) {
         }
     }
     return true;
+}
+
+// a line with something at every scale, as a noisy sensor's is
+std::pair<QList<double>, QList<double>> jaggedLine(int count) {
+    QList<double> xs, ys;
+    for (int i = 0; i < count; ++i) {
+        xs.append(i * 0.55);
+        ys.append(50 + 30 * std::sin(i * 0.05) + 12 * std::sin(i * 2.3) + 7 * std::cos(i * 7.9));
+    }
+    return {xs, ys};
+}
+
+// a curve as a view draws it: moved along by offset device-independent pixels, x scaled
+QImage paintedCurve(plot::CurveItem& curve, double offset = 0, double dpr = 1, double scale = 1) {
+    QImage image(static_cast<int>(700 * dpr), static_cast<int>(100 * dpr), QImage::Format_RGB32);
+    image.setDevicePixelRatio(dpr);
+    image.fill(Qt::white);
+    QPainter painter(&image);
+    painter.translate(offset, 0);
+    painter.scale(scale, 1);
+    curve.paint(&painter, nullptr, nullptr);
+    painter.end();
+    image.setDevicePixelRatio(1);
+    return image;
 }
 
 QString text(const QList<double>& values) {
@@ -255,8 +282,104 @@ private slots:
         view.addItem(curve);
         curve->setData({10, 20, 30}, {5, 50, 25}, plot::mkPen(Qt::blue, 2), plot::mkPen(Qt::white, 4));
         const QRectF bounds = curve->boundingRect();
-        // the data, and 3 px (half the halo, and 1) past it
-        QCOMPARE(bounds, QRectF(QPointF(7, 2), QPointF(33, 53)));
+        // the data, and 4 px (half the halo, and 2) past it
+        QCOMPARE(bounds, QRectF(QPointF(6, 1), QPointF(34, 54)));
+    }
+
+    void curveIsAntialiased() {
+        plot::CurveItem curve;
+        curve.setData({0, 400}, {20, 60}, plot::mkPen(Qt::red, 2), std::nullopt);
+        const QImage image = paintedCurve(curve);
+        int between = 0;
+        for (int y = 0; y < image.height(); ++y) {
+            const QRgb pixel = image.pixel(200, y);
+            between += pixel != qRgb(255, 255, 255) && pixel != qRgb(255, 0, 0);
+        }
+        QVERIFY(between > 0);
+    }
+
+    // scrolling only moves the line by whole pixels: its shape never changes, so it can't flicker
+    void curveKeepsItsShapeAsItScrolls() {
+        for (const double dpr : {1.0, 1.5}) {
+            plot::CurveItem curve;
+            const auto [xs, ys] = jaggedLine(400);
+            curve.setData(xs, ys, plot::mkPen(Qt::red, 2), plot::mkPen(QColor(16, 16, 24, 128), 3.5));
+            const QImage first = paintedCurve(curve, 0, dpr);
+            for (int frame = 1; frame < 30; ++frame) {
+                const double offset = frame * 0.21;
+                const QImage image = paintedCurve(curve, offset, dpr);
+                const int shift = static_cast<int>(std::lround(offset * dpr));
+                // (where the line isn't entering)
+                QCOMPARE(image.copy(shift, 0, 600, image.height()), first.copy(0, 0, 600, first.height()));
+            }
+        }
+    }
+
+    // new points and old ones dropped change the image only where they show, to just what it would be drawn from new
+    void curveChangesDrawAsIfNew_data() {
+        QTest::addColumn<double>("lineWidth");
+        QTest::addColumn<double>("haloWidth");
+        QTest::newRow("sensor line") << 2.0 << 3.5;
+        QTest::newRow("highlighted") << 4.0 << 8.0;
+    }
+
+    void curveChangesDrawAsIfNew() {
+        QFETCH(double, lineWidth);
+        QFETCH(double, haloWidth);
+        const QPen pen = plot::mkPen(Qt::red, lineWidth);
+        const QPen halo = plot::mkPen(QColor(16, 16, 24, 128), haloWidth);
+        const auto [xs, ys] = jaggedLine(900);
+        plot::CurveItem curve;
+        curve.setData(xs.mid(0, 400), ys.mid(0, 400), pen, halo);
+        paintedCurve(curve);
+        for (qsizetype end = 402; end < 900; end += 37) {
+            const qsizetype start = end - 400;
+            curve.setData(xs.mid(start, 400), ys.mid(start, 400), pen, halo);
+            plot::CurveItem fresh;
+            fresh.setData(xs.mid(start, 400), ys.mid(start, 400), pen, halo);
+            QCOMPARE(paintedCurve(curve), paintedCurve(fresh));
+        }
+        // a change to a point already there (a dropout's zero line growing)
+        QList<double> changed = xs.mid(0, 400);
+        changed.last() += 0.5;
+        curve.setData(changed, ys.mid(0, 400), pen, halo);
+        plot::CurveItem fresh;
+        fresh.setData(changed, ys.mid(0, 400), pen, halo);
+        QCOMPARE(paintedCurve(curve), paintedCurve(fresh));
+    }
+
+    // what the image can't shift to is drawn again: a new scale, a new pen, data out of order, further than it reaches
+    void curveDrawsAgainWhenItMust() {
+        const QPen pen = plot::mkPen(Qt::red, 2);
+        const QPen halo = plot::mkPen(QColor(16, 16, 24, 128), 3.5);
+        const auto [xs, ys] = jaggedLine(3000);
+        const auto same = [](plot::CurveItem& curve, plot::CurveItem& fresh, double offset, double scale) {
+            return paintedCurve(curve, offset, 1, scale) == paintedCurve(fresh, offset, 1, scale);
+        };
+        plot::CurveItem curve;
+        curve.setData(xs, ys, pen, halo);
+        plot::CurveItem fresh;
+        fresh.setData(xs, ys, pen, halo);
+        paintedCurve(curve);
+        QVERIFY(same(curve, fresh, 0, 0.5));
+        QVERIFY(same(curve, fresh, -1500, 1));
+        QVERIFY(same(curve, fresh, 0, 1));
+
+        curve.setPen(plot::mkPen(Qt::blue, 4));
+        plot::CurveItem bluer;
+        bluer.setData(xs, ys, plot::mkPen(Qt::blue, 4), halo);
+        QVERIFY(same(curve, bluer, 0, 1));
+
+        QList<double> backward = xs;
+        std::reverse(backward.begin(), backward.end());
+        curve.setData(backward, ys, plot::mkPen(Qt::blue, 4), halo);
+        plot::CurveItem unsorted;
+        unsorted.setData(backward, ys, plot::mkPen(Qt::blue, 4), halo);
+        QVERIFY(same(curve, unsorted, 0, 1));
+
+        curve.clear();
+        plot::CurveItem empty;
+        QCOMPARE(paintedCurve(curve), paintedCurve(empty));
     }
 
     void starsMakeRoomAtTheTop() {

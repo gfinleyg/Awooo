@@ -18,6 +18,9 @@ namespace awo::plot {
 // a pyqtgraph pen made from a color: cosmetic (as wide on screen whatever the scale), 1 px unless given
 QPen mkPen(const QColor& color, double width = 1);
 
+// Antialiased, and drawn into an image of its own that's shifted by whole pixels as the view scrolls: the line can't
+// flicker as it moves, and scrolling costs next to nothing (stroking a long line is slow). New points only redraw the
+// part of the image they change; a new scale or pen, or scrolling past the image's ends, draws it again.
 class CurveItem : public QGraphicsObject, public ViewAware, public Clickable {
     Q_OBJECT
 
@@ -51,6 +54,13 @@ signals:
 private:
     ViewBox* view() const;
     double pixelPadding() const;
+    // how far the pens reach from a point on the line, in pixels (a square cap's corner, and 2 for the antialiasing)
+    double strokeReach() const;
+    // what changes in the image going from the data now to this (nothing yet: it isn't drawn)
+    void noteDataChange(const QList<double>& xs, const QList<double>& ys);
+    // the image where it shows from now, drawn again first if it can't be shifted there; returns its left edge
+    int placeLayer(const QTransform& device, const QSize& deviceSize, double dpr);
+    void drawLayer(double fromX, double toX);
 
     QList<double> xs_, ys_;
     QPainterPath path_;
@@ -59,6 +69,14 @@ private:
     std::optional<QPen> shadowPen_;
     bool clickable_ = false;
     double tolerance_ = 10;
+    bool sorted_ = true;
+    QImage layer_;
+    // the data to the image's pixels
+    QTransform layerTransform_;
+    double layerDpr_ = 1;
+    bool layerStale_ = true;
+    // the x ranges changed since it was last drawn
+    QList<std::pair<double, double>> layerChanges_;
 };
 
 class InfiniteLine : public QGraphicsObject, public ViewAware {

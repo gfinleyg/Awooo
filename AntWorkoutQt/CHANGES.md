@@ -97,6 +97,16 @@ Python app's own results (`tests\golden\`).
   theme's colors, and LayoutViewer lists them. The `hud_graph` parity scene (and the workout screens' scenes) are
   meant to differ.
 
+- **The power, heart rate, cadence and speed lines are antialiased, and don't flicker as the workout graph scrolls.**
+  The Python app's lines (like pyqtgraph's by default) aren't antialiased, so as the graph scrolled by a fraction of
+  a pixel at a time, each stretch of a line snapped to whole pixels at a different moment and its width and halo
+  flickered. Each line is now drawn once into an image that's shifted by whole pixels as the graph scrolls, with only
+  the newest part drawn again as readings come in. The line moves a whole pixel at a time (about every half second)
+  and can be up to half a pixel from the bars behind it. The graph takes far less CPU to draw, except for the one
+  frame after a change of scale, such as when a new highest reading rescales the graph. The synopsis' lines are
+  antialiased the same way. The `hud_graph`, `synopsis_screen` and workout screens' parity scenes no longer match the
+  Python app's along the lines.
+
 - **The workout graph has no empty strips at its sides**: the power, heart rate and cadence lines start at its left
   edge (to within a reading: up to about a second, or 3 pixels) and the expected power runs to its right edge. The
   Python app's graph pads its 12 minutes by about 2% on each side (about 40 pixels at 1800 wide). The `hud_graph`

@@ -66,10 +66,12 @@ ViewBox* CurveItem::view() const {
 
 void CurveItem::setData(const QList<double>& xs, const QList<double>& ys) {
     prepareGeometryChange();
+    noteDataChange(xs, ys);
     xs_ = xs;
     ys_ = ys;
     path_ = QPainterPath();
     const qsizetype count = std::min(xs.size(), ys.size());
+    sorted_ = std::is_sorted(xs.begin(), xs.begin() + count);
     if (count > 0) {
         path_.reserve(static_cast<int>(count));
         path_.moveTo(xs[0], ys[0]);
@@ -87,6 +89,7 @@ void CurveItem::setData(const QList<double>& xs, const QList<double>& ys) {
 
 void CurveItem::setData(const QList<double>& xs, const QList<double>& ys, const QPen& pen,
                         const std::optional<QPen>& shadowPen) {
+    layerStale_ = layerStale_ || pen != pen_ || shadowPen != shadowPen_;
     pen_ = pen;
     shadowPen_ = shadowPen;
     setData(xs, ys);
@@ -94,12 +97,14 @@ void CurveItem::setData(const QList<double>& xs, const QList<double>& ys, const 
 
 void CurveItem::setPen(const QPen& pen) {
     prepareGeometryChange();
+    layerStale_ = true;
     pen_ = pen;
     update();
 }
 
 void CurveItem::setShadowPen(const std::optional<QPen>& pen) {
     prepareGeometryChange();
+    layerStale_ = true;
     shadowPen_ = pen;
     update();
 }
@@ -115,7 +120,16 @@ double CurveItem::pixelPadding() const {
     if (shadowPen_ && shadowPen_->style() != Qt::NoPen) {
         width = std::max(width, shadowPen_->widthF());
     }
-    return std::max(width, 1.0) / 2 + 1 + (clickable_ ? tolerance_ : 0);
+    // (half the pen, 1 for the antialiasing, 1 for the image being up to half a pixel from where the view has it)
+    return std::max(width, 1.0) / 2 + 2 + (clickable_ ? tolerance_ : 0);
+}
+
+double CurveItem::strokeReach() const {
+    double width = pen_.widthF();
+    if (shadowPen_ && shadowPen_->style() != Qt::NoPen) {
+        width = std::max(width, shadowPen_->widthF());
+    }
+    return width * M_SQRT1_2 + 2;
 }
 
 QRectF CurveItem::boundingRect() const {
@@ -147,18 +161,143 @@ QPainterPath CurveItem::shape() const {
     return toPixels.inverted().map(stroker.createStroke(toPixels.map(path_)));
 }
 
+void CurveItem::noteDataChange(const QList<double>& xs, const QList<double>& ys) {
+    if (layerStale_ || layer_.isNull()) {
+        return;
+    }
+    const qsizetype count = std::min(xs.size(), ys.size());
+    const qsizetype oldCount = std::min(xs_.size(), ys_.size());
+    if (count == 0 || oldCount == 0 || !sorted_ || !std::is_sorted(xs.begin(), xs.begin() + count)) {
+        layerStale_ = true;
+        return;
+    }
+    // the points the old and new data share: from where the new data starts (older ones dropped) until they differ
+    const qsizetype start = std::lower_bound(xs_.begin(), xs_.begin() + oldCount, xs[0]) - xs_.begin();
+    qsizetype shared = 0;
+    while (shared < count && start + shared < oldCount && xs[shared] == xs_[start + shared] &&
+           ys[shared] == ys_[start + shared]) {
+        ++shared;
+    }
+    if (shared == 0) {
+        layerStale_ = true;
+        return;
+    }
+    if (start > 0) {
+        layerChanges_.append({xs_[0], xs[0]});
+    }
+    if (shared < count || start + shared < oldCount) {
+        layerChanges_.append({xs[shared - 1], std::max(xs[count - 1], xs_[oldCount - 1])});
+    }
+}
+
+int CurveItem::placeLayer(const QTransform& device, const QSize& deviceSize, double dpr) {
+    const int width = deviceSize.width();
+    const int height = deviceSize.height();
+    // (the point in the middle of the device, where any difference in the scale from the image's balances out)
+    const auto leftEdge = [&] {
+        const double middle = (width / 2. - device.dx()) / device.m11();
+        return static_cast<int>(std::lround(width / 2. - layerTransform_.map(QPointF(middle, 0)).x()));
+    };
+    bool fits = !layerStale_ && !layer_.isNull() && layer_.width() == 2 * width && layer_.height() == height &&
+                layerDpr_ == dpr;
+    if (fits) {
+        // (a range's rounding moves the scale a little every time; it's only new once it would show)
+        const double close = 0.05;
+        fits = std::abs(device.m11() / layerTransform_.m11() - 1) * width < close &&
+               std::abs(device.m22() / layerTransform_.m22() - 1) * height < close &&
+               std::abs(device.dy() - layerTransform_.dy()) < close;
+    }
+    if (fits) {
+        const int left = leftEdge();
+        fits = left <= 0 && left + layer_.width() >= width;
+    }
+    if (!fits) {
+        // as much to spare as half the device each way
+        layer_ = QImage(2 * width, height, QImage::Format_ARGB32_Premultiplied);
+        layerDpr_ = dpr;
+        layerTransform_ = QTransform(device.m11(), 0, 0, device.m22(), device.dx() + width / 2, device.dy());
+        layerStale_ = false;
+        layerChanges_.clear();
+        const double scale = layerTransform_.m11();
+        drawLayer(-layerTransform_.dx() / scale, (layer_.width() - layerTransform_.dx()) / scale);
+    }
+    for (const auto& [fromX, toX] : std::as_const(layerChanges_)) {
+        drawLayer(fromX, toX);
+    }
+    layerChanges_.clear();
+    return leftEdge();
+}
+
+// the pixels of the image a stretch of the data shows in, cleared and drawn again from the points that reach them
+void CurveItem::drawLayer(double fromX, double toX) {
+    const double scale = layerTransform_.m11();
+    const double offset = layerTransform_.dx();
+    const double reach = strokeReach() * layerDpr_;
+    const QRect clip = QRect(QPoint(static_cast<int>(std::floor(fromX * scale + offset - reach)), 0),
+                             QPoint(static_cast<int>(std::ceil(toX * scale + offset + reach)), layer_.height() - 1))
+                           .intersected(layer_.rect());
+    if (clip.isEmpty()) {
+        return;
+    }
+    QPainterPath path;
+    if (sorted_) {
+        const auto end = xs_.begin() + std::min(xs_.size(), ys_.size());
+        // (and one past each side, for the lines that cross them)
+        qsizetype first = std::lower_bound(xs_.begin(), end, (clip.left() - reach - offset) / scale) - xs_.begin();
+        qsizetype last = std::upper_bound(xs_.begin(), end, (clip.right() + 1 + reach - offset) / scale) - xs_.begin();
+        first = std::max<qsizetype>(first - 1, 0);
+        last = std::min<qsizetype>(last, end - xs_.begin() - 1);
+        path.reserve(static_cast<int>(last - first + 1));
+        path.moveTo(xs_[first], ys_[first]);
+        for (qsizetype i = first + 1; i <= last; ++i) {
+            path.lineTo(xs_[i], ys_[i]);
+        }
+    } else {
+        path = path_;
+    }
+    QPainter painter(&layer_);
+    painter.setCompositionMode(QPainter::CompositionMode_Clear);
+    painter.fillRect(clip, Qt::transparent);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setClipRect(clip);
+    painter.setTransform(layerTransform_);
+    // (the image's a pixel a pixel, so the pens' cosmetic widths in its pixels)
+    const auto stroke = [&](QPen pen) {
+        pen.setWidthF(std::max(pen.widthF(), 1.0) * layerDpr_);
+        painter.setPen(pen);
+        painter.drawPath(path);
+    };
+    if (shadowPen_ && shadowPen_->style() != Qt::NoPen) {
+        stroke(*shadowPen_);
+    }
+    stroke(pen_);
+}
+
 void CurveItem::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidget*) {
     if (xs_.isEmpty()) {
         return;
     }
-    // (pyqtgraph's default: no antialiasing)
-    painter->setRenderHint(QPainter::Antialiasing, false);
-    if (shadowPen_ && shadowPen_->style() != Qt::NoPen) {
-        painter->setPen(*shadowPen_);
+    const QTransform world = painter->transform();
+    if (world.type() > QTransform::TxScale || world.m11() <= 0 || world.m22() == 0) {
+        // (nothing the app does: not something an image can shift to)
+        painter->setRenderHint(QPainter::Antialiasing);
+        if (shadowPen_ && shadowPen_->style() != Qt::NoPen) {
+            painter->setPen(*shadowPen_);
+            painter->drawPath(path_);
+        }
+        painter->setPen(pen_);
         painter->drawPath(path_);
+        return;
     }
-    painter->setPen(pen_);
-    painter->drawPath(path_);
+    const QPaintDevice* device = painter->device();
+    const double dpr = device->devicePixelRatioF();
+    // (a widget's size isn't in pixels, an image's is: big enough for either)
+    const QSize size(static_cast<int>(std::ceil(device->width() * dpr)), static_cast<int>(std::ceil(device->height() * dpr)));
+    const int left = placeLayer(world * QTransform::fromScale(dpr, dpr), size, dpr);
+    painter->resetTransform();
+    painter->drawImage(QRectF(left / dpr, 0, layer_.width() / dpr, layer_.height() / dpr), layer_);
+    painter->setTransform(world);
 }
 
 bool CurveItem::click(const QPointF& scenePos, Qt::MouseButton button) {
