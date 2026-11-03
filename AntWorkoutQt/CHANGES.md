@@ -85,6 +85,12 @@ Python app's own results (`tests\golden\`).
   the gear, filling the gaps between the teeth. Scenes with an arc (`power_gauge`, `cadence_mode_gauge`, the workout and
   Musical Cadence screens', `ftp_colors_tab`, `ftp_mockup`) are meant to differ from the Python app's.
 
+- **On the RPM gauge's beat the gear stays as it is, and the circles inside it pulse harder.** The Python app's gear
+  swelled and brightened with the circles. Now only the circles do: they lose all their paleness instead of 60% of it,
+  and each grows outward by the same amount, up to a pixel short of the floor of the gaps between the gear's teeth, at
+  any size. The target arc stays still with the gear. The `cadence_mode_gauge` scene, and the Musical Cadence, workout
+  and free ride screens' scenes that show the rings, are meant to differ.
+
 - **The RPM gauge has a band of the cadence zones' colors in every mode,** filled up to the needle like the power
   gauge's (the chainring shrunk to sit inside it): the same zones as Musical Cadence Mode's (40/65/90/115 rpm) and the
   same fades, from the theme's zone colors. The Python app's RPM gauge had no band outside Musical Cadence Mode, so the

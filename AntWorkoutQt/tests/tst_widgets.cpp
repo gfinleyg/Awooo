@@ -509,6 +509,36 @@ private slots:
         QCOMPARE(with.pixel(at(273.5)), without.pixel(at(273.5)));
     }
 
+    // on a beat the rings inside a gear swell and brighten, up to the floor of its gaps; the gear doesn't change
+    void gaugeBeatLeavesTheGearAlone() {
+        AnalogGauge gauge;
+        gauge.setGaugeTheme(3);
+        gauge.bigNeedleCenterSize = 5;
+        gauge.setValue(0);
+        gauge.resize(400, 400);
+        gauge.setCenterGearAngle(0);
+        const auto picture = [&gauge](double level) {
+            gauge.setCenterRings(QList<QColor>{QColor(Qt::blue), QColor(Qt::cyan)}, level);
+            QImage image(gauge.size(), QImage::Format_ARGB32);
+            image.fill(Qt::white);
+            gauge.render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
+            return image;
+        };
+        const QImage rest = picture(0);
+        const QImage beat = picture(1);
+        // (a 79 center: rings 15.8 wide, its 1.58 outlines, the gaps' floor at 71.1. The next ring in, at 63.2, swells
+        // to 68.52, its outline's edge 69.31)
+        double farthest = 0;
+        for (int y = 0; y < 400; ++y) {
+            for (int x = 0; x < 400; ++x) {
+                if (rest.pixel(x, y) != beat.pixel(x, y)) {
+                    farthest = std::max(farthest, std::hypot(x + 0.5 - 200, y + 0.5 - 200));
+                }
+            }
+        }
+        QVERIFY2(farthest > 68 && farthest < 70.3, qPrintable(QString::number(farthest)));
+    }
+
     void gaugeRingsFitItsSize() {
         AnalogGauge gauge;
         gauge.bigNeedleCenterSize = 5;

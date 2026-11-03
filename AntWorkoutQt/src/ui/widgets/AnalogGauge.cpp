@@ -605,13 +605,32 @@ QColor AnalogGauge::ringColor(int i) const {
     const qsizetype stop = std::min(static_cast<qsizetype>(at), colors.size() - 2);
     const QColor shade = mix(colors[stop], colors[stop + 1], at - stop);
     const auto [paleOuter, paleInner] = centerRingsPale;
-    // paler toward the middle (the reading is drawn over it), less pale on the beat
-    return mix(shade, QColor(QStringLiteral("#ffffff")), (paleOuter + (paleInner - paleOuter) * t) * (1 - 0.6 * level));
+    // paler toward the middle (the reading is drawn over it), less pale on the beat (around a gear, which stays as it
+    // is, the rings inside it lose all of it)
+    const double beat = !centerGearAngle_ ? 0.6 * level : i == 0 ? 0.0 : level;
+    return mix(shade, QColor(QStringLiteral("#ffffff")), (paleOuter + (paleInner - paleOuter) * t) * (1 - beat));
 }
 
 double AnalogGauge::ringRadius(int i, double radius) const {
     const double t = static_cast<double>(i) / (ringCount() - 1);
-    return radius * (1 - kCenterRingSpread * t) * (1 + 0.04 * centerRings_->second);
+    const double rest = radius * (1 - kCenterRingSpread * t);
+    const double level = centerRings_->second;
+    if (!centerGearAngle_) {
+        return rest * (1 + 0.04 * level);
+    }
+    if (i == 0) {
+        return rest;
+    }
+    // the rings inside a gear all swell by as much as leaves the outermost of them a pixel short of the gaps' floor,
+    // the two outlines between them
+    const double band = radius * kCenterRingSpread / (ringCount() - 1);
+    return rest + level * std::max(0.0, band * kCenterGearDepth - ringOutlineWidth(radius) - 1);
+}
+
+// (thin enough to leave narrow rings their color)
+double AnalogGauge::ringOutlineWidth(double radius) const {
+    const double band = radius * kCenterRingSpread / (ringCount() - 1);
+    return std::max(1.0, std::min(radius * 0.02, band * 0.15));
 }
 
 double AnalogGauge::centerRadius() const {
@@ -629,8 +648,7 @@ void AnalogGauge::drawCenterRings(QPainter& painter, double radius) {
         grad.setColorAt(0, color.lighter(112));
         grad.setColorAt(1, color.darker(118));
         painter.setBrush(grad);
-        // (outlines thin enough to leave narrow rings their color)
-        painter.setPen(QPen(color.darker(140), std::max(1.0, std::min(radius * 0.02, band * 0.15))));
+        painter.setPen(QPen(color.darker(140), ringOutlineWidth(radius)));
         if (i == 0 && centerGearAngle_) {
             painter.save();
             painter.rotate(*centerGearAngle_);
@@ -679,8 +697,8 @@ void AnalogGauge::drawOuterCircle() {
 }
 
 // the target arc, centered on arcCenterValue, wider the higher it is: from the center's edge (the outermost ring's, as
-// it swells on a beat; a gear's, just under the floor of the gaps between its teeth, so it fills them) out to the outer
-// ring's, which the widget's edge doesn't cut off when it points straight up
+// it swells on a beat; a gear's, which doesn't, just under the floor of the gaps between its teeth, so it fills them)
+// out to the outer ring's, which the widget's edge doesn't cut off when it points straight up
 void AnalogGauge::drawNewArc() {
     QPainter painter(paintTarget_);
     painter.setRenderHint(QPainter::Antialiasing);

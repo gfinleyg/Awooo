@@ -88,6 +88,7 @@ public:
     QGradientStops outerCircleBg() const { return outerCircleBg_; }
     // nested circles in place of the center point, shaded through colors from the outermost to the innermost (two or
     // more), or the center point back (none). level (0 to 1) brightens them and swells them a little, e.g. on a beat
+    // (with a gear, setCenterGearAngle: only the rings inside it, and more, as far as the floor of its gaps)
     void setCenterRings(const std::optional<QList<QColor>>& colors, double level = 0.0);
     // the outline the reading gets where it doesn't stand out from the center behind it (dark rings, say), none where
     // it does (see HaloLabel). The reading isn't in the theme's colors, nor is this: it's taken toward white, not the
@@ -170,6 +171,7 @@ private:
     // ring i of ringCount()'s color, and its radius in a center of the given radius
     QColor ringColor(int i) const;
     double ringRadius(int i, double radius) const;
+    double ringOutlineWidth(double radius) const;
     double centerRadius() const;
     void createUnitsText();
     void drawCenterRings(QPainter& painter, double radius);
