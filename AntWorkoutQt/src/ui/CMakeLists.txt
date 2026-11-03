@@ -17,6 +17,8 @@ add_library(awo_ui STATIC
     SoundEffects.hpp
     Theme.cpp
     Theme.hpp
+    TimedApplication.cpp
+    TimedApplication.hpp
     ZoneColors.cpp
     ZoneColors.hpp
     dialogs/CalibratePowerWindow.cpp

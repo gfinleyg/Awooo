@@ -54,3 +54,12 @@ target_link_libraries(render_widgets PRIVATE awo_viewer)
 target_compile_definitions(render_widgets PRIVATE AWO_PYTHON_APP_DIR="${AWO_PYTHON_APP}")
 target_include_directories(render_widgets PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 awo_target_defaults(render_widgets)
+
+# what takes the UI thread's time on a live ride, on the real display (a dev tool: not run by ctest or shipped)
+add_executable(perf_ride perf/perf_ride.cpp)
+target_link_libraries(perf_ride PRIVATE awo_viewer)
+awo_target_defaults(perf_ride)
+
+# TimedApplication, which perf_ride and AWO_EVENT_TIMING report from
+awo_add_test(tst_event_timing tst_event_timing.cpp)
+target_link_libraries(tst_event_timing PRIVATE awo_ui)

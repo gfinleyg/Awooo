@@ -1,6 +1,5 @@
 // AntWorkout.exe (AntWorkout.py)
 
-#include <QApplication>
 #include <QDir>
 #include <QJsonObject>
 
@@ -12,12 +11,13 @@
 #include "SingleInstance.hpp"
 #include "SoundEffects.hpp"
 #include "Theme.hpp"
+#include "TimedApplication.hpp"
 #include "Units.hpp"
 
 using namespace awo;
 
 int main(int argc, char* argv[]) {
-    QApplication app(argc, argv);
+    TimedApplication app(argc, argv);
     // settings, logs and workouts live next to the exe, wherever it was started from
     QDir::setCurrent(QCoreApplication::applicationDirPath());
     // Qt's warnings, uncaught exceptions and crashes go to the log: the app runs without a console

@@ -91,6 +91,27 @@ views also show what runs on the clock, which doesn't match: the heart's beat, t
 fading in and out on the workout screen, and on the synopsis the best sustained powers, which shift with the ride's
 start (two hours before it's built) unless both sides are rendered within the same few seconds.
 
+### Finding what's slow
+
+`perf_ride.exe` (built with the tests, in `build\Release\bin`, with Qt's bin folder on PATH) rides a workout live on the
+real display for a minute, on the app's real timers but a stand-in bridge, and prints what took the UI thread's time:
+
+```
+build\Release\bin\perf_ride.exe --seconds 60 --out %TEMP%\perf.txt
+```
+
+It starts part way through the ride (`--progress`), in any of LayoutViewer's modes (`--mode`), with a workout and theme
+of your choice (`--workout`, `--theme`), and its first seconds (`--warmup`) aren't timed. Each row is one kind of event on
+one kind of object, its own time without the events handled inside it, most time first. `Paint` rows are a widget's
+drawing, `UpdateRequest` rows the flush to the screen around them, and `QTimer ... Timer` rows that timer's work.
+
+To time the real app with real sensors, set `AWO_EVENT_TIMING` to a file before starting it. The report covers everything
+since the start and is written when it quits:
+
+```
+$env:AWO_EVENT_TIMING = "$env:TEMP\perf.txt"; dist\AntWorkout\AntWorkout.exe
+```
+
 ### Hardware tests with SimulANT+
 
 `hwtests\simulant_test.py` is `..\AntWorkout\SimulantTests\run_simulant_test.py` with the C++ app riding: it
