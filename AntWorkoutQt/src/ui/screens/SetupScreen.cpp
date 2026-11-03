@@ -27,6 +27,7 @@
 #include "DeviceDialogs.hpp"
 #include "Dialogs.hpp"
 #include "FtpTest.hpp"
+#include "HaloLabel.hpp"
 #include "KeyShortcuts.hpp"
 #include "Logger.hpp"
 #include "LongVLabels.hpp"
@@ -158,7 +159,7 @@ SetupScreen::SetupScreen(ant::AntBridge* bridge, QWidget* parent)
     initializationWidget_ = new QWidget;
     initializationWidget_->setMaximumWidth(800);
     auto* init = new QGridLayout(initializationWidget_);
-    auto* requiredHeader = new QLabel(QStringLiteral("  Required Power Device:  "));
+    auto* requiredHeader = new HaloLabel(QStringLiteral("  Required Power Device:  "));
     requiredHeader->setMaximumHeight(60);
     theme::setSheet(requiredHeader, kXlText);
     init->addWidget(requiredHeader, 0, 0, 1, 2, Qt::AlignHCenter);
@@ -199,7 +200,7 @@ SetupScreen::SetupScreen(ant::AntBridge* bridge, QWidget* parent)
     selectedPowerLayout->addLayout(maxWattsLayout, 1, 0, 1, 2);
     init->addLayout(selectedPowerLayout, 2, 0, 1, 2);
     // ("HR" rather than "Heart Rate" so it fits this column on one line)
-    auto* optionalHeader = new QLabel(QStringLiteral("Optional HR/Cadence/Speed Device(s):"));
+    auto* optionalHeader = new HaloLabel(QStringLiteral("Optional HR/Cadence/Speed Device(s):"));
     optionalHeader->setMaximumHeight(60);
     theme::setSheet(optionalHeader, kXlText);
     init->addWidget(optionalHeader, 3, 0, 1, 2, Qt::AlignHCenter);

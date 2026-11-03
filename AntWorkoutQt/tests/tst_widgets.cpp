@@ -757,21 +757,68 @@ private slots:
                                    {QStringLiteral("#9fc5d1"), QStringLiteral("#1a1a1a")},
                                    {QStringLiteral("#000000"), QStringLiteral("#ffffff")}};
         QVERIFY(!legend.haloed());
-        // drawn with its halo: light around the dark text, past the text's own outline
+        // drawn with its outline: lighter than the background around the dark text, but no brighter than it takes
         theme::current().reset();
+        const QColor background(QStringLiteral("#28275e"));
         QImage image(legend.size(), QImage::Format_ARGB32);
-        image.fill(QColor(QStringLiteral("#5f6e98")));
+        image.fill(background);
         legend.render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
+        const QColor outline = halo::color(Qt::black, legend.backgroundAt(legend.rpmRow().center()));
+        QVERIFY(theme::contrast(outline, Qt::black) >= 3.0);
         // (both rows: above and below the bar)
         for (const QRectF& row : {legend.rpmRow(), legend.powerRow()}) {
             int light = 0;
+            int bright = 0;
             for (int y = static_cast<int>(row.top()); y < static_cast<int>(row.bottom()); ++y) {
                 for (int x = 0; x < image.width(); ++x) {
-                    light += image.pixelColor(x, y).lightness() > 200;
+                    light += image.pixelColor(x, y).lightness() > background.lightness() + 20;
+                    bright += image.pixelColor(x, y).lightness() > 200;
                 }
             }
             QVERIFY(light > 50);
+            QCOMPARE(bright, 0);
         }
+    }
+
+    void gaugeReadingHalosWhereItDoesntStandOut() {
+        AnalogGauge gauge;
+        gauge.setGaugeTheme(3);
+        gauge.altUnitsDisplay = true;
+        gauge.bigNeedleCenterSize = 5;
+        gauge.centerRingCount = 3;
+        gauge.centerRingsPale = {0.1, 0.4};
+        gauge.resize(400, 400);
+        // the white center and pale rings stand out from the black reading
+        QVERIFY(!gauge.valueHalo());
+        gauge.setCenterRings(QList<QColor>{QColor(QStringLiteral("#ffb3c6")), QColor(QStringLiteral("#ffb3c6"))});
+        QVERIFY(!gauge.valueHalo());
+        // dark rings don't: outlined no lighter than it takes
+        gauge.setCenterRings(QList<QColor>{QColor(QStringLiteral("#000020")), QColor(QStringLiteral("#000020"))});
+        const std::optional<QColor> outline = gauge.valueHalo();
+        QVERIFY(outline);
+        QVERIFY(theme::contrast(*outline, Qt::black) >= 3.0);
+        // drawn around the reading: lighter than any of the (unpaled) rings
+        gauge.centerRingsPale = {0, 0};
+        gauge.setMaxValue(1000);
+        gauge.setValue(494);
+        QImage image(gauge.size(), QImage::Format_ARGB32);
+        image.fill(Qt::white);
+        gauge.render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
+        int light = 0;
+        for (int y = 170; y < 230; ++y) {
+            for (int x = 170; x < 230; ++x) {
+                light += image.pixelColor(x, y).lightness() > 60;
+            }
+        }
+        QVERIFY(light > 50);
+        // (even with a theme whose backgrounds are all dark)
+        theme::current().colors = {{QStringLiteral("#28275e"), QStringLiteral("#000000")},
+                                   {QStringLiteral("#9fc5d1"), QStringLiteral("#1a1a1a")}};
+        QVERIFY(theme::contrast(*gauge.valueHalo(), Qt::black) >= 3.0);
+        theme::current().reset();
+        // not off in the gauge's face
+        gauge.altUnitsDisplay = false;
+        QVERIFY(!gauge.valueHalo());
     }
 
     void haloLabelHalosTextThatDoesntStandOut() {

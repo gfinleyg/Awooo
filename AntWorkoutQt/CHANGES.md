@@ -43,11 +43,19 @@ Python app's own results (`tests\golden\`).
   second row, so the coming up list above it shows one block fewer on some screens. The `zone_legend` pixel comparison
   scene no longer matches the Python app's.
 
-- **The workout screen's "Up Next:", "Coming up..." and "Workout Grades" headers get a one pixel outline where their
-  text doesn't stand out** from the window's gradient behind them (contrast under WCAG AA, 4.5, as the zone legend's
-  numbers get their halo). The outline is the window's color behind the text, lightened toward the theme's lightest
+- **The workout screen's "Up Next:", "Coming up..." and "Workout Grades" headers, the setup screen's "Required Power
+  Device:" and "Optional HR/Cadence/Speed Device(s):" headers and the zone legend's numbers get a one pixel outline
+  where their text doesn't stand out** from the window's gradient behind them (contrast under WCAG AA, 4.5). The outline is the window's color behind the text, lightened toward the theme's lightest
   background color only as far as it needs to go to be seen against the text (3:1). In the Python app these headers could
-  nearly vanish in themes whose text color is close to the top of the window's gradient.
+  nearly vanish in themes whose text color is close to the top of the window's gradient, and the legend's numbers had a
+  wide, bright halo (each number's outline here takes the gradient behind that number). The `zone_legend` and
+  `setup_screen` pixel comparison scenes no longer match the Python app's where the outline shows.
+
+- **The gauges' readings get the same one pixel outline where they don't stand out** from the center behind them, as
+  when dark zone colors or a dark heart rate gradient make the rings dark. The reading stays black, and its outline is
+  the rings' color taken toward white only as far as it needs to go (white rather than the theme's lightest background,
+  which in a dark theme wouldn't show against black). The gauge pixel comparison scenes no longer match the Python
+  app's where the outline shows.
 
 - **The spiral's cadence lines stay where the cadence is between pedal strokes.** A cadence sensor only sends a new
   reading with a pedal stroke, and the Python app's spiral took more than 2 s without one (while the power kept

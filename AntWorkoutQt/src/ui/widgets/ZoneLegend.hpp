@@ -6,8 +6,8 @@
 // Mode's zones, see ftpcolors::cadenceRanges) and the power zones' watts below it (the FTP's, zones::powerRanges).
 //
 // The numbers are in the theme's text color. Where that doesn't stand out from the window's gradient behind them
-// (contrast under kMinContrast: a mid-tone gradient reads poorly with dark and light text alike), they get a halo,
-// light under dark text and dark under light (the graph's sensor lines' halo colors, ftpcolors::haloColor).
+// (contrast under halo::kMinContrast: a mid-tone gradient reads poorly with dark and light text alike), they get a one
+// pixel outline, each the gradient behind it taken only as far as it needs to go to be seen (see HaloLabel).
 
 #include <QRectF>
 #include <QWidget>
@@ -28,11 +28,6 @@ public:
     static constexpr double kLabelPoints = 11;
     // the bar's fade steps in each zone (as the gauges' bands)
     static constexpr int kStopSteps = 6;
-    // WCAG AA for text: numbers that contrast less than this with the window's gradient behind them get a halo,
-    // kHaloPx (design px) out from their outline
-    static constexpr double kMinContrast = 4.5;
-    static constexpr double kHaloPx = 2.5;
-    static constexpr int kHaloAlpha = 0xd0;
 
     explicit ZoneLegend(QWidget* parent = nullptr);
 

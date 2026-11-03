@@ -255,6 +255,11 @@ private slots:
         QTRY_VERIFY(!upNext->haloed());
         controls.setColor(QStringLiteral("#000000"), std::nullopt);
         QTRY_VERIFY(upNext->haloed());
+        // as are the setup screen's device headers
+        const QList<HaloLabel*> setupHeaders = display.view(QStringLiteral("Init"))->findChildren<HaloLabel*>();
+        QCOMPARE(setupHeaders.size(), 2);
+        QVERIFY(setupHeaders[0]->text().contains(QStringLiteral("Required Power Device")));
+        QVERIFY(setupHeaders[1]->text().startsWith(QStringLiteral("Optional")));
     }
 
     void fontsChangeTheTheme() {

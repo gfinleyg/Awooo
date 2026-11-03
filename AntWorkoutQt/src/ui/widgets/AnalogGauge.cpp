@@ -16,6 +16,7 @@
 #include <cmath>
 #include <numbers>
 
+#include "HaloLabel.hpp"
 #include "Performance.hpp"
 #include "PyCompat.hpp"
 #include "Theme.hpp"
@@ -61,10 +62,14 @@ QColor colorAt(const QList<std::pair<double, QColor>>& stops, double value) {
 
 // text drawn centered on (x, y) as the original does it: a box its advance (plus 1) wide and its height tall, at
 // whole pixels
-void drawCentered(QPainter& painter, const QFontMetrics& fm, double x, double y, const QString& text) {
+QRect centeredBox(const QFontMetrics& fm, double x, double y, const QString& text) {
     const int w = fm.horizontalAdvance(text) + 1;
     const int h = fm.height();
-    painter.drawText(static_cast<int>(x) - w / 2, static_cast<int>(y) - h / 2, w, h, Qt::AlignCenter, text);
+    return {static_cast<int>(x) - w / 2, static_cast<int>(y) - h / 2, w, h};
+}
+
+void drawCentered(QPainter& painter, const QFontMetrics& fm, double x, double y, const QString& text) {
+    painter.drawText(centeredBox(fm, x, y, text), Qt::AlignCenter, text);
 }
 
 // a gear's outline around (0, 0): its teeth's tips at r, the gaps between them depth in
@@ -508,27 +513,70 @@ void AnalogGauge::createFineScaledMarker() {
     }
 }
 
+QFont AnalogGauge::valueFont() {
+    const double fontsize = fitValueInCenter ? fittedValueFontsize() : valueFontsize_;
+    return QFont(valueFontname_, static_cast<int>(fontsize), QFont::Bold);
+}
+
+QString AnalogGauge::valueText() const {
+    return valueDecimals ? py::fixed(reading_, valueDecimals) : QString::number(static_cast<long long>(reading_));
+}
+
+std::optional<QColor> AnalogGauge::valueHalo() {
+    // (only a reading in the center is over it)
+    if (!enableCenterPoint_ || !altUnitsDisplay) {
+        return std::nullopt;
+    }
+    QList<QColor> behind;
+    if (centerRings_ && centerRings_->first.size() >= 2) {
+        // the rings under the reading's middle and its ends
+        const double radius = centerRadius();
+        const double reach = QFontMetrics(valueFont()).horizontalAdvance(valueText()) / 2.0;
+        const int count = ringCount();
+        int outer = count - 1;
+        while (outer > 0 && ringRadius(outer, radius) < reach) {
+            --outer;
+        }
+        behind = {ringColor(count - 1), ringColor(outer)};
+    } else if (!needleCenterBg.isEmpty()) {
+        behind = {needleCenterBg.front().second};
+    } else {
+        return std::nullopt;
+    }
+    // (the one it stands out from least)
+    const QColor& worst = *std::min_element(behind.begin(), behind.end(), [this](const QColor& a, const QColor& b) {
+        return theme::contrast(displayValueColor_, a) < theme::contrast(displayValueColor_, b);
+    });
+    if (!halo::needed(displayValueColor_, worst)) {
+        return std::nullopt;
+    }
+    return halo::color(displayValueColor_, worst, QColor(Qt::white));
+}
+
 void AnalogGauge::createValuesText() {
+    const std::optional<QColor> outline = valueHalo();
     QPainter painter(paintTarget_);
     painter.setRenderHint(QPainter::TextAntialiasing);
     painter.translate(width() / 2.0, height() / 2.0);
-    const double fontsize = fitValueInCenter ? fittedValueFontsize() : valueFontsize_;
-    const QFont font(valueFontname_, static_cast<int>(fontsize), QFont::Bold);
+    const QFont font = valueFont();
     const QFontMetrics fm(font);
     QPen pen;
     // (on the gauge's own white face: not themed)
     pen.setBrush(displayValueColor_);
     painter.setPen(pen);
     const double textRadius = altUnitsDisplay ? 0 : widgetDiameter_ / 2 * textRadiusFactor_;
-    const QString text = valueDecimals ? py::fixed(reading_, valueDecimals)
-                                       : QString::number(static_cast<long long>(reading_));
+    const QString text = valueText();
     painter.setFont(font);
     // halfway between the scale's start and end
     const double angleEnd = scaleAngleStartValue_ + scaleAngleSize_ - 360;
     const double angle = (angleEnd - scaleAngleStartValue_) / 2 + scaleAngleStartValue_;
     const double raise = centerHeart ? widgetDiameter_ / bigNeedleCenterSize * kCenterHeartRaise : 0;
-    drawCentered(painter, fm, textRadius * std::cos(radians(angle)), textRadius * std::sin(radians(angle)) - raise,
-                 text);
+    const double x = textRadius * std::cos(radians(angle));
+    const double y = textRadius * std::sin(radians(angle)) - raise;
+    if (outline) {
+        halo::draw(painter, centeredBox(fm, x, y, text), Qt::AlignCenter, text, *outline);
+    }
+    drawCentered(painter, fm, x, y, text);
 }
 
 void AnalogGauge::createUnitsText() {
@@ -549,24 +597,34 @@ void AnalogGauge::createUnitsText() {
     drawCentered(painter, fm, textRadius * std::cos(radians(angle)), textRadius * std::sin(radians(angle)), units);
 }
 
-void AnalogGauge::drawCenterRings(QPainter& painter, double radius) {
+QColor AnalogGauge::ringColor(int i) const {
     const auto& [colors, level] = *centerRings_;
-    const QColor white(QStringLiteral("#ffffff"));
+    const double t = static_cast<double>(i) / (ringCount() - 1);
     // the colors spread evenly from t 0 (outermost) to 1 (innermost), blended between
-    auto shade = [&colors](double t) {
-        const double at = t * (colors.size() - 1);
-        const qsizetype i = std::min(static_cast<qsizetype>(at), colors.size() - 2);
-        return mix(colors[i], colors[i + 1], at - i);
-    };
+    const double at = t * (colors.size() - 1);
+    const qsizetype stop = std::min(static_cast<qsizetype>(at), colors.size() - 2);
+    const QColor shade = mix(colors[stop], colors[stop + 1], at - stop);
     const auto [paleOuter, paleInner] = centerRingsPale;
+    // paler toward the middle (the reading is drawn over it), less pale on the beat
+    return mix(shade, QColor(QStringLiteral("#ffffff")), (paleOuter + (paleInner - paleOuter) * t) * (1 - 0.6 * level));
+}
+
+double AnalogGauge::ringRadius(int i, double radius) const {
+    const double t = static_cast<double>(i) / (ringCount() - 1);
+    return radius * (1 - kCenterRingSpread * t) * (1 + 0.04 * centerRings_->second);
+}
+
+double AnalogGauge::centerRadius() const {
+    return widgetDiameter_ / bigNeedleCenterSize - pen_.width() / 2.0;
+}
+
+void AnalogGauge::drawCenterRings(QPainter& painter, double radius) {
     const int count = ringCount();
     // (each ring's width)
     const double band = radius * kCenterRingSpread / (count - 1);
     for (int i = 0; i < count; ++i) {
-        const double t = static_cast<double>(i) / (count - 1);
-        const double r = radius * (1 - kCenterRingSpread * t) * (1 + 0.04 * level);
-        // paler toward the middle (the reading is drawn over it), less pale on the beat
-        const QColor color = mix(shade(t), white, (paleOuter + (paleInner - paleOuter) * t) * (1 - 0.6 * level));
+        const double r = ringRadius(i, radius);
+        const QColor color = ringColor(i);
         QRadialGradient grad(QPointF(0, 0), r);
         grad.setColorAt(0, color.lighter(112));
         grad.setColorAt(1, color.darker(118));
@@ -591,7 +649,7 @@ void AnalogGauge::drawBigNeedleCenterPoint() {
     painter.setRenderHint(QPainter::Antialiasing);
     painter.translate(width() / 2.0, height() / 2.0);
     painter.setPen(Qt::NoPen);
-    const double radius = widgetDiameter_ / bigNeedleCenterSize - pen_.width() / 2.0;
+    const double radius = centerRadius();
     if (centerRings_ && centerRings_->first.size() >= 2) {
         drawCenterRings(painter, radius);
         return;

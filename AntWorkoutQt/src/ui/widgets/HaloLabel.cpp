@@ -10,15 +10,13 @@
 
 #include "Theme.hpp"
 #include "ZoneColors.hpp"
-#include "ZoneLegend.hpp"
 
 namespace awo {
 
 namespace {
 
-// the copies of the text around it that make the halo, one device pixel out: as thin as an outline can be
+// the copies of the text around it that make the halo
 constexpr int kHaloSteps = 8;
-constexpr double kHaloDevicePx = 1;
 // how far the outline stands out from the text: WCAG's minimum for an edge to be seen (non-text contrast)
 constexpr double kHaloContrast = 3.0;
 
@@ -38,6 +36,45 @@ QColor lightestBackground() {
 }
 
 }  // namespace
+
+namespace halo {
+
+bool needed(const QColor& text, const QColor& behind) {
+    return theme::contrast(text, behind) < kMinContrast;
+}
+
+QColor color(const QColor& text, const QColor& behind) {
+    return color(text, behind, lightestBackground());
+}
+
+QColor color(const QColor& text, const QColor& behind, const QColor& lightest) {
+    const auto standsOut = [&](double t) {
+        return theme::contrast(QColor(colors::mix(behind.name(), lightest.name(), t)), text) >= kHaloContrast;
+    };
+    if (!standsOut(1)) {
+        return lightest;
+    }
+    double low = 0;
+    double high = 1;
+    for (int i = 0; i < 12; ++i) {
+        const double mid = (low + high) / 2;
+        (standsOut(mid) ? high : low) = mid;
+    }
+    return QColor(colors::mix(behind.name(), lightest.name(), high));
+}
+
+void draw(QPainter& painter, const QRectF& rect, int flags, const QString& text, const QColor& color) {
+    painter.save();
+    painter.setPen(color);
+    const double radius = kDevicePx / painter.device()->devicePixelRatioF();
+    for (int step = 0; step < kHaloSteps; ++step) {
+        const double angle = 2 * std::numbers::pi * step / kHaloSteps;
+        painter.drawText(rect.translated(radius * std::cos(angle), radius * std::sin(angle)), flags, text);
+    }
+    painter.restore();
+}
+
+}  // namespace halo
 
 HaloLabel::HaloLabel(const QString& text, QWidget* parent) : QLabel(text, parent) {
     connect(&theme::notifier(), &theme::Notifier::changed, this, qOverload<>(&QWidget::update));
@@ -80,34 +117,16 @@ bool HaloLabel::haloed() const {
                                  QPointF(rect.right(), rect.center().y())}) {
         lowest = std::min(lowest, theme::contrast(color, zones::windowBackgroundAt(this, point)));
     }
-    return lowest < ZoneLegend::kMinContrast;
+    return lowest < halo::kMinContrast;
 }
 
 QColor HaloLabel::haloColor() const {
-    // the background behind the text, taken toward the theme's lightest background only as far as it needs to go to
-    // stand out from the text (all the way, if even that doesn't)
-    const QString text = palette().color(foregroundRole()).name();
-    const QString behind = zones::windowBackgroundAt(this, textRect().center()).name();
-    const QString lightest = lightestBackground().name();
-    const auto standsOut = [&](double t) {
-        return theme::contrast(QColor(colors::mix(behind, lightest, t)), QColor(text)) >= kHaloContrast;
-    };
-    if (!standsOut(1)) {
-        return QColor(lightest);
-    }
-    double low = 0;
-    double high = 1;
-    for (int i = 0; i < 12; ++i) {
-        const double mid = (low + high) / 2;
-        (standsOut(mid) ? high : low) = mid;
-    }
-    return QColor(colors::mix(behind, lightest, high));
+    return halo::color(palette().color(foregroundRole()), zones::windowBackgroundAt(this, textRect().center()));
 }
 
 void HaloLabel::paintEvent(QPaintEvent* event) {
     if (haloed()) {
-        // the text in the halo color all around where it's drawn (laid out as QLabel lays it out), on a layer of its
-        // own so the copies' antialiased edges don't add up
+        // (laid out as QLabel lays it out, on a layer of its own so the copies' antialiased edges don't add up)
         const double dpr = devicePixelRatioF();
         QImage layer((QSizeF(size()) * dpr).toSize(), QImage::Format_ARGB32_Premultiplied);
         layer.setDevicePixelRatio(dpr);
@@ -115,14 +134,8 @@ void HaloLabel::paintEvent(QPaintEvent* event) {
         QPainter haloPainter(&layer);
         haloPainter.setRenderHint(QPainter::TextAntialiasing);
         haloPainter.setFont(font());
-        haloPainter.setPen(haloColor());
-        const int flags = QStyle::visualAlignment(layoutDirection(), alignment());
-        const double radius = kHaloDevicePx / dpr;
-        for (int step = 0; step < kHaloSteps; ++step) {
-            const double angle = 2 * std::numbers::pi * step / kHaloSteps;
-            const QPointF offset(radius * std::cos(angle), radius * std::sin(angle));
-            haloPainter.drawText(QRectF(layoutRect()).translated(offset), flags, text());
-        }
+        halo::draw(haloPainter, layoutRect(), QStyle::visualAlignment(layoutDirection(), alignment()), text(),
+                   haloColor());
         haloPainter.end();
         QPainter painter(this);
         painter.drawImage(QPointF(0, 0), layer);

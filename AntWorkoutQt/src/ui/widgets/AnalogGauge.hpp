@@ -89,6 +89,10 @@ public:
     // nested circles in place of the center point, shaded through colors from the outermost to the innermost (two or
     // more), or the center point back (none). level (0 to 1) brightens them and swells them a little, e.g. on a beat
     void setCenterRings(const std::optional<QList<QColor>>& colors, double level = 0.0);
+    // the outline the reading gets where it doesn't stand out from the center behind it (dark rings, say), none where
+    // it does (see HaloLabel). The reading isn't in the theme's colors, nor is this: it's taken toward white, not the
+    // theme's lightest background, which a dark theme's wouldn't show against the black reading
+    std::optional<QColor> valueHalo();
     // the rings' colors (outermost first) and level, as last set
     const std::optional<std::pair<QList<QColor>, double>>& centerRings() const { return centerRings_; }
     // how many rings: centerRingCount, or with centerRingMinPx as many as fit at its size with each that wide
@@ -161,6 +165,12 @@ private:
     void createScaleMarkerValuesText();
     void createFineScaledMarker();
     void createValuesText();
+    QFont valueFont();
+    QString valueText() const;
+    // ring i of ringCount()'s color, and its radius in a center of the given radius
+    QColor ringColor(int i) const;
+    double ringRadius(int i, double radius) const;
+    double centerRadius() const;
     void createUnitsText();
     void drawCenterRings(QPainter& painter, double radius);
     void drawBigNeedleCenterPoint();

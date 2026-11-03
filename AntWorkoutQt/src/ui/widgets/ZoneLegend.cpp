@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include "GradeWidgets.hpp"
+#include "HaloLabel.hpp"
 #include "LongVLabels.hpp"
 #include "PyCompat.hpp"
 #include "Theme.hpp"
@@ -103,7 +104,7 @@ bool ZoneLegend::haloed() const {
     for (const QPointF& center : labelCenters(rpmRow()) + labelCenters(powerRow())) {
         lowest = std::min(lowest, theme::contrast(color, backgroundAt(center)));
     }
-    return lowest < kMinContrast;
+    return lowest < halo::kMinContrast;
 }
 
 void ZoneLegend::paintEvent(QPaintEvent*) {
@@ -130,25 +131,32 @@ void ZoneLegend::paintEvent(QPaintEvent*) {
     font = fittedFont(font, widest, width() / static_cast<double>(ftpcolors::kZones) * 0.92,
                       std::min(rows[0].first.height(), rows[1].first.height()));
     const QFontMetricsF metrics(font);
-    QPainterPath path;
+    // (each number its own path: each one's outline takes the gradient behind it)
+    QList<std::pair<QPainterPath, QPointF>> numbers;
     for (const auto& [row, texts] : rows) {
         const QList<QPointF> centers = labelCenters(row);
         const double baseline = row.top() + (row.height() - metrics.height()) / 2 + metrics.ascent();
         for (qsizetype k = 0; k < texts.size() && k < centers.size(); ++k) {
+            QPainterPath path;
             path.addText(QPointF(centers[k].x() - metrics.horizontalAdvance(texts[k]) / 2, baseline), font, texts[k]);
+            numbers.append({path, centers[k]});
         }
     }
 
     const QColor color(theme::current().mapHex(kTextColor));
     if (haloed()) {
-        painter.setPen(QPen(ftpcolors::haloColor(color.name(), kHaloAlpha), 2 * kHaloPx * scale, Qt::SolidLine,
-                            Qt::RoundCap, Qt::RoundJoin));
         painter.setBrush(Qt::NoBrush);
-        painter.drawPath(path);
+        for (const auto& [path, center] : numbers) {
+            painter.setPen(QPen(halo::color(color, backgroundAt(center)), 2 * halo::kDevicePx / devicePixelRatioF(),
+                                Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            painter.drawPath(path);
+        }
     }
     painter.setPen(Qt::NoPen);
     painter.setBrush(color);
-    painter.drawPath(path);
+    for (const auto& [path, center] : numbers) {
+        painter.drawPath(path);
+    }
 }
 
 }  // namespace awo
