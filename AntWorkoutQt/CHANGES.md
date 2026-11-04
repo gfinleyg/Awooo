@@ -202,6 +202,8 @@ Python app's own results (`tests\golden\`).
   moves a degree, the center and reading until either changes), and copies only the part of the widget the gauge covers.
   The center is laid over the frame instead of drawn on it, so a few pixels on the edges of its rings differ by 1 or 2
   levels out of 255, which can't be seen.
+- **Resuming with Space lets the PAUSE button's color go.** The button stayed drawn pressed until something else
+  repainted it. Resuming with the mouse was never affected. The Python app makes the same calls, so it has this too.
 
 ## Musical Cadence Mode
 

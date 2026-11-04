@@ -564,6 +564,48 @@ private slots:
         QCOMPARE(hud.engine().workoutSecondsPassed(), 4.0);
     }
 
+    // click() (Space, a key's shortcut) lets the button up without asking for a repaint, and setDown(false) after it
+    // has nothing left to change: unpausing still has to repaint, or the pressed color stays on
+    void unpausingRepaintsTheButton_data() {
+        QTest::addColumn<bool>("byMouse");
+        QTest::newRow("key") << false;
+        QTest::newRow("mouse") << true;
+    }
+
+    void unpausingRepaintsTheButton() {
+        QFETCH(bool, byMouse);
+        QVERIFY(loadWorkout(kAppFlowWorkout));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        hud.show();
+        hud.startEndButton()->click();
+        const auto press = [&] {
+            if (byMouse) {
+                QTest::mouseClick(hud.pauseButton(), Qt::LeftButton);
+            } else {
+                hud.pauseButton()->click();
+            }
+        };
+        press();
+        QVERIFY(!hud.engine().unpaused() && hud.pauseButton()->isDown());
+        QApplication::processEvents();
+
+        class PaintCounter : public QObject {
+        public:
+            using QObject::QObject;
+            int paints = 0;
+            bool eventFilter(QObject*, QEvent* event) override {
+                paints += event->type() == QEvent::Paint;
+                return false;
+            }
+        } counter;
+        hud.pauseButton()->installEventFilter(&counter);
+        press();
+        QVERIFY(hud.engine().unpaused() && !hud.pauseButton()->isDown());
+        QApplication::processEvents();
+        QVERIFY(counter.paints > 0);
+    }
+
     // END pauses a running workout while it asks; Keep Going goes on, and closing the prompt after doesn't pause again
     void endPromptPausesAndKeepGoingResumes() {
         QVERIFY(loadWorkout(kAppFlowWorkout));

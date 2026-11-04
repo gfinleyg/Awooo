@@ -774,6 +774,9 @@ void HudScreen::pauseRecording() {
 void HudScreen::showPaused() {
     if (engine_->unpaused()) {
         pauseButton_->setDown(false);
+        // (click(), which Space uses, has already let it up without a repaint, so setDown has nothing to change and
+        // the pressed color would stay on)
+        pauseButton_->update();
         updateRequestedPowerDisplays();
         if (layout::text(pauseButton_) != u"PAUSE") {
             layout::setText(pauseButton_, QStringLiteral("PAUSE"));
