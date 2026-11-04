@@ -40,6 +40,30 @@ Python app's own results (`tests\golden\`).
   measured a label against Qt's size hint, which is never smaller than the label's own minimum size, so a fixed size
   label looked exactly full and its shrunk text stayed small until the next full refit (a resize or a theme change).
 
+- **The side gauges are as big as fit, and built and placed alike.** On the workout and Musical Cadence screens the two
+  small gauges are the same size (238 and 256 pixels across at 1920x1200, up from 130 and 173) on one line, the same
+  distance from the middle gauge either side; free ride's are the same size too (526, up from 280 and 347), each halfway
+  between the middle gauge and the screen's edge. They're worked out from the screen around them, so each screen size
+  gets its own largest fit, keeping 12 pixels (scaled) from each gauge's outer arc to what's next to it. The Python
+  app's sit in grid cells at a fixed size. They don't change when the grades take over the column on the left.
+- **The zone legend, the workout grades and the workout timer rows narrow as far as those gauges need,** and no further.
+  The timer rows are 32 pixels tall (each still its own bubble) and against the column's right edge.
+- **Speed, distance and elapsed time each have a bubble behind them,** on the workout and free ride screens, in the
+  timer rows' color (`#9fc5d1`). The Python app's are plain text. Free ride's low battery warning sits just above them
+  rather than among them.
+- **The heart rate gauge has an outer arc** like the other gauges, filled up to the needle in its hearts' colors (light
+  pink through red to dark red). The Python app's has none.
+- **Every gauge's units are on the row of its scale's end numbers,** in the side gauges one size of numbers, and the
+  reading is in the middle of the heart as it is on the other gauges (the Python app's is raised into the heart's widest
+  part). The units on the middle gauge move down a little too.
+- **The gauges' needles start inside the center.** What the center hid of them, and the tail behind it that a heart
+  didn't cover, are gone. What shows of the needle is otherwise the same.
+- **The room kept under Ride At for a workout message is the same on every screen size.** It could be taken at the wrong
+  size when a screen was built while another size was in use, pushing Ride At up over the middle gauge's units
+  (the Python app's reserves it differently).
+- The `hud_screen`, `cadence_screen`, `hr_gauge`, `power_gauge`, `cadence_gauge` and `cadence_mode_gauge` parity scenes
+  are meant to differ for these.
+
 - **The block and workout timer bars' fill sits inside a thin frame** of the bar's own color. The fill used to run to
   the bar's edges, where in the light themes (and with no theme) it was about the shade of the window behind it, so
   the filled part seemed to vanish into the background. Both bars and the "Block time remaining" box are rounded now,
@@ -74,8 +98,8 @@ Python app's own results (`tests\golden\`).
 - **The heart rate gauge has no heart behind it any more; its center hearts are as big as the other gauges' center
   rings and colored by the heart rate.** They're light pink up to 90 BPM, then blend through red to dark red at 95%
   of the max heart rate set (no max set: of 200 BPM), the middle hearts paler so the reading over them stays easy to
-  read. They still pulse with each beat. The reading sits in the middle as big as fits in the heart (raised a little
-  into its widest part) with "BPM" below, like the power and cadence gauges. The three colors can be changed in a
+  read. They still pulse with each beat. The hearts are fuller through their lower half with a longer, sharp point, so the
+  reading sits well inside them; it's in the middle as big as fits, with "BPM" below, like the power and cadence gauges. The three colors can be changed in a
   theme's colors (`#ffb3c6`, `#e8102a`, `#800014`), and LayoutViewer lists them. The Python app's resting/beating
   heart image and its small red-to-pink hearts are gone, so the `hr_gauge` parity scene is meant to differ.
 
@@ -149,6 +173,19 @@ Python app's own results (`tests\golden\`).
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".
 
+- **The window is drawn in step with its screen's refresh, using less CPU.** Each animation runs on its own timer (the
+  bars, stars, needles, heartbeat, gear and scrolling labels), and each one used to get its own redraw, about 230 a
+  second on the workout screen. They now all land in the frame for the next refresh of the monitor the window is on, so
+  a change can reach the screen up to one refresh later, and the animations keep their own rates. At 60 fps a faster
+  screen skips refreshes (a 144 Hz one draws about 72 times a second); at 120 fps every refresh is drawn up to about
+  200 Hz. Pictures are unaffected, so the parity scenes don't change. While the window is open, the app asks Windows for
+  millisecond timers, which the animations' timing needs.
+
+- **The gauges take about half the time to draw.** Each frame now reuses what hasn't changed (the band until its end
+  moves a degree, the center and reading until either changes), and copies only the part of the widget the gauge covers.
+  The center is laid over the frame instead of drawn on it, so a few pixels on the edges of its rings differ by 1 or 2
+  levels out of 255, which can't be seen.
+
 ## Musical Cadence Mode
 
 - **Less of a song with a steady beat becomes free ride.** A stretch whose beat only just stands out (a triplet
@@ -173,6 +210,11 @@ Python app's own results (`tests\golden\`).
   there the next time it started.
 
 ## Settings and log
+
+- **Performance has a 120 fps stop, for 120 Hz and faster screens.** It runs the gauges, timer bars, spiral, graph stars
+  and chainring, and the window's drawing, at about 120 frames a second. On a 60 Hz screen the window is still drawn
+  only 60 times a second, as the frames follow the screen, and the animations' faster timers just use more CPU, so 60
+  stays the default. The scrolling labels and the grade's fade keep their own slower rates.
 
 - **savedSettingsANT.json is written with its keys sorted and 4-space indents** (Qt's JSON writer). The values are the
   same, and either app reads the other's file.

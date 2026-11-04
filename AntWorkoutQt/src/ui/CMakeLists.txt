@@ -7,6 +7,8 @@ add_library(awo_ui STATIC
     CustomTitleBar.hpp
     Dialogs.cpp
     Dialogs.hpp
+    FramePacer.cpp
+    FramePacer.hpp
     KeyShortcuts.cpp
     KeyShortcuts.hpp
     MainWindow.cpp
@@ -72,5 +74,5 @@ add_library(awo_ui STATIC
 )
 target_include_directories(awo_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/widgets"
     "${CMAKE_CURRENT_SOURCE_DIR}/dialogs" "${CMAKE_CURRENT_SOURCE_DIR}/screens")
-target_link_libraries(awo_ui PUBLIC Qt6::Widgets Qt6::Svg Qt6::SvgWidgets awo_core awo_ant awo_plot awo_music PRIVATE miniaudio)
+target_link_libraries(awo_ui PUBLIC Qt6::Widgets Qt6::Svg Qt6::SvgWidgets awo_core awo_ant awo_plot awo_music PRIVATE miniaudio winmm dxgi)
 awo_target_defaults(awo_ui)

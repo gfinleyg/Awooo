@@ -11,6 +11,7 @@
 #include "AppState.hpp"
 #include "CustomTitleBar.hpp"
 #include "Dialogs.hpp"
+#include "FramePacer.hpp"
 #include "Logger.hpp"
 #include "HudScreen.hpp"
 #include "PowerSpiral.hpp"
@@ -32,6 +33,7 @@ MainWindow::MainWindow(std::unique_ptr<ant::AntBridge> bridge) : bridge_(std::mo
         bridge_->start();
     }
     setObjectName(QStringLiteral("mainWindow"));
+    new FramePacer(this);
     resize(800, 600);  // (this fixes some widgets' sizes before maximizing)
     // keeps the keyboard focus (no text box focused to start with: the first Tab goes to the first one)
     setFocusPolicy(Qt::StrongFocus);

@@ -185,9 +185,22 @@ private slots:
         QCOMPARE(readSettings()[QStringLiteral("gaugeFps")].toInt(), 0);
     }
 
+    void aFrameIsShorterOnlyAbove60() {
+        Performance performance;
+        QCOMPARE(performance.frameMs(), 16);
+        performance.setGaugeFps(120);
+        QCOMPARE(performance.gaugeFps(), 120);
+        QCOMPARE(performance.frameMs(), 8);
+        performance.reset();
+        QCOMPARE(performance.gaugeFps(), 120);  // saved
+        performance.setGaugeFps(0);
+        QCOMPARE(performance.frameMs(), 16);
+    }
+
     void gaugeFpsText() {
         QVERIFY(Performance::gaugeFpsText(0).startsWith(QStringLiteral("Off")));
-        QCOMPARE(Performance::gaugeFpsText(60), QStringLiteral("60 fps - smoothest"));
+        QCOMPARE(Performance::gaugeFpsText(120), QStringLiteral("120 fps - for 120 Hz screens"));
+        QCOMPARE(Performance::gaugeFpsText(60), QStringLiteral("60 fps"));
         QCOMPARE(Performance::gaugeFpsText(30), QStringLiteral("30 fps"));
     }
 

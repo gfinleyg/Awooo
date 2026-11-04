@@ -510,6 +510,70 @@ private slots:
     }
 
     // on a beat the rings inside a gear swell and brighten, up to the floor of its gaps; the gear doesn't change
+    // (what's kept from frame to frame, its layers and how much of the widget they cover, leaves nothing behind)
+    void gaugeFramesLookLikeAFreshlyDrawnGauge_data() {
+        QTest::addColumn<QSize>("size");
+        QTest::addColumn<double>("valueFont");
+        QTest::newRow("square") << QSize(400, 400) << 40.0;
+        QTest::newRow("wide") << QSize(900, 300) << 40.0;
+        QTest::newRow("tall") << QSize(300, 700) << 40.0;
+        QTest::newRow("text past the circle") << QSize(900, 300) << 200.0;
+    }
+
+    void gaugeFramesLookLikeAFreshlyDrawnGauge() {
+        QFETCH(QSize, size);
+        QFETCH(double, valueFont);
+        const auto build = [&](AnalogGauge& gauge) {
+            gauge.setGaugeTheme(3);
+            gauge.setEnableBarGraph(false);
+            gauge.setValueColors({{0, QColor(Qt::green)}, {1000, QColor(Qt::red)}});
+            gauge.altUnitsDisplay = true;
+            gauge.bigNeedleCenterSize = 5;
+            gauge.units = QStringLiteral("Watts");
+            gauge.initialValueFontsize = valueFont;
+            gauge.resize(size);
+            gauge.rescale();
+        };
+        const auto finish = [](AnalogGauge& gauge) {
+            gauge.setCenterRings(QList<QColor>{QColor(Qt::black), QColor(Qt::darkBlue)});
+            gauge.setArc(300, {{0, QColor(0, 0, 255, 155)}});
+            gauge.setValue(87);
+            gauge.snapNeedle();
+        };
+        AnalogGauge moved;
+        build(moved);
+        // wider text, other rings, a gear and the needle elsewhere first
+        moved.setValue(1000);
+        moved.snapNeedle();
+        moved.grab();
+        moved.setCenterRings(QList<QColor>{QColor(Qt::yellow), QColor(Qt::white)}, 0.5);
+        moved.setCenterGearAngle(30);
+        moved.grab();
+        moved.setCenterGearAngle(std::nullopt);
+        moved.setArc(800, {{0, QColor(255, 0, 0, 155)}});
+        moved.grab();
+        finish(moved);
+        const QImage kept = moved.grab().toImage();
+
+        AnalogGauge fresh;
+        build(fresh);
+        // (a gauge's first face has its outer ring a little wider, see drawFace)
+        fresh.grab();
+        finish(fresh);
+        QCOMPARE(kept, fresh.grab().toImage());
+
+        // and with only part of it changed since the last frame, each on its own
+        moved.setCenterRings(QList<QColor>{QColor(Qt::red), QColor(Qt::white)});
+        fresh.setCenterRings(QList<QColor>{QColor(Qt::red), QColor(Qt::white)});
+        QCOMPARE(moved.grab().toImage(), fresh.grab().toImage());
+        moved.setValue(5);
+        fresh.setValue(5);
+        QCOMPARE(moved.grab().toImage(), fresh.grab().toImage());
+        moved.snapNeedle();
+        fresh.snapNeedle();
+        QCOMPARE(moved.grab().toImage(), fresh.grab().toImage());
+    }
+
     void gaugeBeatLeavesTheGearAlone() {
         AnalogGauge gauge;
         gauge.setGaugeTheme(3);

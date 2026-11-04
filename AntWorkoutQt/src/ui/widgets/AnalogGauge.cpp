@@ -72,6 +72,27 @@ void drawCentered(QPainter& painter, const QFontMetrics& fm, double x, double y,
     painter.drawText(centeredBox(fm, x, y, text), Qt::AlignCenter, text);
 }
 
+// a part of the widget (in its coordinates) from a layer as big as the widget, to the same place
+void drawPart(QPainter& painter, const QPixmap& layer, const QRect& part) {
+    const double dpr = layer.devicePixelRatio();
+    const QRect pixels =
+        QRectF(QPointF(part.topLeft()) * dpr, QSizeF(part.size()) * dpr).toAlignedRect().intersected(layer.rect());
+    painter.drawPixmap(QPointF(pixels.topLeft()) / dpr, layer, pixels);
+}
+
+// the same over what's there, replacing it (with nothing, where the layer has nothing)
+void replacePart(QPixmap& target, const QPixmap& layer, const QRect& part) {
+    QPainter painter(&target);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    drawPart(painter, layer, part);
+}
+
+void clearPart(QPixmap& layer, const QRect& part) {
+    QPainter painter(&layer);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.fillRect(part, Qt::transparent);
+}
+
 // a gear's outline around (0, 0): its teeth's tips at r, the gaps between them depth in
 QPolygonF centerGear(double r, double depth) {
     const double root = r - depth;
@@ -88,15 +109,33 @@ QPolygonF centerGear(double r, double depth) {
     return points;
 }
 
-// a heart's outline around (0, 0), as wide as a circle of radius r (and a little less tall), its point down
+// a heart's outline around (0, 0), a little wider than a circle of radius r: the classic heart curve (32 wide, 29 tall),
+// moved up to center it and scaled to r, made fuller through its lower half so the reading sits well inside it, its point
+// drawn out and as sharp as the curve's own
 QPolygonF centerHeartOutline(double r) {
+    constexpr double kWider = 1.04;
+    // (the sine's power, from the curve's 3: lower is fuller)
+    constexpr double kFuller = 1.5;
+    // how far along the curve from its point the fullness has gone again, in radians
+    constexpr double kSharpOver = 0.75;
+    constexpr double kLonger = 0.12;
+    constexpr double kCurveBelowMiddle = 14.5;
+    const auto smooth = [](double u) {
+        u = std::clamp(u, 0.0, 1.0);
+        return u * u * (3 - 2 * u);
+    };
     QPolygonF points;
-    // the classic heart curve (32 wide, 29 tall), moved up to center it and scaled to r
     for (int k = 0; k < AnalogGauge::kCenterHeartPoints; ++k) {
         const double t = 2 * std::numbers::pi * k / AnalogGauge::kCenterHeartPoints;
-        const double x = 16 * std::pow(std::sin(t), 3);
-        const double y = -(13 * std::cos(t) - 5 * std::cos(2 * t) - 2 * std::cos(3 * t) - std::cos(4 * t)) - 2.5;
-        points.append(QPointF(x * r / 16, y * r / 16));
+        const double fromPoint = std::abs(t - std::numbers::pi);
+        const double power = 3 - kFuller * smooth(1 - fromPoint / (std::numbers::pi / 2)) * (1 - smooth(1 - fromPoint / kSharpOver));
+        const double x = 16 * (std::sin(t) < 0 ? -1 : 1) * std::pow(std::abs(std::sin(t)), power);
+        double y = -(13 * std::cos(t) - 5 * std::cos(2 * t) - 2 * std::cos(3 * t) - std::cos(4 * t)) - 2.5;
+        if (y > 0) {
+            const double down = y / kCurveBelowMiddle;
+            y *= 1 + kLonger * down * down;
+        }
+        points.append(QPointF(x * kWider * r / 16, y * r / 16));
     }
     return points;
 }
@@ -359,8 +398,12 @@ void AnalogGauge::redrawFrame() {
 void AnalogGauge::rescale() {
     widgetDiameter_ = std::min(width(), height());
     const int reach = static_cast<int>(widgetDiameter_ / 2 * needleScaleFactor_);
-    needle_ = QPolygon({QPoint(4, 30), QPoint(-4, 30), QPoint(-2, -reach),
-                        QPoint(0, -static_cast<int>(widgetDiameter_ / 2 * needleScaleFactor_ - 6)), QPoint(2, -reach)});
+    // from inside the center's edge, which covers where it starts (a heart's notch comes in to under half its radius, a
+    // gear's gaps and a circle's edge stay beyond 0.8), along the taper from a base 8 wide 30 behind the middle
+    const double start = widgetDiameter_ / bigNeedleCenterSize * (centerHeart ? 0.4 : 0.8);
+    const double half = 4 - 2 * (30 + start) / (30.0 + reach);
+    needle_ = QPolygonF({QPointF(half, -start), QPointF(-half, -start), QPointF(-2, -reach),
+                         QPointF(0, -static_cast<int>(widgetDiameter_ / 2 * needleScaleFactor_ - 6)), QPointF(2, -reach)});
     redraw();
     // the font sizes from the gauge's size, in the theme's Gauge numbers font at its scale
     const theme::FontSettings settings = theme::current().fonts.value(theme::kRoleGauge);
@@ -405,12 +448,17 @@ double AnalogGauge::fitValueFontsize() const {
     return std::max(1.0, valueFontsize_ * radius / corner);
 }
 
+int AnalogGauge::filledLength(int length) const {
+    return enableBarGraph_ ? length
+                           : static_cast<int>(py::round((length / (maxValue_ - minValue_)) * (displayValue_ - minValue_)));
+}
+
 QPolygonF AnalogGauge::createPolygonPie(double outerRadius, double innerRadius, double start, int length,
                                         bool barGraph) {
     // (one step a degree: other step sizes draw it wrong)
     constexpr double w = 360 / 360.;
-    if (!enableBarGraph_ && barGraph) {
-        length = static_cast<int>(py::round((length / (maxValue_ - minValue_)) * (displayValue_ - minValue_)));
+    if (barGraph) {
+        length = filledLength(length);
     }
     const auto key = std::make_tuple(outerRadius, innerRadius, start, length, angleOffset_);
     if (const auto found = pieCache_.find(key); found != pieCache_.end()) {
@@ -493,7 +541,10 @@ void AnalogGauge::createScaleMarkerValuesText() {
     for (int i = 0; i <= scalaCount_; ++i) {
         const QString text = QString::number(static_cast<long long>(minValue_ + scalePerDiv * i));
         const double angle = angleDistance * i + (scaleAngleStartValue_ - angleOffset_);
-        drawCentered(painter, fm, textRadius * std::cos(radians(angle)), textRadius * std::sin(radians(angle)), text);
+        const double x = textRadius * std::cos(radians(angle));
+        const double y = textRadius * std::sin(radians(angle));
+        drawCentered(painter, fm, x, y, text);
+        faceRect_ |= textArea(centeredBox(fm, x, y, text), fm);
     }
 }
 
@@ -511,6 +562,11 @@ void AnalogGauge::createFineScaledMarker() {
         painter.drawLine(static_cast<int>(lineLength), 0, static_cast<int>(outerStart), 0);
         painter.rotate(stepSize);
     }
+}
+
+QRect AnalogGauge::textArea(const QRect& box, const QFontMetrics& fm) const {
+    const int margin = fm.height() / 2 + 1;
+    return box.translated(width() / 2, height() / 2).adjusted(-margin, -margin, margin, margin);
 }
 
 QFont AnalogGauge::valueFont() {
@@ -553,8 +609,18 @@ std::optional<QColor> AnalogGauge::valueHalo() {
     return halo::color(displayValueColor_, worst, QColor(Qt::white));
 }
 
+// (working it out takes a while, and the rings' gear turning doesn't change it)
+const std::optional<QColor>& AnalogGauge::currentHalo() {
+    HaloKey key(valueText(), valueFont(), centerRings_, centerGearAngle_.has_value(), ringCount());
+    if (haloKey_ != key) {
+        haloKey_ = std::move(key);
+        halo_ = valueHalo();
+    }
+    return halo_;
+}
+
 void AnalogGauge::createValuesText() {
-    const std::optional<QColor> outline = valueHalo();
+    const std::optional<QColor> outline = currentHalo();
     QPainter painter(paintTarget_);
     painter.setRenderHint(QPainter::TextAntialiasing);
     painter.translate(width() / 2.0, height() / 2.0);
@@ -570,13 +636,13 @@ void AnalogGauge::createValuesText() {
     // halfway between the scale's start and end
     const double angleEnd = scaleAngleStartValue_ + scaleAngleSize_ - 360;
     const double angle = (angleEnd - scaleAngleStartValue_) / 2 + scaleAngleStartValue_;
-    const double raise = centerHeart ? widgetDiameter_ / bigNeedleCenterSize * kCenterHeartRaise : 0;
     const double x = textRadius * std::cos(radians(angle));
-    const double y = textRadius * std::sin(radians(angle)) - raise;
+    const double y = textRadius * std::sin(radians(angle));
     if (outline) {
         halo::draw(painter, centeredBox(fm, x, y, text), Qt::AlignCenter, text, *outline);
     }
     drawCentered(painter, fm, x, y, text);
+    textRect_ |= textArea(centeredBox(fm, x, y, text), fm);
 }
 
 void AnalogGauge::createUnitsText() {
@@ -594,7 +660,12 @@ void AnalogGauge::createUnitsText() {
     painter.setFont(font);
     const double angleEnd = scaleAngleStartValue_ + scaleAngleSize_ + unitPosition;
     const double angle = (angleEnd - scaleAngleStartValue_) / 2 + scaleAngleStartValue_;
-    drawCentered(painter, fm, textRadius * std::cos(radians(angle)), textRadius * std::sin(radians(angle)), units);
+    const double x = textRadius * std::cos(radians(angle));
+    // (at the bottom: on the row of the scale's end numbers, see createScaleMarkerValuesText)
+    const double y = altUnitsDisplay ? widgetDiameter_ / 2 * 0.8 * std::sin(radians(45.0))
+                                     : textRadius * std::sin(radians(angle));
+    drawCentered(painter, fm, x, y, units);
+    textRect_ |= textArea(centeredBox(fm, x, y, units), fm);
 }
 
 QColor AnalogGauge::ringColor(int i) const {
@@ -766,29 +837,40 @@ void AnalogGauge::paintEvent(QPaintEvent*) {
         paintCache_ = newLayer(size, dpr);
         paintCacheDirty_ = true;
     }
-    auto drawLayer = [this](QPixmap& layer, void (AnalogGauge::*draw)()) {
-        paintTarget_ = &layer;
-        (this->*draw)();
-        paintTarget_ = this;
-    };
     if (paintCacheDirty_) {
+        // the gauge's circle (the numbers add themselves as they're drawn)
+        const int reach = static_cast<int>(widgetDiameter_ / 2) + 3;
+        faceRect_ = QRect(width() / 2 - reach, height() / 2 - reach, 2 * reach, 2 * reach);
         faceUnder_ = newLayer(size, dpr);
         drawLayer(faceUnder_, &AnalogGauge::drawFaceUnder);
         faceOver_ = newLayer(size, dpr);
         drawLayer(faceOver_, &AnalogGauge::drawFaceOver);
+        face_ = newLayer(size, dpr);
+        centerLayer_ = newLayer(size, dpr);
+        faceBand_.reset();
+        centerKey_.reset();
+        haloKey_.reset();
+        centerRect_ = QRect();
         paintCacheDirty_ = false;
         frameDirty_ = true;
     }
     if (frameDirty_) {
-        paintCache_.fill(Qt::transparent);
         drawLayer(paintCache_, &AnalogGauge::drawFrame);
         frameDirty_ = false;
     }
-    QPainter(this).drawPixmap(0, 0, paintCache_);
+    QPainter painter(this);
+    drawPart(painter, paintCache_, frameRect_);
 }
 
-// the cached face under and over the band, then every frame the band and everything that moves over them, in the order
-// the whole gauge was always drawn in, but for the arc: under the center, whose gear's teeth stand over it
+void AnalogGauge::drawLayer(QPixmap& layer, void (AnalogGauge::*draw)()) {
+    QPaintDevice* const target = paintTarget_;
+    paintTarget_ = &layer;
+    (this->*draw)();
+    paintTarget_ = target;
+}
+
+// the cached face under and over the band, then the band and everything that moves over them, in the order the whole
+// gauge was always drawn in, but for the arc: under the center, whose gear's teeth stand over it
 void AnalogGauge::drawFaceUnder() {
     drawOuterCircle();
 }
@@ -805,8 +887,8 @@ void AnalogGauge::drawFaceOver() {
     }
 }
 
-void AnalogGauge::drawFrame() {
-    QPainter(paintTarget_).drawPixmap(0, 0, faceUnder_);
+void AnalogGauge::drawFace() {
+    replacePart(face_, faceUnder_, faceRect_);
     if (enableFilledPolygon_) {
         drawFilledPolygon();
     }
@@ -815,20 +897,61 @@ void AnalogGauge::drawFrame() {
     if (enableBigScaledMarker_) {
         pen_.setWidth(2);
     }
-    QPainter(paintTarget_).drawPixmap(0, 0, faceOver_);
+    QPainter painter(paintTarget_);
+    drawPart(painter, faceOver_, faceRect_);
+}
+
+bool AnalogGauge::valueOnCenter() const {
+    return enableValueText_ && enableCenterPoint_ && altUnitsDisplay;
+}
+
+void AnalogGauge::drawCenterLayer() {
+    clearPart(centerLayer_, centerRect_);
+    // (the rings swell on a beat)
+    const int reach = static_cast<int>(centerRadius() * 1.08) + 3;
+    centerRect_ = QRect(width() / 2 - reach, height() / 2 - reach, 2 * reach, 2 * reach);
+    if (enableCenterPoint_) {
+        drawBigNeedleCenterPoint();
+    }
+    if (valueOnCenter()) {
+        textRect_ = QRect();
+        createValuesText();
+        centerRect_ |= textRect_;
+    }
+}
+
+void AnalogGauge::drawFrame() {
+    const int band = enableFilledPolygon_ ? filledLength(static_cast<int>(scaleAngleSize_)) : 0;
+    if (faceBand_ != band) {
+        faceBand_ = band;
+        drawLayer(face_, &AnalogGauge::drawFace);
+    }
+    CenterKey key(centerRings_, centerGearAngle_, centerRadius(), ringCount(), centerRingsPale, centerHeart,
+                  needleCenterBg, valueOnCenter() ? valueText() : QString(), valueFont(), currentHalo());
+    if (centerKey_ != key) {
+        centerKey_ = std::move(key);
+        drawLayer(centerLayer_, &AnalogGauge::drawCenterLayer);
+    }
+    // (over all of the last frame too: its text may have reached further)
+    replacePart(paintCache_, face_, faceRect_ | centerRect_ | frameRect_);
     if (enableNeedlePolygon_) {
         drawNeedle();
     }
     if (enableDrawNewArc_) {
         drawNewArc();
     }
-    if (enableCenterPoint_) {
-        drawBigNeedleCenterPoint();
+    {
+        QPainter painter(paintTarget_);
+        drawPart(painter, centerLayer_, centerRect_);
     }
+    textRect_ = QRect();
     if (enableValueText_) {
-        createValuesText();
+        if (!valueOnCenter()) {
+            createValuesText();
+        }
         createUnitsText();
     }
+    frameRect_ = faceRect_ | centerRect_ | textRect_;
 }
 
 // ---- Heartbeat ----
@@ -914,8 +1037,8 @@ void RotatingSvgWidget::step() {
         }
         return;
     }
-    if (spinTimer_->interval() != kFrameMs) {
-        spinTimer_->setInterval(kFrameMs);
+    if (const int frameMs = Performance::current().frameMs(); spinTimer_->interval() != frameMs) {
+        spinTimer_->setInterval(frameMs);
         // (dt covered the idle wait: timing starts from here)
         return;
     }
@@ -981,6 +1104,7 @@ Gauge::Gauge(const QString& svgFile, const std::optional<Beat>& beat, bool spin,
         });
         connect(gauge, &AnalogGauge::valueChanged, this, &Gauge::colorHeart);
         connect(&theme::notifier(), &theme::Notifier::changed, this, &Gauge::colorHeart);
+        connect(&theme::notifier(), &theme::Notifier::changed, this, &Gauge::colorArc);
         colorHeart();
     } else if (spin) {
         // the chainring spins at the reading, in RPM
@@ -1003,6 +1127,14 @@ Gauge::Gauge(const QString& svgFile, const std::optional<Beat>& beat, bool spin,
 
 QColor Gauge::heartColor() const {
     return heartColors_.isEmpty() ? QColor() : themed(colorAt(heartColors_, gauge_->value()));
+}
+
+void Gauge::colorArc() {
+    QList<std::pair<double, QColor>> stops = heartColors_;
+    for (auto& [value, color] : stops) {
+        color = themed(color);
+    }
+    gauge_->setValueColors(stops);
 }
 
 void Gauge::colorHeart() {

@@ -5,9 +5,11 @@
 
 #include <QApplication>
 #include <QFile>
+#include <QFrame>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
+#include <QLayout>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QSlider>
@@ -32,12 +34,14 @@
 #include "PyCompat.hpp"
 #include "Session.hpp"
 #include "SimulatedRider.hpp"
+#include "SmoothProgressBar.hpp"
 #include "TestSupport.hpp"
 #include "Theme.hpp"
 #include "Units.hpp"
 #include "WorkoutData.hpp"
 #include "WorkoutGrading.hpp"
 #include "WorkoutGraph.hpp"
+#include "ZoneLegend.hpp"
 #include "WorkoutHelpers.hpp"
 #include "ZoneColors.hpp"
 
@@ -139,6 +143,31 @@ class TestHud : public QObject {
     Q_OBJECT
 
 private slots:
+    void animationsFollowTheFrameRate() {
+        QVERIFY(loadWorkout({"1:60,0.5"}));
+        HudScreen hud(bridge_.get());
+        const auto timersAt = [&hud](int ms) {
+            int count = 0;
+            for (const QTimer* timer : hud.findChildren<QTimer*>(Qt::FindDirectChildrenOnly)) {
+                count += timer->interval() == ms ? 1 : 0;
+            }
+            return count;
+        };
+        // the bars and spiral, and the graph's stars
+        Performance::current().setGaugeFps(120);
+        QCOMPARE(timersAt(8), 2);
+        Performance::current().setGaugeFps(60);
+        QCOMPARE(timersAt(16), 2);
+        hud.stopTimers();
+    }
+
+    // what's queued for the layout, the side gauges following it, run
+    static void settle() {
+        for (int i = 0; i < 6; ++i) {
+            QCoreApplication::processEvents();
+        }
+    }
+
     void initTestCase() { keys::install(qApp); }
 
     void init() {
@@ -322,6 +351,178 @@ private slots:
         expected.setValueColors(zones::zoneStops(ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm)));
         QCOMPARE(w->scalePolygonColors(), expected.scalePolygonColors());
         QCOMPARE(hud.cadenceGauge()->chainring()->scale, w->gaugeColorInnerRadiusFactor);
+    }
+
+    // ---- The side gauges ----
+
+    // every side gauge's box is its outer arc's circle, nothing around it; both one size, on one line, mirrored about
+    // the middle gauge and clear of everything around them; and they don't change when the grades take over (the grades
+    // list gives way instead); the legend and timer rows narrow just as far as that takes
+    void workoutSideGaugesMirrorAboutTheMiddleGauge() {
+        QVERIFY(loadWorkout({QStringLiteral("1:60,0.5"), QStringLiteral("1:60,0.6")}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1896, 1092);
+        hud.show();
+        settle();
+        const Gauge* left = hud.cadenceGauge();
+        const Gauge* right = hud.heartRateGauge();
+        const QRect leftAt = left->geometry();
+        const QRect rightAt = right->geometry();
+        QCOMPARE(left->gauge()->size(), leftAt.size());
+        QCOMPARE(leftAt.width(), leftAt.height());
+        QVERIFY(leftAt.width() > 200);
+        QCOMPARE(rightAt.size(), leftAt.size());
+        QCOMPARE(rightAt.center().y(), leftAt.center().y());
+        const QRect middle(hud.powerGauge()->gauge()->mapTo(&hud, QPoint(0, 0)), hud.powerGauge()->gauge()->size());
+        const double middleRadius = std::min(middle.width(), middle.height()) / 2.0;
+        const double radius = leftAt.width() / 2.0;
+        const auto fromMiddle = [&](const QRect& gauge) {
+            return std::hypot(QRectF(gauge).center().x() - QRectF(middle).center().x(),
+                              QRectF(gauge).center().y() - QRectF(middle).center().y()) -
+                   middleRadius - radius;
+        };
+        constexpr double room = 10;
+        QVERIFY(std::abs(fromMiddle(leftAt) - fromMiddle(rightAt)) <= 2);
+        QVERIFY(fromMiddle(leftAt) >= room);
+        const auto clear = [&](const QRect& gauge, const QWidget* widget) {
+            const QRectF rect(widget->mapTo(&hud, QPoint(0, 0)), widget->size());
+            const QPointF at = QRectF(gauge).center();
+            const double dx = std::max({rect.left() - at.x(), 0.0, at.x() - rect.right()});
+            const double dy = std::max({rect.top() - at.y(), 0.0, at.y() - rect.bottom()});
+            return std::hypot(dx, dy) - radius >= room;
+        };
+        const auto* legend = hud.findChild<ZoneLegend*>();
+        QVERIFY(clear(leftAt, legend));
+        QVERIFY(clear(rightAt, hud.remainingTimeLabel()));
+        QVERIFY(clear(rightAt, hud.workoutTimeLabel()));
+        // (the rest of the column stays as wide as it was)
+        QVERIFY(legend->width() < HudScreen::kUpNextWidth);
+        const QList<QFrame*> bubbles = hud.findChildren<QFrame*>(QStringLiteral("infoBubble"));
+        QCOMPARE(bubbles.size(), qsizetype(4));
+        for (const QFrame* bubble : bubbles) {
+            QVERIFY(clear(rightAt, bubble));
+        }
+        // the timer rows narrower than the column above them, against its right edge, each its own bubble
+        const QRect spiral(hud.spiral()->mapTo(&hud, QPoint(0, 0)), hud.spiral()->size());
+        for (const QWidget* row : {static_cast<const QWidget*>(hud.workoutTimeLabel()),
+                                   static_cast<const QWidget*>(hud.workoutBar()),
+                                   static_cast<const QWidget*>(hud.remainingTimeLabel())}) {
+            const QRect rect(row->mapTo(&hud, QPoint(0, 0)), row->size());
+            QCOMPARE(rect.right(), spiral.right());
+            QVERIFY(rect.width() <= spiral.width());
+        }
+
+        SimulatedRider rider(3);
+        hud.runSimulatedRide(appState().workoutDurationSeconds - 5, rider);
+        hud.stopTimers();
+        QVERIFY(hud.showingGrades());
+        settle();
+        QCOMPARE(left->geometry(), leftAt);
+        QCOMPARE(right->geometry(), rightAt);
+        QVERIFY(clear(leftAt, hud.gradeList()));
+    }
+
+    // free ride's side gauges alike, between the middle gauge and the screen's edge or the trainer's slider; its speed
+    // through elapsed time in four bubbles (no battery warning's room among them, nor speed and distance's without a
+    // speed sensor)
+    void freeRideSideGaugesFitBetweenTheMiddleGaugeAndTheEdge() {
+        for (const bool trainer : {false, true}) {
+            QVERIFY(loadWorkout({QStringLiteral("1:60,0.5")}));
+            AppState& state = appState();
+            state.workoutMode = false;
+            bridge_->trainer = trainer;
+            HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+            hud.setAttribute(Qt::WA_DontShowOnScreen);
+            hud.resize(1896, 1092);
+            hud.show();
+            settle();
+            hud.stopTimers();
+            bridge_->trainer = false;
+            const QRect left = hud.cadenceGauge()->geometry();
+            const QRect right = hud.heartRateGauge()->geometry();
+            QCOMPARE(right.size(), left.size());
+            QCOMPARE(right.center().y(), left.center().y());
+            QVERIFY(left.left() >= 0);
+            QVERIFY(left.right() < hud.graph()->mapTo(&hud, QPoint(0, 0)).x() + hud.graph()->width());
+            QVERIFY(left.width() > 300);
+            int edge = hud.width();
+            if (trainer) {
+                QVERIFY(hud.difficultySlider() != nullptr);
+                edge = hud.difficultySlider()->mapTo(&hud, QPoint(0, 0)).x();
+            }
+            QVERIFY(right.right() < edge);
+            const QList<QFrame*> bubbles = hud.findChildren<QFrame*>(QStringLiteral("infoBubble"));
+            QCOMPARE(bubbles.size(), qsizetype(4));
+            for (const QFrame* bubble : bubbles) {
+                QVERIFY(hud.batteryWarning()->geometry().bottom() < bubble->geometry().top());
+            }
+        }
+        QVERIFY(loadWorkout({QStringLiteral("1:60,0.5")}));
+        AppState& state = appState();
+        state.workoutMode = false;
+        state.antSpeedCadence = false;
+        state.antCadence = false;
+        state.antSpeed = false;
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1896, 1092);
+        hud.show();
+        settle();
+        hud.stopTimers();
+        int shown = 0;
+        for (const QFrame* bubble : hud.findChildren<QFrame*>(QStringLiteral("infoBubble"))) {
+            shown += bubble->isVisible() ? 1 : 0;
+        }
+        QCOMPARE(shown, 2);
+    }
+
+    // a screen goes on as what it was built as: on its way out, with the next ride's mode already set, a free ride
+    // screen has no workout's legend or timers to place its gauges against (nor a workout's anything to miss in free)
+    void sideGaugesFollowTheScreensOwnModeNotTheNextRides() {
+        QVERIFY(loadWorkout({QStringLiteral("1:60,0.5")}));
+        appState().workoutMode = false;
+        HudScreen freeRide(bridge_.get(), nullptr, [] { return 1000.0; });
+        freeRide.setAttribute(Qt::WA_DontShowOnScreen);
+        freeRide.resize(1896, 1092);
+        freeRide.show();
+        settle();
+        freeRide.stopTimers();
+        const QRect left = freeRide.cadenceGauge()->geometry();
+        appState().workoutMode = true;
+        freeRide.fitWorkoutMessage();
+        QCOMPARE(freeRide.cadenceGauge()->geometry(), left);
+
+        HudScreen workout(bridge_.get(), nullptr, [] { return 1000.0; });
+        workout.setAttribute(Qt::WA_DontShowOnScreen);
+        workout.resize(1896, 1092);
+        workout.show();
+        settle();
+        workout.stopTimers();
+        const QRect workoutLeft = workout.cadenceGauge()->geometry();
+        appState().workoutMode = false;
+        workout.fitWorkoutMessage();
+        QCOMPARE(workout.cadenceGauge()->geometry(), workoutLeft);
+    }
+
+    // the heart rate gauge's outer arc in its hearts' colors, and no needle behind the heart
+    void heartRateGaugeHasAnArcAndNoNeedleTail() {
+        const int fps = Performance::current().gaugeFps();
+        Performance::current().setGaugeFps(0);
+        std::unique_ptr<Gauge> gauge(newHeartRateGauge(185));
+        gauge->heart()->beatTimer()->stop();
+        AnalogGauge* w = gauge->gauge();
+        QCOMPARE(w->scalePolygonColors().front().second, QColor(kHeartPink));
+        gauge->layout()->setContentsMargins(0, 0, 0, 0);
+        gauge->resize(100, 100);
+        w->setValue(146);
+        QImage image(gauge->size(), QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        gauge->render(&image, QPoint(), QRegion(), QWidget::DrawChildren);
+        // (the needle points up and right: where its tail would be, down and left of the middle, outside the heart)
+        QCOMPARE(qAlpha(image.pixel(50 - 20, 50 + 20)), 0);
+        QVERIFY(qAlpha(image.pixel(50 + 20, 50 - 21)) > 0);
+        Performance::current().setGaugeFps(fps);
     }
 
     // ---- START, PAUSE, END ----

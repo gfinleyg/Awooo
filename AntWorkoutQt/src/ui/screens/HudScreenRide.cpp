@@ -622,11 +622,13 @@ void HudScreen::setWorkoutMessage(const QString& text) {
 // Ride At and the message under it centered on the power gauge and clear of the gauges either side (whichever show):
 // their text wraps to stay between them, and only if it still needs more lines than it has does the font shrink
 void HudScreen::fitWorkoutMessage() {
+    placeSideGauges();
     fitBetweenGauges(rideAtLabel_, kRideAtStyle, kRideAtPoints, kRideAtLines, kRideAtLongest);
     // (the message's lines kept at the font it's drawn in: the design size scaled can come out a pixel or two short)
     theme::setSheet(workoutMessageLabel_, kMessageStyle.arg(kMessagePoints));
     const int kept = kMessageLines * workoutMessageLabel_->fontMetrics().lineSpacing();
-    if (workoutMessageLabel_->minimumHeight() < kept) {
+    // (once the layout has taken the design size it scales from, or this, at the screen's scale, would become it)
+    if (workoutMessageLabel_->property("awoOrigSize").isValid() && workoutMessageLabel_->minimumHeight() < kept) {
         workoutMessageLabel_->setMinimumHeight(kept);
     }
     fitBetweenGauges(workoutMessageLabel_, kMessageStyle, kMessagePoints, kMessageLines, workoutMessageLabel_->text());
@@ -965,6 +967,13 @@ bool HudScreen::eventFilter(QObject* watched, QEvent* event) {
         return true;
     }
     return QWidget::eventFilter(watched, event);
+}
+
+bool HudScreen::event(QEvent* event) {
+    if (event->type() == QEvent::LayoutRequest && sideGaugeTimer_) {
+        sideGaugeTimer_->start();
+    }
+    return QWidget::event(event);
 }
 
 void HudScreen::resizeEvent(QResizeEvent* event) {

@@ -372,7 +372,7 @@ QWidget* sceneCadenceModeGauge() {
 }
 
 // The HUD's heart rate gauge at 132 BPM with a 185 BPM max heart rate, the center's hearts at rest (deliberately unlike
-// the Python app's: no heart behind it, bigger hearts colored by the heart rate, see CHANGES.md)
+// the Python app's: no heart behind it, bigger hearts colored by the heart rate, an outer arc, see CHANGES.md)
 QWidget* sceneHrGauge() {
     auto* gauge = newHeartRateGauge(185);
     gauge->heart()->beatTimer()->stop();

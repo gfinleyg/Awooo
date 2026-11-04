@@ -3,6 +3,8 @@
 // The performance settings from the title bar's menu (Performance.py), saved in savedSettingsANT.json:
 //   "gaugeFps": 60   how many times a second the gauge needles move while easing toward a new reading; 0 turns the
 //                    easing off (the needle jumps to each reading, about 4 a second)
+//                    120 runs the workout screen's other animations and its drawing at 120 too, for faster screens;
+//                    on a 60 Hz screen it only uses more CPU
 // Lower is lighter on the CPU. Gauges connect to changed(), so a new setting applies to the ones on screen too.
 
 #include <QList>
@@ -24,6 +26,8 @@ public:
     // (read from the saved settings the first time it's asked for)
     int gaugeFps();
     void setGaugeFps(int fps);
+    // how long a frame is: of the window's drawing (FramePacer) and the animations that step every frame
+    int frameMs();
     static QString gaugeFpsText(int fps);
     // forget the setting read, so it's read again (tests)
     void reset() { gaugeFps_ = -1; }

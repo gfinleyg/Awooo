@@ -17,6 +17,7 @@
 #include "AppState.hpp"
 #include "AppStyle.hpp"
 #include "CustomTitleBar.hpp"
+#include "FramePacer.hpp"
 #include "HudScreen.hpp"
 #include "MusicSelectDialog.hpp"
 #include "PreviewRide.hpp"
@@ -141,6 +142,7 @@ DisplayWindow::DisplayWindow() : bridge_(std::make_unique<PreviewBridge>()), rea
     readingTimer_->setInterval(1000);
     connect(readingTimer_, &QTimer::timeout, this, &DisplayWindow::playReading);
     setObjectName(QStringLiteral("layoutDisplay"));
+    new FramePacer(this);
     resize(800, 600);
     setWindowFlags(Qt::FramelessWindowHint);
     setWindowTitle(QStringLiteral("   ") + kAppTitle);

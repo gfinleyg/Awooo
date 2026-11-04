@@ -6,7 +6,7 @@
 
 namespace awo {
 
-const QList<int> Performance::kGaugeFpsChoices = {0, 10, 15, 20, 30, 45, 60};
+const QList<int> Performance::kGaugeFpsChoices = {0, 10, 15, 20, 30, 45, 60, 120};
 
 Performance& Performance::current() {
     static Performance performance;
@@ -31,12 +31,16 @@ void Performance::setGaugeFps(int fps) {
     emit changed();
 }
 
+int Performance::frameMs() {
+    return gaugeFps() > 60 ? 8 : 16;
+}
+
 QString Performance::gaugeFpsText(int fps) {
     if (fps == 0) {
         return QStringLiteral("Off - needles jump to each reading");
     }
     if (fps == kGaugeFpsChoices.last()) {
-        return QStringLiteral("%1 fps - smoothest").arg(fps);
+        return QStringLiteral("%1 fps - for 120 Hz screens").arg(fps);
     }
     return QStringLiteral("%1 fps").arg(fps);
 }

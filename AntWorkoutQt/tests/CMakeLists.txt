@@ -63,3 +63,7 @@ awo_target_defaults(perf_ride)
 # TimedApplication, which perf_ride and AWO_EVENT_TIMING report from
 awo_add_test(tst_event_timing tst_event_timing.cpp)
 target_link_libraries(tst_event_timing PRIVATE awo_ui)
+
+# FramePacer on its own, and on LayoutViewer's display
+awo_add_test(tst_frame_pacer tst_frame_pacer.cpp)
+target_link_libraries(tst_frame_pacer PRIVATE awo_viewer)

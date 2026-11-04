@@ -23,8 +23,6 @@ namespace awo {
 
 class MaxStar : public QGraphicsPathItem {
 public:
-    // how often the owner steps its stars, in ms (about every frame)
-    static constexpr int kStepMs = 16;
     // (at the app's design size: scaled with the rest of the screen, see theme::uiScale)
     static constexpr double kRadius = 8;
     // the inner corners' share of kRadius: plumper in the middle than a classic star's ~0.38

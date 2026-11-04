@@ -240,6 +240,11 @@ void applySizes(QWidget* root) {
             return value == 0 || value == kWidgetSizeMax ? value
                                                           : std::max(1, static_cast<int>(py::round(value * scale)));
         };
+        if (widget->property("awoSkipWidth").toBool()) {
+            widget->setMinimumHeight(scaled(minH));
+            widget->setMaximumHeight(scaled(maxH));
+            continue;
+        }
         if (widget->property("awoSkipHeight").toBool()) {
             widget->setMinimumWidth(scaled(minW));
             widget->setMaximumWidth(scaled(maxW));

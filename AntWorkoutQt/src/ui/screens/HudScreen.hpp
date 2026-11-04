@@ -274,6 +274,7 @@ signals:
     void titleChanged(const QString& title);
 
 protected:
+    bool event(QEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void showEvent(QShowEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -312,6 +313,12 @@ private:
     void hideLastBlockNote();
     void updateRequestedPowerDisplays();
     void updateWorkoutMessage();
+    // a side gauge outside the grid, placed by placeSideGauges, its cell kept so nothing else moves
+    void keepSideGaugeCell(Gauge* gauge, const QSize& minimum, const QSize& maximum, int row, int column, int rows,
+                           int columns);
+    void placeSideGauges();
+    void placeWorkoutSideGauges();
+    void placeFreeRideSideGauges();
     void fitBetweenGauges(QLabel* label, const QString& style, int points, int lines, const QString& text);
     void showWorkoutGrades(bool show);
     void refreshWorkoutGrades();
@@ -368,6 +375,12 @@ private:
     double musicVolume_ = 1.0;
     int currentPower_ = 0;
     bool workoutGraded_ = false;
+    // a workout's side gauges as last worked out for this screen size: they stay put when the grades take over
+    QTimer* sideGaugeTimer_ = nullptr;
+    QSize sideGaugesSize_;
+    int sideGaugesRadius_ = 0;
+    double sideGaugesY_ = 0;
+    double sideGaugesReach_ = 0;
     QString spiralBlinkState_ = QStringLiteral("default");
     bool blinkWorkout_ = false;
     bool blinkBlock_ = false;
@@ -438,6 +451,12 @@ private:
     QLabel* workoutTime_ = nullptr;
     SmoothProgressBar* timeProgressBar_ = nullptr;
     QLabel* remainingWorkoutTime_ = nullptr;
+    // the four rows above, outside the grid so their width doesn't change its columns: narrowed as the heart rate gauge
+    // needs, from the top of the rows kept for them (see placeWorkoutSideGauges)
+    QWidget* timerStack_ = nullptr;
+    QWidget* timerFirstRow_ = nullptr;
+    // speed through elapsed time, a bubble behind each row
+    QGridLayout* infoLayout_ = nullptr;
     QLabel* speedLabelTitle_ = nullptr;
     QLabel* speedValueLabel_ = nullptr;
     QLabel* mphLabel_ = nullptr;

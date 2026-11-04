@@ -7,17 +7,21 @@
 // chainring, the heart rate gauge's nested hearts pulsing with the heartbeat), and the Ride At target arc.
 //
 // It's drawn in layers kept as pixmaps: the face under the band (the outer ring) and over it (ticks, numbers) are
-// redrawn only by redraw(); each frame (redrawFrame(): a reading, the needle easing, the rings, the arc) only the
-// moving parts are drawn over them. Repaints from an animated widget behind it just copy the last frame.
+// redrawn only by redraw(); those with the band between them again when the band's end moves a degree; the center with
+// the reading on it (text has to be drawn on what's behind it to look the same) again when either changes. Each frame
+// (redrawFrame(): a reading, the needle easing, the rings, the arc) only the needle, arc and units are drawn, among
+// copies of those, and only in the part of the widget the gauge covers (a wide gauge's circle is much less than its
+// widget). Repaints from an animated widget behind it just copy the last frame.
 //
 // Gauge: the gauge over a background image (a spinning chainring for cadence), or for heart rate with no background, its
 // center nested hearts pulsing with the heartbeat and colored by the heart rate.
 
 #include <QElapsedTimer>
+#include <QFont>
 #include <QGradient>
 #include <QPen>
 #include <QPixmap>
-#include <QPolygon>
+#include <QPolygonF>
 #include <QWidget>
 
 #include <functional>
@@ -42,10 +46,8 @@ public:
     static constexpr int kCenterGearTeeth = 18;
     static constexpr double kCenterGearDepth = 0.5;
     // the rings as nested hearts (centerHeart): each outline from this many points
-    static constexpr int kCenterHeartPoints = 72;
-    // with them, the reading raised this much of the center's radius into the heart's widest part, and (fitValueInCenter)
-    // fitted in this much of the room a circle would give it
-    static constexpr double kCenterHeartRaise = 0.15;
+    static constexpr int kCenterHeartPoints = 144;
+    // with them, the reading (fitValueInCenter) fitted in this much of the room a circle would give it
     static constexpr double kCenterHeartFit = 0.7;
 
     explicit AnalogGauge(QWidget* parent = nullptr);
@@ -160,7 +162,17 @@ private:
 
     void drawFaceUnder();
     void drawFaceOver();
+    void drawFace();
+    void drawCenterLayer();
     void drawFrame();
+    void drawLayer(QPixmap& layer, void (AnalogGauge::*draw)());
+    // the band's length, for a scale this many degrees long
+    int filledLength(int length) const;
+    // the widget's part a text's box draws in, its glyphs' overhang and its outline included
+    QRect textArea(const QRect& box, const QFontMetrics& fm) const;
+    const std::optional<QColor>& currentHalo();
+    // the reading in the center, kept with it (not: drawn with the units, every frame)
+    bool valueOnCenter() const;
     void drawFilledPolygon(int outlinePenWidth = 0);
     void drawBigScaledMarker();
     void createScaleMarkerValuesText();
@@ -198,7 +210,7 @@ private:
     double textRadiusFactor_ = 0.5;
     double needleScaleFactor_ = 0.8;
     double widgetDiameter_ = 0;
-    QPolygon needle_;
+    QPolygonF needle_;
     bool enableBarGraph_ = true;
     bool enableFilledPolygon_ = true;
     bool enableScaleText_ = true;
@@ -213,10 +225,23 @@ private:
     // (on the needle's clock)
     double gearLastFrame_ = 0;
 
+    using Rings = std::optional<std::pair<QList<QColor>, double>>;
+    using CenterKey = std::tuple<Rings, std::optional<double>, double, int, std::pair<double, double>, bool,
+                                 QGradientStops, QString, QFont, std::optional<QColor>>;
+    using HaloKey = std::tuple<QString, QFont, Rings, bool, int>;
+
     QPaintDevice* paintTarget_ = this;
-    QPixmap paintCache_, faceUnder_, faceOver_;
+    // face_: faceUnder_, the band and faceOver_
+    QPixmap paintCache_, faceUnder_, faceOver_, face_, centerLayer_;
     bool paintCacheDirty_ = true;
     bool frameDirty_ = true;
+    // what each layer was last drawn from
+    std::optional<int> faceBand_;
+    std::optional<CenterKey> centerKey_;
+    std::optional<HaloKey> haloKey_;
+    std::optional<QColor> halo_;
+    // the parts of the widget they draw in, and the last frame did
+    QRect faceRect_, centerRect_, textRect_, frameRect_;
     std::map<std::tuple<double, double, double, int, double>, QPolygonF> pieCache_;
     std::optional<std::pair<std::tuple<double, double, double, int, double, QString, bool>, double>> fittedValueFontsize_;
     QTimer* needleTimer_;
@@ -263,8 +288,7 @@ class RotatingSvgWidget : public QWidget {
     Q_OBJECT
 
 public:
-    // ~60 fps while spinning; how often to check for motion again while stopped
-    static constexpr int kFrameMs = 16;
+    // while spinning it steps every frame (Performance::frameMs); how often to check for motion again while stopped
     static constexpr int kIdleMs = 250;
 
     RotatingSvgWidget(const QString& svgFile, std::function<double()> rpmSource, QWidget* parent = nullptr);
@@ -316,6 +340,9 @@ public:
     Heartbeat* heart() const { return heart_; }
     // the hearts' color now (through the theme)
     QColor heartColor() const;
+    // the outer arc in the hearts' colors, filled up to the needle (once the gauge's range is set; again as the theme
+    // changes)
+    void colorArc();
 
 private:
     void colorHeart();

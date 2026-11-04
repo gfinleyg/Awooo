@@ -1,6 +1,7 @@
 #include "HudScreen.hpp"
 
 #include <QEvent>
+#include <QFrame>
 #include <QGraphicsScene>
 #include <QGridLayout>
 #include <QKeySequence>
@@ -29,6 +30,7 @@
 #include "MaxStar.hpp"
 #include "PlotItems.hpp"
 #include "PowerSpiral.hpp"
+#include "Performance.hpp"
 #include "PyCompat.hpp"
 #include "ReadingPipeline.hpp"
 #include "SavedSettings.hpp"
@@ -62,6 +64,14 @@ constexpr int kRideAtLines = 2;
 const QString kMessageStyle = QStringLiteral("font: 700 %1pt 'Orbitron'; background-color: rgba(0, 0, 0, 0);");
 constexpr int kMessagePoints = 22;
 constexpr int kMessageGap = 12;
+// the side gauges: the room around their outer arcs, and how far below their centers they reach as a share of their
+// radius (the chainring, which stops short of the arc; or the arc's ends and the numbers there)
+constexpr int kSideGaugeGap = 12;
+constexpr double kChainringReach = 0.9;
+constexpr double kOpenGaugeReach = 0.72;
+// the narrowest the zone legend and the timer rows go to make room for them (their text still fits)
+constexpr int kLegendMinWidth = 360;
+constexpr int kTimerMinWidth = 280;
 const QString kWorkoutComplete = QStringLiteral("Workout Complete!\nCooldown, or press END for more options");
 const QString kPressStart = QStringLiteral("Press Start to begin workout");
 const QString kLastBlock = QStringLiteral("You're on the last block, way to go!");
@@ -96,6 +106,30 @@ QLabel* centeredLabel(const QString& text = {}) {
     auto* label = new QLabel(text);
     label->setAlignment(Qt::AlignCenter);
     return label;
+}
+
+// what's left in the grid of something placed outside it: the same size to the layout, so the rows and columns stay as
+// they were
+class KeptCell : public QWidget {
+public:
+    explicit KeptCell(const QSize& hint) : hint_(hint) { setAttribute(Qt::WA_TransparentForMouseEvents); }
+    QSize sizeHint() const override { return hint_; }
+
+private:
+    QSize hint_;
+};
+
+// Ride At and the message under it fit themselves into the lines kept for them (see fitWorkoutMessage): their wrapped
+// text's height mustn't reach the grid, or a message showing would move everything on the screen
+class SelfFittingColumn : public QVBoxLayout {
+public:
+    using QVBoxLayout::QVBoxLayout;
+    bool hasHeightForWidth() const override { return false; }
+};
+
+// the distance from a point to a rectangle (0 inside it)
+double distanceTo(const QRectF& rect, double x, double y) {
+    return std::hypot(std::max({rect.left() - x, 0.0, x - rect.right()}), std::max({rect.top() - y, 0.0, y - rect.bottom()}));
 }
 
 double maxOrZero(const QList<double>& values) {
@@ -149,7 +183,6 @@ Gauge* newHeartRateGauge(int maxHr) {
     w->setNeedleColor(QColor(kGaugeRed));
     w->setMouseTracking(false);
     w->needleCenterBg = {{0, QColor(QStringLiteral("#FFFFFF"))}};
-    w->setScalePolygonColors(QGradientStops{{0, QColor(0, 0, 0, 0)}});
     w->setOuterCircleBg({{0, QColor(0, 0, 0, 0)}});
     // (as big a center as the power and cadence gauges')
     w->bigNeedleCenterSize = 5;
@@ -164,6 +197,7 @@ Gauge* newHeartRateGauge(int maxHr) {
     w->setEnableBarGraph(false);
     w->setScalaCount(2);
     w->scalaSubdivCount = 5;
+    gauge->colorArc();
     return gauge;
 }
 
@@ -325,19 +359,26 @@ HudScreen::HudScreen(ant::AntBridge* bridge, QWidget* parent, WorkoutEngine::Clo
     connect(timer_, &QTimer::timeout, this, &HudScreen::tick);
     timer_->setInterval(kTickMs);
     timer_->start();
-    // about 60 frames a second between ticks: the two timer bars and the spiral glide rather than step
+    // every frame between ticks: the two timer bars and the spiral glide rather than step
     if (state.workoutMode) {
         smoothBarTimer_ = new QTimer(this);
         smoothBarTimer_->setTimerType(Qt::PreciseTimer);
         connect(smoothBarTimer_, &QTimer::timeout, this, &HudScreen::updateSmoothBars);
-        smoothBarTimer_->setInterval(16);
+        smoothBarTimer_->setInterval(Performance::current().frameMs());
         smoothBarTimer_->start();
     }
     // the graph's max stars riding to a new max, or twinkling at rest
     starClock_.start();
     connect(starTimer_, &QTimer::timeout, this, &HudScreen::stepMaxStars);
-    starTimer_->setInterval(MaxStar::kStepMs);
+    starTimer_->setInterval(Performance::current().frameMs());
     starTimer_->start();
+    connect(&Performance::current(), &Performance::changed, this, [this] {
+        const int frameMs = Performance::current().frameMs();
+        if (smoothBarTimer_) {
+            smoothBarTimer_->setInterval(frameMs);
+        }
+        starTimer_->setInterval(frameMs);
+    });
 
     // redrawn when the zone colors change, and in the distance unit when that changes
     connect(&zones::notifier(), &zones::Notifier::changed, this, &HudScreen::refreshFtpColors);
@@ -387,17 +428,20 @@ void HudScreen::buildUpNext() {
     // the zones' colors and where each ends, between the blocks and the graph
     zoneLegend_ = new ZoneLegend;
     zoneLegend_->setFixedWidth(kUpNextWidth);
-    upNext->addWidget(zoneLegend_, 26, 0);
+    // (placeWorkoutSideGauges sets its width, the layout's scaling just its height)
+    zoneLegend_->setProperty("awoSkipWidth", true);
+    upNext->addWidget(zoneLegend_, 26, 0, Qt::AlignLeft);
     // well into the last block (or at the end of the workout) each block's grade takes over the whole column
     workoutGradesHeader_ = new HaloLabel(QStringLiteral("Workout Grades"));
     theme::setSheet(workoutGradesHeader_, kXlText);
     workoutGradesHeader_->setMaximumHeight(40);
+    workoutGradesHeader_->setMinimumWidth(kUpNextWidth);
     workoutGradesHeader_->hide();
     upNext->addWidget(workoutGradesHeader_, 0, 0);
     workoutGradeList_ = new GradeList;
-    workoutGradeList_->setMinimumWidth(kUpNextWidth);
+    workoutGradeList_->setProperty("awoSkipWidth", true);
     workoutGradeList_->hide();
-    upNext->addWidget(workoutGradeList_, 1, 0, 25, 1);
+    upNext->addWidget(workoutGradeList_, 1, 0, 25, 1, Qt::AlignLeft);
     hudLayout_->addLayout(upNext, 0, 0, 20, 6);
 }
 
@@ -458,9 +502,7 @@ void HudScreen::buildGauges() {
     gaugeChooser();
     if (cadenceMode_) {
         // in the cadence gauge's usual corner; the cadence gauge is the big one in the middle
-        wattGaugeDisplay_->setMaximumSize(220, 165);
-        wattGaugeDisplay_->setMinimumSize(200, 150);
-        hudLayout_->addWidget(wattGaugeDisplay_, 16, 6, 4, 3, Qt::AlignBottom);
+        keepSideGaugeCell(wattGaugeDisplay_, QSize(200, 150), QSize(220, 165), 16, 6, 4, 3);
         // (small: a numbered tick every 100 W, nothing between)
         wattGaugeDisplay_->gauge()->scalaSubdivCount = 1;
     } else if (state.workoutMode) {
@@ -503,13 +545,9 @@ void HudScreen::buildGauges() {
             w->setCenterRings(QList<QColor>{QColor(QStringLiteral("#ffffff")), QColor(QStringLiteral("#ffffff"))});
             hudLayout_->addWidget(cadenceGaugeDisplay_, 4, 7, 16, 15);
         } else if (state.workoutMode) {
-            cadenceGaugeDisplay_->setMaximumSize(220, 165);
-            cadenceGaugeDisplay_->setMinimumSize(200, 150);
-            hudLayout_->addWidget(cadenceGaugeDisplay_, 16, 6, 4, 3, Qt::AlignBottom);
+            keepSideGaugeCell(cadenceGaugeDisplay_, QSize(200, 150), QSize(220, 165), 16, 6, 4, 3);
         } else {
-            cadenceGaugeDisplay_->setMaximumSize(400, 300);
-            cadenceGaugeDisplay_->setMinimumSize(400, 300);
-            hudLayout_->addWidget(cadenceGaugeDisplay_, 10, 0, 9, 11, Qt::AlignBottom);
+            keepSideGaugeCell(cadenceGaugeDisplay_, QSize(400, 300), QSize(400, 300), 10, 0, 9, 11);
         }
         cadenceGaugeDisplay_->chainring()->scale = w->gaugeColorInnerRadiusFactor;
         if (!cadenceMode_) {
@@ -551,9 +589,27 @@ void HudScreen::buildGauges() {
     messageFitTimer_->setSingleShot(true);
     messageFitTimer_->setInterval(0);
     connect(messageFitTimer_, &QTimer::timeout, this, &HudScreen::fitWorkoutMessage);
+    // the side gauges follow the layout as it settles; Ride At follows them only if they moved
+    sideGaugeTimer_ = new QTimer(this);
+    sideGaugeTimer_->setSingleShot(true);
+    sideGaugeTimer_->setInterval(0);
+    connect(sideGaugeTimer_, &QTimer::timeout, this, [this] {
+        const auto places = [this] {
+            QList<QRect> rects;
+            for (const Gauge* gauge : {wattGaugeDisplay_, cadenceGaugeDisplay_, hrGaugeDisplay_}) {
+                rects.append(gauge ? gauge->geometry() : QRect());
+            }
+            return rects;
+        };
+        const QList<QRect> before = places();
+        placeSideGauges();
+        if (places() != before) {
+            fitWorkoutMessage();
+        }
+    });
     rideAtWidget_ = new QWidget;
     theme::setSheet(rideAtWidget_, QStringLiteral("background-color: rgba(0, 0, 0, 0);"));
-    auto* rideAt = new QVBoxLayout(rideAtWidget_);
+    auto* rideAt = new SelfFittingColumn(rideAtWidget_);
     rideAt->setContentsMargins(0, 0, 0, 0);
     rideAt->setSpacing(0);
     rideAt->addStretch();
@@ -567,10 +623,174 @@ void HudScreen::buildGauges() {
         // its center hearts beating at the heart rate, pink to dark red toward the max heart rate
         hrGaugeDisplay_ = newHeartRateGauge(state.maxHr);
         if (state.workoutMode) {
-            hudLayout_->addWidget(hrGaugeDisplay_, 15, 21, 6, 4);
+            keepSideGaugeCell(hrGaugeDisplay_, hrGaugeDisplay_->minimumSizeHint(), QSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX), 15,
+                              21, 6, 4);
         } else {
-            hudLayout_->addWidget(hrGaugeDisplay_, 11, 23, 9, 9);
+            keepSideGaugeCell(hrGaugeDisplay_, hrGaugeDisplay_->minimumSizeHint(), QSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX), 11,
+                              23, 9, 9);
         }
+    }
+}
+
+void HudScreen::keepSideGaugeCell(Gauge* gauge, const QSize& minimum, const QSize& maximum, int row, int column, int rows,
+                                  int columns) {
+    auto* cell = new KeptCell(gauge->sizeHint());
+    cell->setMinimumSize(minimum);
+    cell->setMaximumSize(maximum);
+    hudLayout_->addWidget(cell, row, column, rows, columns,
+                          maximum.height() < QWIDGETSIZE_MAX ? Qt::AlignBottom : Qt::Alignment());
+    // built alike, nothing around them: each one's box is its outer arc's circle
+    gauge->setParent(this);
+    gauge->layout()->setContentsMargins(0, 0, 0, 0);
+    AnalogGauge* w = gauge->gauge();
+    w->initialScaleFontsize = 16;
+    w->initialValueFontsize = 56;
+    w->bigNeedleCenterSize = 5;
+    w->rescale();
+    gauge->show();
+}
+
+// both side gauges one size, on one line, as big as fits with the room around their outer arcs
+void HudScreen::placeSideGauges() {
+    if (!targetGauge_ || !progressGraph_) {
+        return;
+    }
+    // (what this screen was built as: the next ride's mode can already be set while it's on its way out)
+    if (zoneLegend_) {
+        placeWorkoutSideGauges();
+    } else {
+        placeFreeRideSideGauges();
+    }
+}
+
+// mirrored about the middle gauge, the same distance from it. The zone legend, the grades and the timer rows narrow as
+// far as they have to (and no further) to make room; the gauges don't change when the grades take over.
+void HudScreen::placeWorkoutSideGauges() {
+    const auto rectOf = [this](const QWidget* widget) { return QRect(widget->mapTo(this, QPoint(0, 0)), widget->size()); };
+    Gauge* left = cadenceMode_ ? wattGaugeDisplay_ : cadenceGaugeDisplay_;
+    Gauge* right = hrGaugeDisplay_;
+    const double scale = theme::widgetScale(this);
+    const double gap = kSideGaugeGap * scale;
+    const QRectF middle = rectOf(targetGauge_->gauge());
+    const QPointF center = middle.center();
+    const double middleRadius = std::min(middle.width(), middle.height()) / 2;
+    const QRectF legend = rectOf(zoneLegend_);
+    const double timersRight = rectOf(spiralWorkoutProgress_).right();
+    const double legendMin = kLegendMinWidth * scale;
+    const double timersMin = kTimerMinWidth * scale;
+    const QRectF timers(timersRight - timersMin, rectOf(timerFirstRow_).top(), timersMin, timerStack_->sizeHint().height());
+    // how far either side of the middle gauge's center a gauge goes, the gap away from it
+    const auto reachAt = [&](double y, double radius) {
+        const double along = middleRadius + gap + radius;
+        const double down = y - center.y();
+        return along > std::abs(down) ? std::sqrt(along * along - down * down) : 0.0;
+    };
+    if (!workoutGraded_ || sideGaugesSize_ != size()) {
+        const QList<QRectF> leftOf{rectOf(remainingWorkoutList_),
+                                   QRectF(legend.left(), legend.top(), legendMin, legend.height())};
+        const QList<QRectF> rightOf{timers, infoLayout_->geometry()};
+        const double below = (left == cadenceGaugeDisplay_ ? kChainringReach : kOpenGaugeReach);
+        const double bottom = rectOf(progressGraph_).top() - gap;
+        const auto clear = [&](const QList<QRectF>& rects, double x, double y, double radius) {
+            return std::all_of(rects.begin(), rects.end(),
+                               [&](const QRectF& rect) { return distanceTo(rect, x, y) >= radius + gap; });
+        };
+        double low = 10, high = 2000;
+        while (high - low > 0.25) {
+            const double radius = (low + high) / 2;
+            const double y = bottom - below * radius;
+            const double reach = reachAt(y, radius);
+            const bool fits = (!left || clear(leftOf, center.x() - reach, y, radius)) &&
+                              (!right || clear(rightOf, center.x() + reach, y, radius));
+            (fits ? low : high) = radius;
+        }
+        sideGaugesSize_ = size();
+        sideGaugesRadius_ = static_cast<int>(low);
+        sideGaugesY_ = bottom - below * sideGaugesRadius_;
+        sideGaugesReach_ = reachAt(sideGaugesY_, sideGaugesRadius_);
+    }
+    const int r = sideGaugesRadius_;
+    const double y = sideGaugesY_;
+    const auto place = [&](Gauge* gauge, double x) {
+        gauge->setGeometry(static_cast<int>(std::lround(x)) - r, static_cast<int>(y) - r, 2 * r, 2 * r);
+    };
+    // how far to the side of a gauge's center a rectangle's near corner has to be, this far above or below it
+    const auto sideways = [&](double down) {
+        const double needed = r + gap;
+        return std::abs(down) < needed ? std::sqrt(needed * needed - down * down) : 0.0;
+    };
+    const double column = kUpNextWidth * scale;
+    double legendWidth = column;
+    double gradesWidth = column;
+    if (left) {
+        const double x = center.x() - sideGaugesReach_;
+        place(left, x);
+        legendWidth = std::min(column, x - sideways(std::max(legend.top() - y, 0.0)) - legend.left());
+        gradesWidth = std::min(column, x - r - gap - legend.left());
+    }
+    zoneLegend_->setFixedWidth(static_cast<int>(std::max(legendWidth, legendMin)));
+    workoutGradeList_->setFixedWidth(static_cast<int>(std::max(gradesWidth, legendMin)));
+    double timersWidth = rectOf(spiralWorkoutProgress_).width();
+    if (right) {
+        const double x = center.x() + sideGaugesReach_;
+        place(right, x);
+        timersWidth = std::min(timersWidth, timersRight - (x + sideways(y - timers.bottom())));
+    }
+    const int stackWidth = std::min(static_cast<int>(std::max(timersWidth, timersMin)), rectOf(spiralWorkoutProgress_).width());
+    timerStack_->setGeometry(static_cast<int>(timersRight) - stackWidth + 1, static_cast<int>(timers.top()), stackWidth,
+                             static_cast<int>(timers.height()));
+}
+
+// each between the middle gauge and the screen's edge (the slider's, with one), the same room to both
+void HudScreen::placeFreeRideSideGauges() {
+    const auto rectOf = [this](const QWidget* widget) { return QRect(widget->mapTo(this, QPoint(0, 0)), widget->size()); };
+    Gauge* left = cadenceGaugeDisplay_;
+    Gauge* right = hrGaugeDisplay_;
+    const double gap = kSideGaugeGap * theme::widgetScale(this);
+    const QRectF middle = rectOf(targetGauge_->gauge());
+    const QPointF center = middle.center();
+    const double middleRadius = std::min(middle.width(), middle.height()) / 2;
+    const double bottom = rectOf(progressGraph_).top() - gap;
+    const double edge = difficultySlider_ ? rectOf(difficultySlider_).left() : width();
+    const double top = infoLayout_->geometry().bottom();
+    const double below = left ? kChainringReach : kOpenGaugeReach;
+    const auto fromMiddle = [&](double x, double y, double radius) {
+        return std::hypot(center.x() - x, center.y() - y) - middleRadius - radius;
+    };
+    const auto leftX = [&](double y, double radius) {
+        double a = 0, b = center.x();
+        while (b - a > 0.25) {
+            const double x = (a + b) / 2;
+            (x - radius < fromMiddle(x, y, radius) ? a : b) = x;
+        }
+        return a;
+    };
+    const auto rightX = [&](double y, double radius) {
+        double a = center.x(), b = edge;
+        while (b - a > 0.25) {
+            const double x = (a + b) / 2;
+            (fromMiddle(x, y, radius) < edge - x - radius ? a : b) = x;
+        }
+        return a;
+    };
+    double low = 10, high = 2000;
+    while (high - low > 0.25) {
+        const double radius = (low + high) / 2;
+        const double y = bottom - below * radius;
+        const bool fits = (!left || leftX(y, radius) - radius >= gap) &&
+                          (!right || (y - radius >= top + gap && edge - rightX(y, radius) - radius >= gap));
+        (fits ? low : high) = radius;
+    }
+    const int r = static_cast<int>(low);
+    const double y = bottom - below * r;
+    const auto place = [&](Gauge* gauge, double x) {
+        gauge->setGeometry(static_cast<int>(x) - r, static_cast<int>(y) - r, 2 * r, 2 * r);
+    };
+    if (left) {
+        place(left, leftX(y, r));
+    }
+    if (right) {
+        place(right, rightX(y, r));
     }
 }
 
@@ -700,23 +920,39 @@ void HudScreen::buildTimers() {
     duration->addWidget(batteryWarningLabel_, 10, 0, 1, 1);
     // rounded timer boxes (Qt draws square corners when the radius is more than half the height)
     constexpr int timerBoxHeight = 34;
+    constexpr int timerRowHeight = 32;
     timerRadius_ = timerBoxHeight / 2 - 2;
     workoutTimeHeader_ = centeredLabel(QStringLiteral("Workout Time:"));
-    workoutTimeHeader_->setMinimumHeight(timerBoxHeight);
-    duration->addWidget(workoutTimeHeader_, 11, 0, 1, 1);
+    workoutTimeHeader_->setMinimumHeight(timerRowHeight);
     workoutTime_ = centeredLabel(QStringLiteral("0s / ") + minimizedDuration(state.workoutDurationSeconds));
-    workoutTime_->setMinimumHeight(timerBoxHeight);
-    duration->addWidget(workoutTime_, 12, 0, 1, 1);
+    workoutTime_->setMinimumHeight(timerRowHeight);
     timeProgressBar_ = new SmoothProgressBar;
     timeProgressBar_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
     timeProgressBar_->setRange(0, 100 * state.workoutDurationSeconds);
     timeProgressBar_->setValue(0);
     timeProgressBar_->setTextVisible(false);
-    timeProgressBar_->setFixedHeight(timerBoxHeight);
-    duration->addWidget(timeProgressBar_, 13, 0, 1, 1);
+    timeProgressBar_->setFixedHeight(timerRowHeight);
     remainingWorkoutTime_ = centeredLabel(QStringLiteral("Done in: ") + minimizedDuration(state.workoutDurationSeconds));
-    remainingWorkoutTime_->setMinimumHeight(timerBoxHeight);
-    duration->addWidget(remainingWorkoutTime_, 14, 0, 1, 1);
+    remainingWorkoutTime_->setMinimumHeight(timerRowHeight);
+    timerStack_ = new QWidget(this);
+    auto* timerRows = new QVBoxLayout(timerStack_);
+    timerRows->setContentsMargins(0, 0, 0, 0);
+    timerRows->setSpacing(6);
+    timerRows->addWidget(workoutTimeHeader_);
+    timerRows->addWidget(workoutTime_);
+    timerRows->addWidget(timeProgressBar_);
+    timerRows->addWidget(remainingWorkoutTime_);
+    for (int i = 0; i < 4; ++i) {
+        auto* row = new KeptCell(workoutTimeHeader_->sizeHint());
+        row->setMinimumSize(workoutTimeHeader_->minimumSizeHint().width(), timerBoxHeight);
+        if (i == 2) {
+            row->setMaximumHeight(timerBoxHeight);
+        }
+        duration->addWidget(row, 11 + i, 0);
+        if (i == 0) {
+            timerFirstRow_ = row;
+        }
+    }
     // (the times as they count mustn't widen the column: "Workout Time:" sets it)
     for (QLabel* label : {workoutTime_, remainingWorkoutTime_}) {
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -728,12 +964,11 @@ void HudScreen::buildTimers() {
 void HudScreen::buildOtherInfo() {
     const AppState& state = appState();
     auto* info = new QGridLayout;
-    // free mode has no Workout Time box: its battery warning sits at the top of this group
-    int row = 0;
+    // free mode has no Workout Time box: its battery warning sits just above this group
     if (!state.workoutMode) {
-        info->addWidget(batteryWarningLabel_, 0, 0, 1, 3);
-        row = 1;
+        hudLayout_->addWidget(batteryWarningLabel_, 1, 25, 1, 5);
     }
+    constexpr int row = 0;
     speedLabelTitle_ = new QLabel(QStringLiteral("Speed"));
     speedLabelTitle_->setAlignment(Qt::AlignVCenter | Qt::AlignRight);
     info->addWidget(speedLabelTitle_, row, 0, 1, 1);
@@ -758,10 +993,25 @@ void HudScreen::buildOtherInfo() {
     info->addWidget(timerLabel_, row + 2, 0, 1, 3);
     timeElapsed_ = centeredLabel(QStringLiteral("0s"));
     info->addWidget(timeElapsed_, row + 3, 0, 1, 3);
+    // a bubble behind each row (speed and distance's only with their text)
+    infoLayout_ = info;
+    QList<QFrame*> bubbles;
+    for (int i = 0; i < 4; ++i) {
+        auto* bubble = new QFrame;
+        bubble->setObjectName(QStringLiteral("infoBubble"));
+        theme::setSheet(bubble,
+                        QStringLiteral("QFrame#infoBubble{background-color:#9fc5d1; border-radius: %1px;}").arg(timerRadius_));
+        info->addWidget(bubble, row + i, 0, 1, 3);
+        bubble->setVisible(i >= 2 || state.hasSpeedSensor());
+        bubbles.append(bubble);
+    }
     if (state.workoutMode) {
         hudLayout_->addLayout(info, 16, 25, 4, 5);
     } else {
         hudLayout_->addLayout(info, 2, 25, 4, 5);
+    }
+    for (QFrame* bubble : bubbles) {
+        bubble->lower();
     }
 }
 

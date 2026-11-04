@@ -728,7 +728,9 @@ QList<ControlWindow::Fit> ControlWindow::fitResults() const {
 }
 
 void ControlWindow::updateFitReport() {
-    if (display_->views().isEmpty()) {
+    // (not mid rebuild: until applyLayout has marked the new views as screens, each is measured with the others on top
+    // of it, and would read as too tall; afterLayout reports once it has)
+    if (display_->views().isEmpty() || building()) {
         return;
     }
     const QSize available = availableSize();

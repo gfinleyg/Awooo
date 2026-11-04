@@ -2,7 +2,8 @@
 // event the UI thread handles, and prints what took the time (TimedApplication). A window opens maximized on the main
 // screen for the length of the run. See README.md.
 //
-//     perf_ride.exe [--seconds 60] [--warmup 5] [--progress 40] [--mode workout] [--workout FILE] [--theme FILE] [--out FILE]
+//     perf_ride.exe [--seconds 60] [--warmup 5] [--progress 40] [--mode workout] [--workout FILE] [--theme FILE] [--gauge-fps FPS]
+//                   [--out FILE]
 
 #include <QCommandLineParser>
 #include <QDir>
@@ -36,8 +37,10 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption modeOption("mode", "workout, free, 20m, 1h, ramp10, ramp20 or cadence", "mode", "workout");
     const QCommandLineOption workoutOption("workout", "The workout file (Workout Mode)", "file");
     const QCommandLineOption themeOption("theme", "A theme .json (none: the app's no theme look)", "file");
+    const QCommandLineOption fpsOption("gauge-fps", "The Performance setting for this ride (put back after)", "fps");
     const QCommandLineOption outOption("out", "Write the report here too", "file");
-    parser.addOptions({secondsOption, warmupOption, progressOption, modeOption, workoutOption, themeOption, outOption});
+    parser.addOptions({secondsOption, warmupOption, progressOption, modeOption, workoutOption, themeOption, fpsOption,
+                       outOption});
     parser.process(app);
     // (from where it was started, before moving to the exe's folder)
     const auto startedPath = [&parser](const QCommandLineOption& option) {
@@ -58,6 +61,10 @@ int main(int argc, char* argv[]) {
     }
     // (the views are built with stand-in devices picked: the app's own picks are put back on the way out)
     const QStringList selected = selectedDevices::read();
+    const int savedFps = Performance::current().gaugeFps();
+    if (parser.isSet(fpsOption)) {
+        Performance::current().setGaugeFps(parser.value(fpsOption).toInt());
+    }
     theme::setDefaultFont(QApplication::font());
     theme::registerFonts();
     theme::setAppStyleSheet(style::kAppStyleSheet);
@@ -113,6 +120,7 @@ int main(int argc, char* argv[]) {
         });
         code = app.exec();
     }
+    Performance::current().setGaugeFps(savedFps);
     if (selected.isEmpty()) {
         selectedDevices::clear();
     } else {

@@ -24,6 +24,7 @@
 #include "GradeWidgets.hpp"
 #include "KeyShortcuts.hpp"
 #include "MaxStar.hpp"
+#include "Performance.hpp"
 #include "PlotItems.hpp"
 #include "PyCompat.hpp"
 #include "SetupScreen.hpp"
@@ -490,7 +491,9 @@ SynopsisScreen::SynopsisScreen(ant::AntBridge* bridge, SetupScreen* setup, Clock
     starTimer_ = new QTimer(this);
     // (LayoutViewer lists them with the colors a theme can change)
     theme::setPaintedColors(this, {MaxStar::kColor, MaxStar::kEdgeColor});
-    starTimer_->setInterval(MaxStar::kStepMs);
+    starTimer_->setInterval(Performance::current().frameMs());
+    connect(&Performance::current(), &Performance::changed, starTimer_,
+            [this] { starTimer_->setInterval(Performance::current().frameMs()); });
     connect(starTimer_, &QTimer::timeout, this, &SynopsisScreen::animateStars);
     starTimer_->start();
     connect(graph_->vb(), &plot::ViewBox::xRangeChanged, selectionTimer_, qOverload<>(&QTimer::start));

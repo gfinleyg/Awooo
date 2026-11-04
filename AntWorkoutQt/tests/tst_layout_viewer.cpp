@@ -7,14 +7,17 @@
 #include <QComboBox>
 #include <QDir>
 #include <QFile>
+#include <QFrame>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
+#include <QScreen>
 #include <QSlider>
 #include <QSpinBox>
 #include <QTabWidget>
+#include <QVBoxLayout>
 #include <QtTest>
 
 #include <algorithm>
@@ -33,6 +36,7 @@
 #include "SoapBubble.hpp"
 #include "TestSupport.hpp"
 #include "Theme.hpp"
+#include "ZoneLegend.hpp"
 #include "ViewerControls.hpp"
 #include "ViewerDisplay.hpp"
 #include "ZoneColors.hpp"
@@ -192,6 +196,131 @@ private slots:
         QVERIFY(!display.workoutHud()->showingGrades());
     }
 
+    // the side gauges follow the layout's scaling on any screen, in both workout modes: one size, on one line, mirrored
+    // about the middle gauge, and the bubbles and legend beside them clear of them
+    void sideGaugesFitEveryScale() {
+        DisplayWindow display;
+        for (const QString& mode : {QStringLiteral("workout"), QStringLiteral("cadence")}) {
+            display.build(mode, kWorkoutFile, 40);
+            for (const double scale : {1.0, 0.667, 1.833}) {
+                QWidget holder;
+                auto* holderLayout = new QVBoxLayout(&holder);
+                auto* hud = new HudScreen(display.bridge(), nullptr, [] { return 1000.0; });
+                holderLayout->addWidget(hud);
+                layout::applyLayout(&holder, {{QStringLiteral("Workout"), hud}}, scale);
+                holder.setAttribute(Qt::WA_DontShowOnScreen);
+                holder.resize(static_cast<int>(1920 * scale), static_cast<int>(1116 * scale));
+                holder.show();
+                for (int i = 0; i < 6; ++i) {
+                    QCoreApplication::processEvents();
+                }
+                hud->stopTimers();
+                const Gauge* left = mode == u"cadence" ? hud->powerGauge() : hud->cadenceGauge();
+                const Gauge* middleGauge = mode == u"cadence" ? hud->cadenceGauge() : hud->powerGauge();
+                const Gauge* right = hud->heartRateGauge();
+                const QString where = QStringLiteral("%1 at %2: %3 across").arg(mode).arg(scale).arg(left->width());
+                QVERIFY2(left->width() > 200 * scale, qPrintable(where));
+                QVERIFY2(left->geometry().size() == right->geometry().size(), qPrintable(where));
+                QVERIFY2(left->geometry().center().y() == right->geometry().center().y(), qPrintable(where));
+                const QRect middle(middleGauge->gauge()->mapTo(hud, QPoint(0, 0)), middleGauge->gauge()->size());
+                const int fromLeft = middle.center().x() - left->geometry().center().x();
+                const int fromRight = right->geometry().center().x() - middle.center().x();
+                QVERIFY2(std::abs(fromLeft - fromRight) <= 2, qPrintable(where));
+                const auto clear = [&](const Gauge* gauge, const QWidget* widget) {
+                    const QRect rect(widget->mapTo(hud, QPoint(0, 0)), widget->size());
+                    const QPoint at = gauge->geometry().center();
+                    const int dx = std::max({rect.left() - at.x(), 0, at.x() - rect.right()});
+                    const int dy = std::max({rect.top() - at.y(), 0, at.y() - rect.bottom()});
+                    return std::hypot(dx, dy) >= gauge->width() / 2.0;
+                };
+                QVERIFY2(clear(left, hud->findChild<ZoneLegend*>()), qPrintable(where));
+                QVERIFY2(clear(right, hud->remainingTimeLabel()), qPrintable(where));
+                for (const QFrame* bubble : hud->findChildren<QFrame*>(QStringLiteral("infoBubble"))) {
+                    QVERIFY2(clear(right, bubble), qPrintable(where));
+                }
+            }
+        }
+    }
+
+    // switching modes back and forth, the screens being replaced still getting their last events; and every mode's
+    // screens fit every screen size
+    void modesSwitchedBackAndForthFitEveryScreen() {
+        // (with the fonts and theme the viewer starts with: what fits depends on them)
+        QFile::copy(awotest::pythonAppDir() + QStringLiteral("/defaultTheme.json"), QStringLiteral("defaultTheme.json"));
+        theme::registerFonts();
+        theme::clear();
+        DisplayWindow display;
+        ControlWindow controls(&display, {});
+        // (on the main screen, as main() puts it: not whichever the window system picks)
+        controls.setHomeScreen(QGuiApplication::primaryScreen());
+        display.move(QGuiApplication::primaryScreen()->availableGeometry().topLeft());
+        controls.rebuild();
+        display.show();
+        // (red for a moment in the report counts too)
+        QStringList flashes;
+        bool watching = true;
+        const auto watch = [&](const QString& when) {
+            const QString text = controls.fitLabel()->text();
+            if (watching && text.contains(QStringLiteral("#b00020")) && !flashes.contains(when + u' ' + text)) {
+                flashes.append(when + u' ' + text);
+            }
+        };
+        const auto settle = [&] {
+            for (int i = 0; i < 10; ++i) {
+                QCoreApplication::processEvents();
+                watch(QStringLiteral("pass %1 of %2:").arg(i).arg(controls.modeCombo()->currentData().toString()));
+            }
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        };
+        const auto pick = [&](const QString& mode) {
+            controls.modeCombo()->setCurrentIndex(controls.modeCombo()->findData(mode));
+            watch(QStringLiteral("right after picking %1:").arg(mode));
+            settle();
+            // (from the workout page, as it's being looked at)
+            display.showView(QStringLiteral("Workout"));
+            settle();
+        };
+        for (int round = 0; round < 2; ++round) {
+            for (const QString& mode : {QStringLiteral("workout"), QStringLiteral("cadence"), QStringLiteral("free"),
+                                        QStringLiteral("cadence")}) {
+                pick(mode);
+            }
+        }
+        QVERIFY2(flashes.isEmpty(), qPrintable(flashes.join(QStringLiteral("; "))));
+        // (changing the screen's size redoes the layout in steps of its own)
+        watching = false;
+        QStringList tooBig;
+        // the room kept for a workout message: its two lines, whatever size a screen was built at (any more pushes Ride
+        // At up over the middle gauge's units)
+        for (const QString& mode : {QStringLiteral("workout"), QStringLiteral("cadence"), QStringLiteral("free")}) {
+            pick(mode);
+            for (int i = 0; i < controls.screenCombo()->count(); ++i) {
+                const QString size = controls.screenCombo()->itemData(i).toString();
+                if (size == u"custom") {
+                    continue;
+                }
+                controls.screenCombo()->setCurrentIndex(i);
+                settle();
+                // (the sizes picked: the screen's own can be under the smallest scale, on a test machine)
+                if (const HudScreen* hud = i > 0 ? display.workoutHud() : nullptr) {
+                    const QLabel* message = hud->workoutMessageLabel();
+                    const int lines = 2 * message->fontMetrics().lineSpacing();
+                    QVERIFY2(message->minimumHeight() <= lines * 1.25,
+                             qPrintable(QStringLiteral("%1 %2: %3 kept for %4").arg(mode, size).arg(message->minimumHeight()).arg(lines)));
+                }
+                for (const ControlWindow::Fit& fit : controls.fitResults()) {
+                    if (!fit.fits) {
+                        tooBig.append(QStringLiteral("%1 %2 %3 needs %4x%5")
+                                          .arg(mode, size, fit.name)
+                                          .arg(fit.need.width())
+                                          .arg(fit.need.height()));
+                    }
+                }
+            }
+        }
+        QVERIFY2(tooBig.isEmpty(), qPrintable(tooBig.join(QStringLiteral("; "))));
+    }
+
     void screenSizesAndTheFitReport() {
         DisplayWindow display;
         ControlWindow controls(&display, {});
@@ -254,6 +383,8 @@ private slots:
         QCOMPARE(hrGauge->heartColor(), QColor(kHeartPink));
         controls.setColor(kHeartPink, QStringLiteral("#123456"));
         QTRY_COMPARE(hrGauge->heartColor(), QColor(QStringLiteral("#123456")));
+        // (the gauge's outer arc too)
+        QTRY_COMPARE(hrGauge->gauge()->scalePolygonColors().front().second, QColor(QStringLiteral("#123456")));
         controls.setColor(kHeartPink, std::nullopt);
         QTRY_COMPARE(hrGauge->heartColor(), QColor(kHeartPink));
         // the zone colors are the FTP Colors tab's, not on this list unless something else uses them

@@ -299,7 +299,9 @@ PerformanceWindow::PerformanceWindow(QWidget* parent) : QDialog(parent) {
     showValue();
 
     auto* note = new QLabel(QStringLiteral("How smoothly the gauge needles glide between readings.\n"
-                                           "Lower it if the workout screen is sluggish on this computer."));
+                                           "Lower it if the workout screen is sluggish on this computer.\n"
+                                           "120 fps runs the whole workout screen faster, for 120 Hz screens:\n"
+                                           "on a 60 Hz screen it only uses more CPU."));
     theme::setSheet(note, QStringLiteral("font: 900 10pt 'Orbitron';"));
     note->setAlignment(Qt::AlignCenter);
     layout->addWidget(note);

@@ -103,7 +103,9 @@ build\Release\bin\perf_ride.exe --seconds 60 --out %TEMP%\perf.txt
 It starts part way through the ride (`--progress`), in any of LayoutViewer's modes (`--mode`), with a workout and theme
 of your choice (`--workout`, `--theme`), and its first seconds (`--warmup`) aren't timed. Each row is one kind of event on
 one kind of object, its own time without the events handled inside it, most time first. `Paint` rows are a widget's
-drawing, `UpdateRequest` rows the flush to the screen around them, and `QTimer ... Timer` rows that timer's work.
+drawing, `UpdateRequest` rows the flush to the screen around them, and `QTimer ... Timer` rows that timer's work. The
+`UpdateRequest` count includes requests `FramePacer` held back for the next frame; the window's own `Paint` row counts
+the frames really drawn.
 
 To time the real app with real sensors, set `AWO_EVENT_TIMING` to a file before starting it. The report covers everything
 since the start and is written when it quits:
