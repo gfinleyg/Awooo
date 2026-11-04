@@ -109,11 +109,15 @@ QPolygonF centerGear(double r, double depth) {
     return points;
 }
 
+}  // namespace
+
 // a heart's outline around (0, 0), a little wider than a circle of radius r: the classic heart curve (32 wide, 29 tall),
-// moved up to center it and scaled to r, made fuller through its lower half so the reading sits well inside it, its point
-// drawn out and as sharp as the curve's own
-QPolygonF centerHeartOutline(double r) {
+// moved up to center it and scaled to r, made fuller through its lower half so the reading sits well inside it, ending
+// at a right angle: its sides run straight into a corner in place of the curve's thin point
+QPolygonF AnalogGauge::centerHeartOutline(double r) {
     constexpr double kWider = 1.04;
+    // how far below the middle the corner is, on the curve's scale
+    constexpr double kCorner = 15.2;
     // (the sine's power, from the curve's 3: lower is fuller)
     constexpr double kFuller = 1.5;
     // how far along the curve from its point the fullness has gone again, in radians
@@ -125,8 +129,8 @@ QPolygonF centerHeartOutline(double r) {
         return u * u * (3 - 2 * u);
     };
     QPolygonF points;
-    for (int k = 0; k < AnalogGauge::kCenterHeartPoints; ++k) {
-        const double t = 2 * std::numbers::pi * k / AnalogGauge::kCenterHeartPoints;
+    for (int k = 0; k < kCenterHeartPoints; ++k) {
+        const double t = 2 * std::numbers::pi * k / kCenterHeartPoints;
         const double fromPoint = std::abs(t - std::numbers::pi);
         const double power = 3 - kFuller * smooth(1 - fromPoint / (std::numbers::pi / 2)) * (1 - smooth(1 - fromPoint / kSharpOver));
         const double x = 16 * (std::sin(t) < 0 ? -1 : 1) * std::pow(std::abs(std::sin(t)), power);
@@ -135,12 +139,15 @@ QPolygonF centerHeartOutline(double r) {
             const double down = y / kCurveBelowMiddle;
             y *= 1 + kLonger * down * down;
         }
-        points.append(QPointF(x * kWider * r / 16, y * r / 16));
+        // (45 degrees either side of straight down from the corner, and what's past it gathered into it)
+        y = std::min(y, kCorner);
+        const QPointF point(std::clamp(x * kWider, y - kCorner, kCorner - y) * r / 16, y * r / 16);
+        if (points.isEmpty() || points.back() != point) {
+            points.append(point);
+        }
     }
     return points;
 }
-
-}  // namespace
 
 QString imagePath(const QString& name) {
     return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("images/") + name);

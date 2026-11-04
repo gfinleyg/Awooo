@@ -19,16 +19,6 @@ QString value(std::optional<double> v, const QString& unit) {
     return (v ? py::fixed(*v, 0) : QStringLiteral("--")) + unit;
 }
 
-// the max bubbles' font: the theme's plot label font, sized to their height
-QFont bubbleFont() {
-    QFont font(QStringLiteral("Orbitron"));
-    font.setBold(true);
-    font = theme::current().mapFont(font);
-    const double height = MaxStar::kRadius * theme::uiScale() * (1 + MaxStar::kBelow);
-    font.setPixelSize(std::max(6, static_cast<int>(py::round(height * 0.72))));
-    return font;
-}
-
 }  // namespace
 
 BlockBubble::BlockBubble(double start, double end, const QList<Row>& rows, double target, const plot::ViewBox* timeBox,
@@ -55,7 +45,7 @@ QStringList BlockBubble::lines() const {
 // the lines in columns, the numbers right aligned, a space apart
 void BlockBubble::fit() {
     prepareGeometryChange();
-    font_ = bubbleFont();
+    font_ = MaxBubble::textFont();
     const QFontMetricsF metrics(font_);
     lineHeight_ = metrics.height();
     columns_ = {0, 0};
@@ -176,7 +166,7 @@ bool BlockBubble::findSpot(const QList<QRectF>& obstacles) {
 // no spot, or it can't be kept on the graph: the time now too near the workout's start)
 void BlockBubble::step(double now, QList<QRectF>& avoid, const QList<QRectF>& keepOff) {
     // (again in a new theme's font or scale)
-    if (bubbleFont() != font_) {
+    if (MaxBubble::textFont() != font_) {
         fit();
     }
     now_ = now;

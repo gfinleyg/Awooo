@@ -339,13 +339,20 @@ private slots:
         rideIntoSession(kWorkout, 301, bridge_.get());
         SynopsisScreen* screen = synopsis();
         plot::CurveItem* power = screen->sensorCurves()[0];
+        // thinner than the workout graph's lines
+        QCOMPARE(power->pen().widthF(), 1.0);
+        QCOMPARE(power->shadowPen()->widthF(), 2.0);
         // on the power line (under the heart rate/cadence view)
         const qsizetype middle = power->xData().size() / 2;
         clickAt(screen->graph()->powerVBox()->mapViewToScene(QPointF(power->xData()[middle], power->yData()[middle])));
         QCOMPARE(screen->selectedCurve(), power);
-        // on nothing: cleared
+        QCOMPARE(power->pen().widthF(), 4.0);
+        QCOMPARE(power->shadowPen()->widthF(), 8.0);
+        // on nothing: cleared, thin again
         clickAt(screen->graph()->powerVBox()->mapViewToScene(QPointF(screen->totalSeconds() * 0.5, screen->graph()->powerVBox()->yRange().max * 0.97)));
         QVERIFY(screen->selectedCurve() == nullptr);
+        QCOMPARE(power->pen().widthF(), 1.0);
+        QCOMPARE(power->shadowPen()->widthF(), 2.0);
         // a max label highlights its curve
         const auto& hr = screen->maxMarkers()[1];
         clickAt(hr.label->sceneBoundingRect().center());

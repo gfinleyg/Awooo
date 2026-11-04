@@ -48,6 +48,7 @@ public:
     // the block's target (at its end)
     double target() const { return target_; }
     QStringList lines() const;
+    QFont font() const { return font_; }
     bool popping() const { return popAt_.has_value(); }
     // where it's placed (scene coordinates), at its full size
     QRectF placedRect() const { return rect_; }

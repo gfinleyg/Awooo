@@ -60,8 +60,12 @@ QString gradeBadgeCss(const QString& grade, int points) {
         .arg(theme::textOn(color));
 }
 
+// (thinner than the workout graph's: a whole ride's readings share so few pixels that its pens fill in the line's wiggles)
+constexpr double kCurveLinePx = 1;
+constexpr double kCurveHaloPx = 2;
+
 std::pair<QPen, QPen> sensorPens(const QString& sensor) {
-    return zones::sensorPens(sensor);
+    return zones::sensorPens(sensor, kCurveLinePx, kCurveHaloPx);
 }
 
 // the readings in view: (times, values) from start to end

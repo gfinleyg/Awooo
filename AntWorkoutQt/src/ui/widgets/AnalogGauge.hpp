@@ -49,6 +49,8 @@ public:
     static constexpr int kCenterHeartPoints = 144;
     // with them, the reading (fitValueInCenter) fitted in this much of the room a circle would give it
     static constexpr double kCenterHeartFit = 0.7;
+    // a center heart's outline around (0, 0), a little wider than a circle of radius r
+    static QPolygonF centerHeartOutline(double r);
 
     explicit AnalogGauge(QWidget* parent = nullptr);
 

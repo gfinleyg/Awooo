@@ -637,6 +637,24 @@ private slots:
         QCOMPARE(w->centerGearAngle(), std::optional<double>(chainring->angle()));
     }
 
+    // a center heart's bottom is a right angle, its sides straight into the corner, not a thin point
+    void centerHeartEndsAtARightAngle() {
+        const QPolygonF heart = AnalogGauge::centerHeartOutline(16);
+        const auto lowest = std::max_element(heart.begin(), heart.end(), [](const QPointF& a, const QPointF& b) { return a.y() < b.y(); });
+        const QPointF corner = *lowest;
+        QVERIFY(std::abs(corner.x()) < 1e-6);
+        QCOMPARE(std::count(heart.begin(), heart.end(), corner), 1);
+        const qsizetype at = lowest - heart.begin();
+        const QPointF before = heart[at - 1], after = heart[at + 1];
+        QCOMPARE(after.y(), before.y());
+        QCOMPARE(std::abs(before.x()), corner.y() - before.y());
+        QCOMPARE(std::abs(after.x()), corner.y() - after.y());
+        QVERIFY(before.x() * after.x() < 0);
+        // and a little way up each side, still about on the line (the curve's own, within a hair of it)
+        QVERIFY(std::abs(std::abs(heart[at + 3].x()) - (corner.y() - heart[at + 3].y())) < 0.1);
+        QVERIFY(std::abs(std::abs(heart[at - 3].x()) - (corner.y() - heart[at - 3].y())) < 0.1);
+    }
+
     // (test_power_spiral.py test_heart_rate_rings_are_hearts_pulsing_with_the_heart, changed) the heart rate gauge's
     // center: nested hearts in the color for the heart rate, brightest as each beat starts and fading over kPulseSeconds
     // (0 fps: bright for the beat, not at rest); no heart image behind it

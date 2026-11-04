@@ -49,8 +49,8 @@ Python app's own results (`tests\golden\`).
 - **The zone legend, the workout grades and the workout timer rows narrow as far as those gauges need,** and no further.
   The timer rows are 32 pixels tall (each still its own bubble) and against the column's right edge.
 - **Speed, distance and elapsed time each have a bubble behind them,** on the workout and free ride screens, in the
-  timer rows' color (`#9fc5d1`). The Python app's are plain text. Free ride's low battery warning sits just above them
-  rather than among them.
+  timer rows' color (`#9fc5d1`). The Python app's are plain text. They're rounded and spaced like the timer rows (at
+  least 32 pixels tall, 6 apart, scaled). Free ride's low battery warning sits just above them rather than among them.
 - **The heart rate gauge has an outer arc** like the other gauges, filled up to the needle in its hearts' colors (light
   pink through red to dark red). The Python app's has none.
 - **Every gauge's units are on the row of its scale's end numbers,** in the side gauges one size of numbers, and the
@@ -98,7 +98,7 @@ Python app's own results (`tests\golden\`).
 - **The heart rate gauge has no heart behind it any more; its center hearts are as big as the other gauges' center
   rings and colored by the heart rate.** They're light pink up to 90 BPM, then blend through red to dark red at 95%
   of the max heart rate set (no max set: of 200 BPM), the middle hearts paler so the reading over them stays easy to
-  read. They still pulse with each beat. The hearts are fuller through their lower half with a longer, sharp point, so the
+  read. They still pulse with each beat. The hearts are fuller through their lower half and end in a right-angled corner, so the
   reading sits well inside them; it's in the middle as big as fits, with "BPM" below, like the power and cadence gauges. The three colors can be changed in a
   theme's colors (`#ffb3c6`, `#e8102a`, `#800014`), and LayoutViewer lists them. The Python app's resting/beating
   heart image and its small red-to-pink hearts are gone, so the `hr_gauge` parity scene is meant to differ.
@@ -151,6 +151,10 @@ Python app's own results (`tests\golden\`).
   antialiased the same way. The `hud_graph`, `synopsis_screen` and workout screens' parity scenes no longer match the
   Python app's along the lines.
 
+- **The synopsis' lines are thinner**: 1 pixel over a 2 pixel halo, where the Python app's and the workout graph's are 2
+  over 3.5. A whole ride shares so few pixels that the thicker pens filled in the lines' wiggles, turning a noisy power
+  line into a solid band. A highlighted line is still 4 over 8. The `synopsis_screen` parity scene is meant to differ.
+
 - **The workout graph has no empty strips at its sides**: the power, heart rate and cadence lines start at its left
   edge (to within a reading: up to about a second, or 3 pixels) and the expected power runs to its right edge. The
   Python app's graph pads its 12 minutes by about 2% on each side (about 40 pixels at 1800 wide). The `hud_graph`
@@ -169,6 +173,12 @@ Python app's own results (`tests\golden\`).
   else higher up in it; one wider than its block only in its middle. With no clear spot it stays away until there's
   one. Max bubbles used to change sides without popping. The `hud_graph` parity scene (and the workout screens' scenes)
   are meant to differ.
+
+- **The workout graph's bubble text stays readable on small screens.** Its size follows the layout's scale but stops at
+  9 pixels (it went down to 6), and a max bubble is kept tall enough to hold its line of text clear of its rim, which
+  used to paint over the text once the bubble got as small as the line. A max bubble shown when the scale or theme font
+  changes now changes with it, as the block bubble does, rather than keeping its old size until its next pop. The
+  Python app's max bubbles shrink to 6 pixels. Parity scenes at the design size don't change.
 
 - **The device popups' title bars show their names**: "Device Selection" and "Connect Devices". The Python app's
   title bars took the window's title before it was set, so both said "CustomTitleBar".

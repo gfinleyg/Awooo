@@ -72,6 +72,9 @@ constexpr double kOpenGaugeReach = 0.72;
 // the narrowest the zone legend and the timer rows go to make room for them (their text still fits)
 constexpr int kLegendMinWidth = 360;
 constexpr int kTimerMinWidth = 280;
+// the timer rows and the speed/distance/elapsed rows under them: at least this tall, this far apart
+constexpr int kTimerRowHeight = 32;
+constexpr int kTimerRowGap = 6;
 const QString kWorkoutComplete = QStringLiteral("Workout Complete!\nCooldown, or press END for more options");
 const QString kPressStart = QStringLiteral("Press Start to begin workout");
 const QString kLastBlock = QStringLiteral("You're on the last block, way to go!");
@@ -920,24 +923,23 @@ void HudScreen::buildTimers() {
     duration->addWidget(batteryWarningLabel_, 10, 0, 1, 1);
     // rounded timer boxes (Qt draws square corners when the radius is more than half the height)
     constexpr int timerBoxHeight = 34;
-    constexpr int timerRowHeight = 32;
     timerRadius_ = timerBoxHeight / 2 - 2;
     workoutTimeHeader_ = centeredLabel(QStringLiteral("Workout Time:"));
-    workoutTimeHeader_->setMinimumHeight(timerRowHeight);
+    workoutTimeHeader_->setMinimumHeight(kTimerRowHeight);
     workoutTime_ = centeredLabel(QStringLiteral("0s / ") + minimizedDuration(state.workoutDurationSeconds));
-    workoutTime_->setMinimumHeight(timerRowHeight);
+    workoutTime_->setMinimumHeight(kTimerRowHeight);
     timeProgressBar_ = new SmoothProgressBar;
     timeProgressBar_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
     timeProgressBar_->setRange(0, 100 * state.workoutDurationSeconds);
     timeProgressBar_->setValue(0);
     timeProgressBar_->setTextVisible(false);
-    timeProgressBar_->setFixedHeight(timerRowHeight);
+    timeProgressBar_->setFixedHeight(kTimerRowHeight);
     remainingWorkoutTime_ = centeredLabel(QStringLiteral("Done in: ") + minimizedDuration(state.workoutDurationSeconds));
-    remainingWorkoutTime_->setMinimumHeight(timerRowHeight);
+    remainingWorkoutTime_->setMinimumHeight(kTimerRowHeight);
     timerStack_ = new QWidget(this);
     auto* timerRows = new QVBoxLayout(timerStack_);
     timerRows->setContentsMargins(0, 0, 0, 0);
-    timerRows->setSpacing(6);
+    timerRows->setSpacing(kTimerRowGap);
     timerRows->addWidget(workoutTimeHeader_);
     timerRows->addWidget(workoutTime_);
     timerRows->addWidget(timeProgressBar_);
@@ -964,6 +966,8 @@ void HudScreen::buildTimers() {
 void HudScreen::buildOtherInfo() {
     const AppState& state = appState();
     auto* info = new QGridLayout;
+    // (its own: otherwise it takes the whole screen's spacing)
+    info->setVerticalSpacing(kTimerRowGap);
     // free mode has no Workout Time box: its battery warning sits just above this group
     if (!state.workoutMode) {
         hudLayout_->addWidget(batteryWarningLabel_, 1, 25, 1, 5);
@@ -993,12 +997,14 @@ void HudScreen::buildOtherInfo() {
     info->addWidget(timerLabel_, row + 2, 0, 1, 3);
     timeElapsed_ = centeredLabel(QStringLiteral("0s"));
     info->addWidget(timeElapsed_, row + 3, 0, 1, 3);
-    // a bubble behind each row (speed and distance's only with their text)
+    // a bubble behind each row (speed and distance's only with their text), rounded like the timer rows: as tall as
+    // them at least, as Qt draws square corners when the radius is more than half the height
     infoLayout_ = info;
     QList<QFrame*> bubbles;
     for (int i = 0; i < 4; ++i) {
         auto* bubble = new QFrame;
         bubble->setObjectName(QStringLiteral("infoBubble"));
+        bubble->setMinimumHeight(kTimerRowHeight);
         theme::setSheet(bubble,
                         QStringLiteral("QFrame#infoBubble{background-color:#9fc5d1; border-radius: %1px;}").arg(timerRadius_));
         info->addWidget(bubble, row + i, 0, 1, 3);

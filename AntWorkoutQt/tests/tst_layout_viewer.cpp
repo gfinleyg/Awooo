@@ -12,7 +12,9 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QListWidget>
+#include <QMap>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QScreen>
 #include <QSlider>
 #include <QSpinBox>
@@ -235,8 +237,19 @@ private slots:
                 };
                 QVERIFY2(clear(left, hud->findChild<ZoneLegend*>()), qPrintable(where));
                 QVERIFY2(clear(right, hud->remainingTimeLabel()), qPrintable(where));
-                for (const QFrame* bubble : hud->findChildren<QFrame*>(QStringLiteral("infoBubble"))) {
-                    QVERIFY2(clear(right, bubble), qPrintable(where));
+                QList<QFrame*> bubbles = hud->findChildren<QFrame*>(QStringLiteral("infoBubble"));
+                std::sort(bubbles.begin(), bubbles.end(), [](const QFrame* a, const QFrame* b) { return a->y() < b->y(); });
+                // spaced like the timer rows above them, and as tall at least, so the same radius rounds them
+                const int timerGap = hud->workoutTimeLabel()->parentWidget()->layout()->spacing();
+                const int timerHeight = hud->workoutTimeLabel()->height();
+                for (qsizetype i = 0; i < bubbles.size(); ++i) {
+                    QVERIFY2(clear(right, bubbles[i]), qPrintable(where));
+                    const QString row = where + QStringLiteral(": bubble %1 is %2 tall (timers %3)").arg(i).arg(bubbles[i]->height()).arg(timerHeight);
+                    QVERIFY2(bubbles[i]->height() >= timerHeight, qPrintable(row));
+                    if (i > 0) {
+                        const int rowGap = bubbles[i]->geometry().top() - bubbles[i - 1]->geometry().bottom() - 1;
+                        QVERIFY2(rowGap == timerGap, qPrintable(where + QStringLiteral(": gap %1, timers' %2").arg(rowGap).arg(timerGap)));
+                    }
                 }
             }
         }
@@ -290,6 +303,8 @@ private slots:
         // (changing the screen's size redoes the layout in steps of its own)
         watching = false;
         QStringList tooBig;
+        QStringList bubbleFaults;
+        QMap<QString, int> timerGaps;
         // the room kept for a workout message: its two lines, whatever size a screen was built at (any more pushes Ride
         // At up over the middle gauge's units)
         for (const QString& mode : {QStringLiteral("workout"), QStringLiteral("cadence"), QStringLiteral("free")}) {
@@ -307,6 +322,24 @@ private slots:
                     const int lines = 2 * message->fontMetrics().lineSpacing();
                     QVERIFY2(message->minimumHeight() <= lines * 1.25,
                              qPrintable(QStringLiteral("%1 %2: %3 kept for %4").arg(mode, size).arg(message->minimumHeight()).arg(lines)));
+                    // the bubbles under the timers: rounded (Qt squares the corners of a radius over half the height),
+                    // and spaced like the timer rows (free ride has none: as the workout screen's at this size)
+                    if (const QLabel* timer = hud->workoutTimeLabel()) {
+                        timerGaps[size] = timer->parentWidget()->layout()->spacing();
+                    }
+                    QList<QFrame*> bubbles = hud->findChildren<QFrame*>(QStringLiteral("infoBubble"));
+                    std::sort(bubbles.begin(), bubbles.end(), [](const QFrame* a, const QFrame* b) { return a->y() < b->y(); });
+                    for (qsizetype row = 0; row < bubbles.size(); ++row) {
+                        const QString sheet = bubbles[row]->styleSheet();
+                        const int radius = QRegularExpression(QStringLiteral("border-radius: *([0-9]+)px")).match(sheet).captured(1).toInt();
+                        if (radius == 0 || bubbles[row]->height() < 2 * radius) {
+                            bubbleFaults.append(QStringLiteral("%1 %2 bubble %3: %4 tall, radius %5").arg(mode, size).arg(row).arg(bubbles[row]->height()).arg(radius));
+                        }
+                        const int rowGap = row > 0 ? bubbles[row]->geometry().top() - bubbles[row - 1]->geometry().bottom() - 1 : 0;
+                        if (row > 0 && rowGap != timerGaps.value(size)) {
+                            bubbleFaults.append(QStringLiteral("%1 %2 bubble %3: gap %4, timers' %5").arg(mode, size).arg(row).arg(rowGap).arg(timerGaps.value(size)));
+                        }
+                    }
                 }
                 for (const ControlWindow::Fit& fit : controls.fitResults()) {
                     if (!fit.fits) {
@@ -318,7 +351,33 @@ private slots:
                 }
             }
         }
+        QVERIFY2(bubbleFaults.isEmpty(), qPrintable(bubbleFaults.join(QStringLiteral("; "))));
         QVERIFY2(tooBig.isEmpty(), qPrintable(tooBig.join(QStringLiteral("; "))));
+    }
+
+    // the workout graph's bubbles on the screen sizes it previews: live, in one font, readable on a small laptop
+    void graphBubblesFollowTheScreenSize() {
+        DisplayWindow display;
+        ControlWindow controls(&display, {});
+        controls.rebuild();
+        display.build(QStringLiteral("workout"), kWorkoutFile, 40);
+        display.showView(QStringLiteral("Workout"));
+        display.setAttribute(Qt::WA_DontShowOnScreen);
+        display.show();
+        HudScreen* hud = display.workoutHud();
+        const auto shownMax = [hud]() -> MaxBubble* {
+            for (MaxBubble* bubble : hud->maxBubbles()) {
+                if (bubble->isVisible() && !bubble->popping()) {
+                    return bubble;
+                }
+            }
+            return nullptr;
+        };
+        controls.screenCombo()->setCurrentIndex(controls.screenCombo()->findData(QStringLiteral("1920x1200")));
+        QTRY_VERIFY(shownMax() && shownMax()->font().pixelSize() == 10);
+        controls.screenCombo()->setCurrentIndex(controls.screenCombo()->findData(QStringLiteral("1280x720")));
+        QTRY_VERIFY(shownMax() && shownMax()->font() == MaxBubble::textFont());
+        QCOMPARE(shownMax()->font().pixelSize(), MaxBubble::kMinTextPixels);
     }
 
     void screenSizesAndTheFitReport() {

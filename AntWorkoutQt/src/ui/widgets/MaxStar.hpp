@@ -116,6 +116,14 @@ public:
     static constexpr double kAppearSeconds = 0.28;
     // pixels kept clear around it when it's placed (it grows in a little past its size)
     static constexpr double kClear = 3;
+    // the smallest its text gets on a small screen, in pixels: it stays readable where the star goes on shrinking
+    static constexpr int kMinTextPixels = 9;
+    // pixels kept between its text's line and its top and bottom edges, clear of its rim
+    static constexpr double kTextMargin = 1.5;
+
+    // the font of the text in the graph's bubbles (this and BlockBubble): the theme's plot label font at the layout's
+    // scale, no smaller than kMinTextPixels
+    static QFont textFont();
 
     // star: the MaxStar it goes with; format: its text, with %1 for the max's value (e.g. "Max Pwr: %1 W"). Add it to
     // the graph's scene
@@ -123,6 +131,7 @@ public:
 
     MaxStar* star() const { return star_; }
     QString text() const { return text_; }
+    QFont font() const { return font_; }
     bool popping() const { return state_ == State::Popping; }
     // where it's placed (scene coordinates), at its full size
     QRectF placedRect() const { return rect_; }
@@ -137,6 +146,8 @@ public:
 
 private:
     void fit(const QString& text);
+    // the star's height, or its text's line and margins where that's more
+    static double fittedHeight();
 
     enum class State { Appearing, Shown, Popping, Hidden };
     MaxStar* star_;

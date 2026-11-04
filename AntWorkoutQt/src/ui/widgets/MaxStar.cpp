@@ -305,22 +305,31 @@ void MaxBubble::paint(QPainter* painter, const QStyleOptionGraphicsItem*, QWidge
     }
 }
 
-// the text in the theme's plot label font, sized to fill the star's height
+QFont MaxBubble::textFont() {
+    QFont font(QStringLiteral("Orbitron"));
+    font.setBold(true);
+    font = theme::current().mapFont(font);
+    const double height = MaxStar::kRadius * theme::uiScale() * (1 + MaxStar::kBelow);
+    font.setPixelSize(std::max(kMinTextPixels, static_cast<int>(py::round(height * 0.72))));
+    return font;
+}
+
+double MaxBubble::fittedHeight() {
+    return std::max(MaxStar::kRadius * theme::uiScale() * (1 + MaxStar::kBelow),
+                    QFontMetricsF(textFont()).height() + 2 * kTextMargin);
+}
+
 void MaxBubble::fit(const QString& text) {
     prepareGeometryChange();
     text_ = text;
-    height_ = MaxStar::kRadius * theme::uiScale() * (1 + MaxStar::kBelow);
-    QFont font(QStringLiteral("Orbitron"));
-    font.setBold(true);
-    font_ = theme::current().mapFont(font);
-    font_.setPixelSize(std::max(6, static_cast<int>(py::round(height_ * 0.72))));
+    height_ = fittedHeight();
+    font_ = textFont();
     width_ = QFontMetricsF(font_).horizontalAdvance(text) + 2 * kPad * height_;
 }
 
 double MaxBubble::headroom() const {
     const double scale = MaxStar::kRadius * theme::uiScale();
-    const double height = scale * (1 + MaxStar::kBelow);
-    const double above = star_->restOffset() - scale * (MaxStar::kBelow - 1) / 2 + (1 + kPopGrowth) * height / 2;
+    const double above = star_->restOffset() - scale * (MaxStar::kBelow - 1) / 2 + (1 + kPopGrowth) * fittedHeight() / 2;
     return std::max(star_->headroom(), above + 1 + MaxStar::kGap);
 }
 
@@ -332,6 +341,10 @@ void MaxBubble::step(double now, QList<QRectF>& avoid, const QList<QRectF>& keep
         return;
     }
     now_ = now;
+    // (again in a new theme's font or scale)
+    if (!text_.isEmpty() && textFont() != font_) {
+        fit(text_);
+    }
     const QRectF area = star->vbox()->sceneBoundingRect();
     const double scale = MaxStar::kRadius * theme::uiScale();
     // where the star rests over the max it's beside now (held down from the graph's top as the star is, see

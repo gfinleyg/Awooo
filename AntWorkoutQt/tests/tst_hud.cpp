@@ -15,6 +15,8 @@
 #include <QSlider>
 #include <QtTest>
 
+#include <algorithm>
+
 #include "AnalogGauge.hpp"
 #include "AntBridge.hpp"
 #include "AppLayout.hpp"
@@ -456,6 +458,13 @@ private slots:
             QCOMPARE(bubbles.size(), qsizetype(4));
             for (const QFrame* bubble : bubbles) {
                 QVERIFY(hud.batteryWarning()->geometry().bottom() < bubble->geometry().top());
+                // tall enough to be rounded, spaced like a workout's timer rows
+                QVERIFY(bubble->height() >= 32);
+            }
+            QList<QFrame*> rows = bubbles;
+            std::sort(rows.begin(), rows.end(), [](const QFrame* a, const QFrame* b) { return a->y() < b->y(); });
+            for (qsizetype i = 1; i < rows.size(); ++i) {
+                QCOMPARE(rows[i]->geometry().top() - rows[i - 1]->geometry().bottom() - 1, 6);
             }
         }
         QVERIFY(loadWorkout({QStringLiteral("1:60,0.5")}));
@@ -1232,6 +1241,47 @@ private slots:
         QVERIFY(bubble->isVisible() && !bubble->popping());
         QVERIFY(!bubble->placedRect().intersects(star.front()));
         QVERIFY(bubble->placedRect() != was);
+    }
+
+    // the graph's bubbles share one font at any scale, readable on a small screen, and those already shown change with
+    // the scale without popping; the text's line stays clear of a max bubble's rim
+    void bubbleTextFollowsTheScaleInOneReadableSize() {
+        QVERIFY(loadWorkout({"T:Scale", "1:200,0.6", "1:400,0.6"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        while (appState().secondsPassed < 280) {
+            tickSecond(hud, rider);
+        }
+        double now = 1000;
+        hud.stepGraphMarkers(now);
+        now += MaxBubble::kAppearSeconds + 0.1;
+        hud.stepGraphMarkers(now);
+        MaxBubble* maxBubble = hud.maxBubbles().front();
+        BlockBubble* blockBubble = BlockBubble::pick(hud.blockBubbles(), hud.engine().currentPower());
+        QVERIFY(maxBubble->isVisible() && blockBubble && blockBubble->isVisible());
+        for (const auto& [scale, pixels] : {std::pair{1.0, 10}, std::pair{0.667, MaxBubble::kMinTextPixels},
+                                            std::pair{0.5, MaxBubble::kMinTextPixels}, std::pair{0.3, MaxBubble::kMinTextPixels}}) {
+            theme::setUiScale(scale);
+            now += 0.1;
+            hud.stepGraphMarkers(now);
+            const QString where = QStringLiteral("at %1").arg(scale);
+            QVERIFY2(!maxBubble->popping(), qPrintable(where));
+            QVERIFY2(maxBubble->font() == MaxBubble::textFont(), qPrintable(where));
+            QCOMPARE(MaxBubble::textFont().pixelSize(), pixels);
+            QVERIFY2(blockBubble->font() == MaxBubble::textFont(), qPrintable(where));
+            const double line = QFontMetricsF(maxBubble->font()).height();
+            QVERIFY2(maxBubble->boundingRect().height() - 2 >= line + 2 * MaxBubble::kTextMargin - 0.001, qPrintable(where));
+        }
+        // (bigger screens: on up with the scale)
+        theme::setUiScale(2.0);
+        QCOMPARE(MaxBubble::textFont().pixelSize(), 21);
+        theme::setUiScale(1.0);
     }
 
     // a star touching a block bubble pops it, and a new one comes in clear of it, still in its block
