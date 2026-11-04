@@ -28,6 +28,7 @@
 #include "FtpTest.hpp"
 #include "GoldenRides.hpp"
 #include "GradeWidgets.hpp"
+#include "HatchedLabel.hpp"
 #include "HudScreen.hpp"
 #include "KeyShortcuts.hpp"
 #include "MaxStar.hpp"
@@ -763,6 +764,45 @@ private slots:
         QVERIFY(!hud.gradeList()->isVisible());
         QVERIFY(hud.upNextLabel()->isVisible());
         QVERIFY(!hud.gradeList()->blinking());
+    }
+
+    // an interval's blocks not being ridden: fainter text and lines over the box, the one being ridden plain, and the
+    // lines' pixmap only made again when it has to be
+    void inactiveIntervalBlocksHatched() {
+        QVERIFY(loadWorkout({"1:10,0.5", "3:2;1:20,0.8;1:20,0.6;1:20,0.7", "1:60,0.5"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        hud.resize(1920, 1116);
+        hud.show();
+        SimulatedRider rider;
+        hud.startWorkout();
+        while (hud.engine().currentKind() != 3 || hud.engine().currentIntervalBlockIndex() != 1) {
+            tickSecond(hud, rider);
+        }
+        QList<HatchedLabel*> shown;
+        for (HatchedLabel* label : hud.findChildren<HatchedLabel*>()) {
+            if (label->isVisible()) {
+                shown.append(label);
+            }
+        }
+        QCOMPARE(shown.size(), 3);
+        std::sort(shown.begin(), shown.end(), [](auto* a, auto* b) { return a->y() < b->y(); });
+        QVERIFY(!shown[0]->isEnabled() && shown[1]->isEnabled() && !shown[2]->isEnabled());
+        QVERIFY(theme::originalSheet(shown[0]).contains(QStringLiteral("QLabel:disabled{color:#59")));
+        const auto colorsNearEnd = [](QLabel* label) {
+            const QImage image = label->grab().toImage();
+            QSet<QRgb> colors;
+            for (int x = 30; x < 80; ++x) {
+                colors.insert(image.pixel(x, image.height() / 2));
+            }
+            return colors;
+        };
+        QVERIFY(colorsNearEnd(shown[0]).size() > 3);
+        QCOMPARE(shown[1]->hatchBuilds(), 0);
+        const int builds = shown[0]->hatchBuilds();
+        QVERIFY(builds >= 1);
+        shown[0]->grab();
+        QCOMPARE(shown[0]->hatchBuilds(), builds);
     }
 
     // a last interval: each repeat's grade as it ends, each block's own once all its repeats have theirs

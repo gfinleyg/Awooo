@@ -4,6 +4,8 @@
 
 #include <algorithm>
 
+#include "HatchTile.hpp"
+
 namespace awo::plot {
 
 SolidColoredColumns::SolidColoredColumns(QGraphicsItem* parent) : QGraphicsObject(parent) {
@@ -49,6 +51,21 @@ void SolidColoredColumns::recolor() {
     update();
 }
 
+void SolidColoredColumns::setHatched(bool hatched) {
+    if (hatched_ != hatched) {
+        hatched_ = hatched;
+        rectsDirty_ = true;
+        update();
+    }
+}
+
+void SolidColoredColumns::setHatchScale(double scale) {
+    if (hatchScale_ != scale) {
+        hatchScale_ = scale;
+        update();
+    }
+}
+
 void SolidColoredColumns::clear() {
     setColumns({}, {}, {});
 }
@@ -71,11 +88,11 @@ void SolidColoredColumns::buildRects() {
         }
         const QRectF rect(xs_[i], 0, xs_[i + 1] - xs_[i], ys_[i]);
         auto found = std::find_if(rects_.begin(), rects_.end(),
-                                  [&](const auto& entry) { return entry.first.rgba() == color.rgba(); });
+                                  [&](const ColorRects& entry) { return entry.color.rgba() == color.rgba(); });
         if (found == rects_.end()) {
-            rects_.append({color, {rect}});
+            rects_.append({color, hatched_ ? hatchInk(color) : QColor(), {rect}});
         } else {
-            found->second.append(rect);
+            found->rects.append(rect);
         }
     }
 }
@@ -93,9 +110,25 @@ void SolidColoredColumns::paint(QPainter* painter, const QStyleOptionGraphicsIte
     }
     painter->setCompositionMode(QPainter::CompositionMode_SourceOver);
     painter->setPen(Qt::NoPen);
-    for (const auto& [color, rects] : rects_) {
-        painter->setBrush(color);
-        painter->drawRects(rects.constData(), static_cast<int>(rects.size()));
+    for (const ColorRects& entry : rects_) {
+        painter->setBrush(entry.color);
+        painter->drawRects(entry.rects.constData(), static_cast<int>(entry.rects.size()));
+    }
+    if (hatched_) {
+        // on the screen's pixels: the tile would be stretched to the graph's scale otherwise, and resampled each frame
+        const QTransform toScreen = painter->worldTransform();
+        const double ratio = painter->device() ? painter->device()->devicePixelRatioF() : 1.0;
+        // (so the lines go along with the columns)
+        const QPointF anchor(toScreen.map(QPointF(0, 0)).x(), 0);
+        painter->save();
+        painter->resetTransform();
+        for (const ColorRects& entry : rects_) {
+            const QPixmap tile = hatchTile(entry.ink, hatchScale_, ratio);
+            for (const QRectF& rect : entry.rects) {
+                drawHatch(*painter, toScreen.mapRect(rect).toRect(), tile, anchor);
+            }
+        }
+        painter->restore();
     }
 }
 

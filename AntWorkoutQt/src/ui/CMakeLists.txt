@@ -53,6 +53,8 @@ add_library(awo_ui STATIC
     widgets/GradeWidgets.hpp
     widgets/HaloLabel.cpp
     widgets/HaloLabel.hpp
+    widgets/HatchedLabel.cpp
+    widgets/HatchedLabel.hpp
     widgets/LongVLabels.cpp
     widgets/LongVLabels.hpp
     widgets/MaxStar.cpp

@@ -15,6 +15,7 @@
 
 #include "AnalogGauge.hpp"
 #include "AppState.hpp"
+#include "HatchTile.hpp"
 #include "PyCompat.hpp"
 #include "Theme.hpp"
 #include "ZoneColors.hpp"
@@ -235,8 +236,15 @@ void GraphMock::paintEvent(QPaintEvent*) {
             const auto [zone, watts] = samples[i];
             const double height = (rowHeight - 12) * (0.3 + 0.175 * zone);
             const double left = rect.left() + labelWidth + 10 + i * barWidth;
-            painter.setBrush(zones::graphColor(watts, ranges, states[row].first));
-            painter.drawRect(QRectF(left, top + rowHeight - 6 - height, barWidth - 1, height));
+            const QColor color = zones::graphColor(watts, ranges, states[row].first);
+            const QRectF bar(left, top + rowHeight - 6 - height, barWidth - 1, height);
+            painter.setBrush(color);
+            painter.drawRect(bar);
+            // (as on the graph: what's still to come has lines over it)
+            if (states[row].first != ftpcolors::GraphState::Past) {
+                plot::drawHatch(painter, bar.toRect(), plot::hatchTile(plot::hatchInk(color), 1.0, devicePixelRatioF()),
+                                QPointF());
+            }
         }
     }
 }

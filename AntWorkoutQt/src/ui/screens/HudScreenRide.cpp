@@ -19,6 +19,7 @@
 #include "BlockBubble.hpp"
 #include "ConfirmEndWorkoutWindow.hpp"
 #include "GradeWidgets.hpp"
+#include "HatchedLabel.hpp"
 #include "HudScreen.hpp"
 #include "LongVLabels.hpp"
 #include "Logger.hpp"
@@ -68,6 +69,12 @@ QString dimColor(const QString& hex) {
                   static_cast<int>(py::round(color.green() + (grey.green() - color.green()) * 0.5)),
                   static_cast<int>(py::round(color.blue() + (grey.blue() - color.blue()) * 0.5)))
         .name();
+}
+
+// a block's text color in its sheet (none for the plain boxes)
+QString textColorIn(const QString& css) {
+    static const QRegularExpression color(QStringLiteral("(?:^|[;\\s])color:\\s*(#[0-9a-fA-F]{6})"));
+    return color.match(css).captured(1);
 }
 
 const SavedValues& savedValues(const QString& name) {
@@ -490,7 +497,7 @@ void HudScreen::blockBlinkOn() {
 // ---- Labels ----
 
 // a block label's colors in its own sheet (it beats the screen's QLabel:disabled rule, so it carries its own: an
-// interval's blocks not being ridden dim, their background halfway to grey)
+// interval's blocks not being ridden dim, their background halfway to grey and their text its own color at 35%)
 QString HudScreen::labelColor(const QString& text) const {
     const QString css = labelColorCss(text);
     static const QRegularExpression background(QStringLiteral("background-color:[^;]*;"));
@@ -509,7 +516,9 @@ QString HudScreen::labelColor(const QString& text) const {
         }
         dimmed = replaced + dimmed.mid(last);
     }
-    return QStringLiteral("QLabel{%1} QLabel:disabled{color:#6a6a6a; %2}").arg(css, dimmed);
+    const QString textColor = textColorIn(css);
+    return QStringLiteral("QLabel{%1} QLabel:disabled{color:#59%2; %3}")
+        .arg(css, (textColor.isEmpty() ? QStringLiteral("#111111") : textColor).mid(1), dimmed);
 }
 
 QString HudScreen::labelColorCss(const QString& text) const {
@@ -530,6 +539,19 @@ QString HudScreen::labelColorCss(const QString& text) const {
 
 void HudScreen::setLabelColor(QLabel* label) {
     theme::setSheet(label, labelColor(label->text()));
+    if (auto* hatched = qobject_cast<HatchedLabel*>(label)) {
+        // the lines go by the middle of the box as it's dimmed
+        static const QRegularExpression hex(QStringLiteral("#[0-9a-fA-F]{6}"));
+        const QString css = labelColorCss(label->text());
+        QStringList stops;
+        for (auto it = hex.globalMatch(css.left(css.indexOf(u';'))); it.hasNext();) {
+            stops.append(dimColor(it.next().captured(0)));
+        }
+        const QColor first(stops.value(0, dimColor(QStringLiteral("#9fc5d1"))));
+        const QColor last(stops.isEmpty() ? first : QColor(stops.back()));
+        hatched->setHatchBackground(QColor((first.red() + last.red()) / 2, (first.green() + last.green()) / 2,
+                                           (first.blue() + last.blue()) / 2));
+    }
 }
 
 // the up next box and the coming up list, at the difficulty set
@@ -1113,6 +1135,7 @@ void HudScreen::hudGraphDataUpdate() {
         };
         // the targets coming up: until the workout's started (or while paused) they move along after the time now,
         // grey and nearly see-through
+        workoutPowerPlot_->setHatchScale(theme::widgetScale(progressGraph_));
         workoutPowerPlot_->setData(timeGraphList_, powerGraphList_, ranges.limits,
                                    colorer(engine_->unpaused() ? ftpcolors::GraphState::Upcoming
                                                                : ftpcolors::GraphState::Paused));

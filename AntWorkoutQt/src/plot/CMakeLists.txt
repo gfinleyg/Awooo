@@ -2,6 +2,8 @@
 add_library(awo_plot STATIC
     AxisItem.cpp
     AxisItem.hpp
+    HatchTile.cpp
+    HatchTile.hpp
     PlotItems.cpp
     PlotItems.hpp
     PlotWidget.cpp

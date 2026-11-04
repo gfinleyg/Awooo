@@ -12,6 +12,7 @@
 #include "AxisItem.hpp"
 #include "MaxStar.hpp"
 #include "PlotItems.hpp"
+#include "HatchTile.hpp"
 #include "SolidColoredColumns.hpp"
 #include "TestSupport.hpp"
 #include "Theme.hpp"
@@ -271,6 +272,60 @@ private slots:
         columns->paint(&painter, nullptr, nullptr);
         painter.end();
         QCOMPARE(calls, 2);
+    }
+
+    // the tile's cached (the same pixmap each time), antialiased, and repeats without a seam
+    void hatchTileCachedAndSeamless() {
+        const QColor ink = plot::hatchInk(QColor(QStringLiteral("#d0d0d0")));
+        QCOMPARE(ink.alpha(), plot::kHatchAlpha);
+        const QPixmap tile = plot::hatchTile(ink, 1.0, 1.0);
+        QCOMPARE(plot::hatchTile(ink, 1.0, 1.0).cacheKey(), tile.cacheKey());
+        QVERIFY(plot::hatchTile(ink, 2.0, 1.0).cacheKey() != tile.cacheKey());
+        const QImage image = tile.toImage();
+        QCOMPARE(image.width(), 10);
+        QSet<int> alphas;
+        for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+                alphas.insert(image.pixelColor(x, y).alpha());
+                // (the next pixel along the line, round the edges, is the same)
+                const QPoint next((x + 1) % image.width(), (y + image.height() - 1) % image.height());
+                QVERIFY(std::abs(image.pixelColor(x, y).alpha() - image.pixelColor(next).alpha()) <= 1);
+            }
+        }
+        // none, full ink and some between: antialiased
+        QVERIFY(alphas.contains(0) && alphas.size() > 2);
+    }
+
+    // hatched columns have lines over them, on the screen's pixels, going along with the columns; others have none
+    void columnsHatched() {
+        plot::ViewBox view;
+        auto* columns = new plot::SolidColoredColumns;
+        view.addItem(columns);
+        columns->setData({0, 50}, {50}, {100}, QList<QColor>{QColor(Qt::white), QColor(Qt::white)});
+        const auto drawn = [&](double shift) {
+            QImage image(100, 50, QImage::Format_ARGB32_Premultiplied);
+            image.fill(Qt::blue);
+            QPainter painter(&image);
+            // (x stretched, y flipped, as a graph's)
+            painter.setTransform(QTransform(2, 0, 0, -1, shift, 50));
+            columns->paint(&painter, nullptr, nullptr);
+            return image;
+        };
+        const auto colorsIn = [](const QImage& image, int right) {
+            QSet<QRgb> colors;
+            for (int x = 0; x < right; ++x) {
+                colors.insert(image.pixel(x, 25));
+            }
+            return colors;
+        };
+        QCOMPARE(colorsIn(drawn(0), 100).size(), 1);
+        columns->setHatched(true);
+        const QImage still = drawn(0);
+        QVERIFY(colorsIn(still, 100).size() > 2);
+        // (white stays lighter than the lines: not stretched by the x scale, so a line's every 10 px)
+        QCOMPARE(still.pixel(10, 25), still.pixel(30, 25));
+        const QImage moved = drawn(-5);
+        QCOMPARE(moved.pixel(10, 25), still.pixel(15, 25));
     }
 
     void curveBoundsReachItsPens() {

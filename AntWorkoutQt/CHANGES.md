@@ -174,6 +174,13 @@ Python app's own results (`tests\golden\`).
   one. Max bubbles used to change sides without popping. The `hud_graph` parity scene (and the workout screens' scenes)
   are meant to differ.
 
+- **It's easier to see what isn't being ridden.** An interval's blocks not being ridden have fainter text (the block's
+  own text color at 35%, where it was a solid grey) and faint diagonal lines over the box, in a color picked to contrast
+  with it, which fade out behind the text so it stays readable. The workout graph's bars still to come, paused or not,
+  and those rows of the FTP Colors tab's preview, have the same lines, since their colors alone looked much like the
+  bars ridden. The lines on the bars move along with them. The `hud_screen` parity scene and the other workout screens'
+  are meant to differ on those bars; `hud_interval` is a new scene (C++ only) showing a live interval.
+
 - **The workout graph's bubble text stays readable on small screens.** Its size follows the layout's scale but stops at
   9 pixels (it went down to 6), and a max bubble is kept tall enough to hold its line of text clear of its rim, which
   used to paint over the text once the bubble got as small as the line. A max bubble shown when the scale or theme font

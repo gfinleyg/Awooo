@@ -24,6 +24,7 @@
 #include "ConfirmEndWorkoutWindow.hpp"
 #include "GradeWidgets.hpp"
 #include "HaloLabel.hpp"
+#include "HatchedLabel.hpp"
 #include "KeyShortcuts.hpp"
 #include "LongVLabels.hpp"
 #include "MusicPlayer.hpp"
@@ -107,6 +108,12 @@ QString sensorColor(const QString& name) {
 
 QLabel* centeredLabel(const QString& text = {}) {
     auto* label = new QLabel(text);
+    label->setAlignment(Qt::AlignCenter);
+    return label;
+}
+
+QLabel* hatchedCenteredLabel() {
+    auto* label = new HatchedLabel;
     label->setAlignment(Qt::AlignCenter);
     return label;
 }
@@ -457,11 +464,11 @@ void HudScreen::buildCurrentBlock() {
     theme::setSheet(blockMultiplierLabel_, QStringLiteral("font: 900 24pt 'Orbitron';"));
     block->addWidget(blockMultiplierLabel_, 0, 0, 6, 2);
     for (int i = 0; i < 3; ++i) {
-        blockInt3Label_[i] = centeredLabel();
+        blockInt3Label_[i] = hatchedCenteredLabel();
         block->addWidget(blockInt3Label_[i], 2 * i, 2, 2, 14);
     }
     for (int i = 0; i < 2; ++i) {
-        blockInt2Label_[i] = centeredLabel();
+        blockInt2Label_[i] = hatchedCenteredLabel();
         block->addWidget(blockInt2Label_[i], 3 * i, 2, 3, 14);
     }
     blockNonIntLabel_ = centeredLabel(kPressStart);
@@ -830,6 +837,8 @@ void HudScreen::buildGraph() {
     // the workout's target bars; Musical Cadence Mode's targets are cadences, drawn on the cadence axis
     plot::ViewBox* targetVBox = cadenceMode_ ? progressGraph_->hrCadenceVBox() : progressGraph_->powerVBox();
     workoutPowerPlot_ = new plot::SolidColoredColumns;
+    // (what's still to come, paused or not)
+    workoutPowerPlot_->setHatched(true);
     targetVBox->addItem(workoutPowerPlot_);
     workoutPowerCompletedPlot_ = new plot::SolidColoredColumns;
     targetVBox->addItem(workoutPowerCompletedPlot_);

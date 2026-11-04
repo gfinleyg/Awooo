@@ -666,7 +666,7 @@ void restStars(const QList<std::pair<MaxStar*, QString>>& stars, const QList<Max
 
 // The workout screen 600 s into the first shipped workout, ridden by the simulated rider (seed 3) a second a tick,
 // laid out at 1920x1116
-QWidget* sceneHudScreen() {
+QWidget* hudSceneRidden(const QString& workoutPath, double seconds) {
     static awotest::FakeAnt fake;
     static StubBridge bridge(fake);
     writeSceneSettings();
@@ -698,15 +698,14 @@ QWidget* sceneHudScreen() {
     state.antCadence = false;
     state.antSpeed = false;
     state.ftpRanges = zones::powerRanges();
-    const QString path = firstShippedWorkout();
-    setup->loadWorkoutFile(path);
-    state.workoutFilename = path;
-    state.workoutFilenameShort = path.split(u'/').last();
+    setup->loadWorkoutFile(workoutPath);
+    state.workoutFilename = workoutPath;
+    state.workoutFilenameShort = workoutPath.split(u'/').last();
     state.startTimestamp = QDateTime::currentDateTime();
     delete setup;
     auto* hud = new HudScreen(&bridge);
     SimulatedRider rider(3);
-    hud->runSimulatedRide(600, rider);
+    hud->runSimulatedRide(seconds, rider);
     hud->stopTimers();
     for (QTimer* timer : hud->gradeOverlay()->findChildren<QTimer*>()) {
         timer->stop();
@@ -725,6 +724,20 @@ QWidget* sceneHudScreen() {
               hud->upcomingBubbleTarget());
     settle();
     return holder;
+}
+
+QWidget* sceneHudScreen() {
+    return hudSceneRidden(firstShippedWorkout(), 600);
+}
+
+// (C++ only) a three block interval's second block being ridden: its other blocks, and the bars still to come, have
+// lines over them
+QWidget* sceneHudInterval() {
+    QFile file(QStringLiteral("hud_interval.awo"));
+    file.open(QIODevice::WriteOnly | QIODevice::Text);
+    file.write("1:60,0.5\n3:3;1:40,1.1;1:20,0.6;1:30,0.75\n1:120,0.9\n1:60,1.3\n1:120,0.5\n");
+    file.close();
+    return hudSceneRidden(QFileInfo(file).absoluteFilePath(), 110);
 }
 
 // The synopsis of the first shipped workout ridden start to finish by the simulated rider (seed 11) a second a tick,
@@ -1102,6 +1115,7 @@ const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("calibrate_power"), sceneCalibratePower},
     {QStringLiteral("workout_picker"), sceneWorkoutPicker},
     {QStringLiteral("hud_screen"), sceneHudScreen},
+    {QStringLiteral("hud_interval"), sceneHudInterval},
     {QStringLiteral("synopsis_screen"), sceneSynopsisScreen},
     {QStringLiteral("music_picker"), sceneMusicPicker},
     {QStringLiteral("cadence_screen"), sceneCadenceScreen},

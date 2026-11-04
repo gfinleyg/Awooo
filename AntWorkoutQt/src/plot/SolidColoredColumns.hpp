@@ -31,6 +31,9 @@ public:
     const QList<double>& yData() const { return ys_; }
     // drawn again with the colorer's colors as they are now
     void recolor();
+    // faint diagonal lines over the columns (see HatchTile), that move along with them; scale: their size's
+    void setHatched(bool hatched);
+    void setHatchScale(double scale);
     void clear();
 
     QRectF boundingRect() const override;
@@ -45,8 +48,16 @@ private:
     Colorer colorer_;
     QRectF bounds_;
     // one list of rectangles per color (a list of rectangles draws much faster than one path of them)
-    QList<std::pair<QColor, QList<QRectF>>> rects_;
+    struct ColorRects {
+        QColor color;
+        // (of the lines over them)
+        QColor ink;
+        QList<QRectF> rects;
+    };
+    QList<ColorRects> rects_;
     bool rectsDirty_ = true;
+    bool hatched_ = false;
+    double hatchScale_ = 1.0;
 };
 
 }  // namespace awo::plot
