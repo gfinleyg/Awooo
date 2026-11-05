@@ -14,7 +14,8 @@
 // widget). Repaints from an animated widget behind it just copy the last frame.
 //
 // Gauge: the gauge over a background image (a spinning chainring for cadence), or for heart rate with no background, its
-// center nested hearts pulsing with the heartbeat and colored by the heart rate.
+// center nested hearts pulsing with the heartbeat and colored by the heart rate. The spin and the beat go at the last 3
+// seconds' average (RecentAverage), the needle and the reading at each reading.
 
 #include <QElapsedTimer>
 #include <QFont>
@@ -24,6 +25,7 @@
 #include <QPolygonF>
 #include <QWidget>
 
+#include <deque>
 #include <functional>
 #include <map>
 #include <optional>
@@ -251,6 +253,28 @@ private:
     double needleLastStep_ = 0;
 };
 
+// the average of a reading over its last kSeconds, by how long each value held (so it doesn't matter how often readings
+// come, or whether they repeat); just the time since the first one, until there's that much. Readings of 0: with
+// zeroCounts they're averaged in like any other (a chainring slows to a stop); without, that time is left out (no heart
+// rate isn't a slow one), and it's 0 once there's no other reading left in the last kSeconds.
+class RecentAverage {
+public:
+    static constexpr double kSeconds = 3.0;
+
+    explicit RecentAverage(bool zeroCounts = true) : zeroCounts_(zeroCounts) {}
+    void add(double value, double now);
+    double at(double now) const;
+
+private:
+    struct Sample {
+        double value;
+        double since;
+    };
+
+    bool zeroCounts_;
+    std::deque<Sample> samples_;
+};
+
 // a heartbeat at the rate bpmSource() returns (read again every beat, so it follows the heart rate as it changes):
 // beating() for the first kBeatFraction of each beat. pulsed(level): 1 as each beat starts, fading to 0 over
 // kPulseSeconds at the Performance setting's frame rate (0 fps: 1 for the beat, 0 at rest), e.g. for the gauge's center
@@ -267,6 +291,8 @@ public:
     explicit Heartbeat(std::function<double()> bpmSource, QObject* parent = nullptr);
     QTimer* beatTimer() const { return beatTimer_; }
     QTimer* pulseTimer() const { return pulseTimer_; }
+    // the rate it's beating at now (0: resting)
+    double bpm() const { return bpmSource_(); }
     bool beating() const { return beating_; }
     void setBeating(bool beating);
 
@@ -332,7 +358,7 @@ public:
     };
 
     // svgFile: the background (none: no background); beat: no background, the center's nested hearts beat at the
-    // gauge's value (heart rate); spin: spins at the gauge's reading (cadence)
+    // average of the gauge's recent values (heart rate); spin: spins at the average of its recent readings (cadence)
     explicit Gauge(const QString& svgFile = {}, const std::optional<Beat>& beat = std::nullopt, bool spin = false,
                    QWidget* parent = nullptr);
 
@@ -354,6 +380,9 @@ private:
     Heartbeat* heart_ = nullptr;
     QList<std::pair<double, QColor>> heartColors_;
     double heartLevel_ = 0.0;
+    // the readings the spin or the beat goes at
+    RecentAverage recent_;
+    QElapsedTimer recentClock_;
 };
 
 // the app's images folder (beside the exe)

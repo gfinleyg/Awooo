@@ -637,6 +637,85 @@ private slots:
         QCOMPARE(w->centerGearAngle(), std::optional<double>(chainring->angle()));
     }
 
+    // by how long each value held, over the last 3 seconds; just the time there's been until there's that much
+    void recentAverageIsOverTheLastThreeSeconds() {
+        RecentAverage average;
+        QCOMPARE(average.at(5), 0.0);
+        average.add(90, 10);
+        QCOMPARE(average.at(10), 90.0);
+        QCOMPARE(average.at(12), 90.0);
+        // 2 seconds of 90, 1 of 60
+        average.add(60, 12);
+        QCOMPARE(average.at(13), 80.0);
+        // repeats change nothing
+        average.add(60, 12.5);
+        QCOMPARE(average.at(13), 80.0);
+        // 1 of 90 left, 2 of 60
+        QCOMPARE(average.at(14), 70.0);
+        QCOMPARE(average.at(15), 60.0);
+        // a 0 counts, and once it's all that's left it's exactly 0
+        average.add(0, 15);
+        QCOMPARE(average.at(16.5), 30.0);
+        QCOMPARE(average.at(18), 0.0);
+        // not without zeroCounts: that time is left out, until there's no other reading left
+        RecentAverage heart(false);
+        heart.add(120, 10);
+        heart.add(0, 11);
+        QCOMPARE(heart.at(11), 120.0);
+        QCOMPARE(heart.at(13), 120.0);
+        heart.add(60, 13);
+        // half a second of 120 left, half a second of 60
+        QCOMPARE(heart.at(13.5), 90.0);
+        QCOMPARE(heart.at(14), 60.0);
+        heart.add(0, 14);
+        QCOMPARE(heart.at(16.5), 60.0);
+        QCOMPARE(heart.at(17), 0.0);
+    }
+
+    // the chainring spins at the last few seconds' cadence, slowing to a stop; the needle and reading go straight there
+    void chainringSpinsAtTheRecentAverage() {
+        Performance::current().setGaugeFps(0);
+        Gauge gauge(QStringLiteral("Chainring.svg"), std::nullopt, true);
+        AnalogGauge* w = gauge.gauge();
+        RotatingSvgWidget* chainring = gauge.chainring();
+        w->setMaxValue(200);
+        QCOMPARE(chainring->rpm(), 0.0);
+        w->setValue(90);
+        QCOMPARE(chainring->rpm(), 90.0);
+        QTest::qWait(300);
+        w->setValue(0);
+        QCOMPARE(w->reading(), 0.0);
+        QCOMPARE(w->displayValue(), 0.0);
+        QTest::qWait(100);
+        QVERIFY(chainring->rpm() > 0 && chainring->rpm() < 90);
+        QTRY_COMPARE(chainring->rpm(), 0.0);
+    }
+
+    // the heart beats at the last few seconds' heart rate, and at a real one through a dropout, not a slow one
+    void heartBeatsAtTheRecentAverage() {
+        Performance::current().setGaugeFps(0);
+        Gauge gauge({}, Gauge::Beat{{{90, QColor(QStringLiteral("#ffb3c6"))}}});
+        AnalogGauge* w = gauge.gauge();
+        w->setMinValue(40);
+        w->setMaxValue(200);
+        Heartbeat* heart = gauge.heart();
+        heart->beatTimer()->stop();
+        QCOMPARE(heart->bpm(), 0.0);
+        w->setValue(120);
+        QCOMPARE(heart->bpm(), 120.0);
+        QTest::qWait(300);
+        w->setValue(180);
+        QCOMPARE(w->value(), 180.0);
+        QTest::qWait(100);
+        QVERIFY(heart->bpm() > 120 && heart->bpm() < 180);
+        w->setValue(0);
+        const double held = heart->bpm();
+        QVERIFY(held > 120 && held < 180);
+        QTest::qWait(100);
+        QCOMPARE(heart->bpm(), held);
+        QTRY_COMPARE(heart->bpm(), 0.0);
+    }
+
     // a center heart's bottom is a right angle, its sides straight into the corner, not a thin point
     void centerHeartEndsAtARightAngle() {
         const QPolygonF heart = AnalogGauge::centerHeartOutline(16);

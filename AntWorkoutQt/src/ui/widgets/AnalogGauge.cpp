@@ -961,6 +961,34 @@ void AnalogGauge::drawFrame() {
     frameRect_ = faceRect_ | centerRect_ | textRect_;
 }
 
+// ---- RecentAverage ----
+
+void RecentAverage::add(double value, double now) {
+    // (the oldest stays while it reaches into the last kSeconds)
+    while (samples_.size() >= 2 && samples_[1].since <= now - kSeconds) {
+        samples_.pop_front();
+    }
+    samples_.push_back({value, now});
+}
+
+double RecentAverage::at(double now) const {
+    double total = 0;
+    double seconds = 0;
+    for (size_t i = 0; i < samples_.size(); ++i) {
+        const double from = std::max(samples_[i].since, now - kSeconds);
+        const double to = i + 1 < samples_.size() ? samples_[i + 1].since : now;
+        if (to > from && (zeroCounts_ || samples_[i].value > 0)) {
+            total += samples_[i].value * (to - from);
+            seconds += to - from;
+        }
+    }
+    if (seconds > 0) {
+        return total / seconds;
+    }
+    // (no time has passed since the first reading, or there's only no reading left)
+    return samples_.empty() ? 0 : samples_.back().value;
+}
+
 // ---- Heartbeat ----
 
 Heartbeat::Heartbeat(std::function<double()> bpmSource, QObject* parent)
@@ -1091,10 +1119,16 @@ Gauge::Gauge(const QString& svgFile, const std::optional<Beat>& beat, bool spin,
     resize(400, 300);
     auto* layout = new QGridLayout(this);
     AnalogGauge* gauge = gauge_;
+    recentClock_.start();
+    const auto recentNow = [this] { return recentClock_.nsecsElapsed() / 1e9; };
     if (beat) {
         // the center point nested hearts in the color for the gauge's value (paler toward the middle, see
-        // centerRingsPale), pulsing with each beat at it
-        heart_ = new Heartbeat([gauge] { return gauge->value() > gauge->minValue() ? gauge->value() : 0; }, this);
+        // centerRingsPale), pulsing with each beat at its recent average
+        recent_ = RecentAverage(false);
+        connect(gauge, &AnalogGauge::valueChanged, this, [this, gauge, recentNow] {
+            recent_.add(gauge->value() > gauge->minValue() ? gauge->value() : 0, recentNow());
+        });
+        heart_ = new Heartbeat([this, recentNow] { return recent_.at(recentNow()); }, this);
         gauge->centerHeart = true;
         heartColors_ = beat->colors;
         std::stable_sort(heartColors_.begin(), heartColors_.end(),
@@ -1114,9 +1148,12 @@ Gauge::Gauge(const QString& svgFile, const std::optional<Beat>& beat, bool spin,
         connect(&theme::notifier(), &theme::Notifier::changed, this, &Gauge::colorArc);
         colorHeart();
     } else if (spin) {
-        // the chainring spins at the reading, in RPM
-        auto* chainring = new RotatingSvgWidget(
-            imagePath(svgFile), [gauge] { return gauge->reading() > gauge->minValue() ? gauge->reading() : 0; });
+        // the chainring spins at the recent average of the reading, in RPM
+        connect(gauge, &AnalogGauge::valueChanged, this, [this, gauge, recentNow] {
+            recent_.add(gauge->reading() > gauge->minValue() ? gauge->reading() : 0, recentNow());
+        });
+        auto* chainring =
+            new RotatingSvgWidget(imagePath(svgFile), [this, recentNow] { return recent_.at(recentNow()); });
         // (with center rings, their outermost a gear turning with it)
         gauge->setCenterGearAngle(chainring->angle());
         connect(chainring, &RotatingSvgWidget::turned, gauge,

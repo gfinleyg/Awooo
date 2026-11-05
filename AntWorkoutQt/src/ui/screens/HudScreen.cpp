@@ -525,7 +525,7 @@ void HudScreen::buildGauges() {
     }
     updatePowerRings();
     if (state.showsCadence()) {
-        // the chainring spins at the cadence
+        // the chainring spins at the cadence (its recent average)
         cadenceGaugeDisplay_ = new Gauge(QStringLiteral("Chainring.svg"), std::nullopt, true);
         AnalogGauge* w = cadenceGaugeDisplay_->gauge();
         w->setNeedleColor(QColor(kGaugeRed));
@@ -633,7 +633,7 @@ void HudScreen::buildGauges() {
     // (the gauges either side can move without the whole screen resizing)
     rideAtWidget_->installEventFilter(this);
     if (state.antHRM) {
-        // its center hearts beating at the heart rate, pink to dark red toward the max heart rate
+        // its center hearts beating at the heart rate (its recent average), pink to dark red toward the max heart rate
         hrGaugeDisplay_ = newHeartRateGauge(state.maxHr);
         if (state.workoutMode) {
             keepSideGaugeCell(hrGaugeDisplay_, hrGaugeDisplay_->minimumSizeHint(), QSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX), 15,
