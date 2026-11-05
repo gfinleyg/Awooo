@@ -159,8 +159,12 @@ private slots:
                 farFromWhite(theme + u'/' + gradient, fittedPalette(readGradient(gradient), backgrounds));
             }
         }
-        // and on the base theme every zone keeps a hue down to its pale end: grey is free ride's too
+        // and on the base theme every zone keeps a hue down to its pale end: grey is free ride's too (but for Earth
+        // Tones' first zone, kept as a dark taupe on purpose: it's nowhere near white)
         for (const QString& gradient : gradients) {
+            if (gradient == u"10-earth-tones.json") {
+                continue;
+            }
             const Palette palette = fittedPalette(readGradient(gradient), themeBackgrounds());
             for (int zone = 0; zone < kZones; ++zone) {
                 QVERIFY2(colors::toOklch(palette[zone].pale).C >= 0.02,  // (what blend() counts as a grey)

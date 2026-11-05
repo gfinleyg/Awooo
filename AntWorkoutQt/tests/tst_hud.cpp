@@ -980,6 +980,21 @@ private slots:
             }
         }
         QCOMPARE(shown, 2);
+
+        // the bar, the time left and the count stay as they are from one of the interval's blocks to the next
+        const QRect bar = hud.blockBar()->geometry();
+        const QRect timeBox = time->geometry();
+        const QRect countBox = count->geometry();
+        QSet<int> blocksSeen;
+        for (int s = 0; s < 45 && hud.engine().currentKind() == 3; ++s) {
+            blocksSeen.insert(hud.engine().currentIntervalBlockIndex());
+            QApplication::processEvents();
+            QCOMPARE(hud.blockBar()->geometry(), bar);
+            QCOMPARE(time->geometry(), timeBox);
+            QCOMPARE(count->geometry(), countBox);
+            tickSecond(hud, rider);
+        }
+        QCOMPARE(blocksSeen.size(), 2);
     }
 
     // a last interval: each repeat's grade as it ends, each block's own once all its repeats have theirs

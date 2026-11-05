@@ -26,6 +26,7 @@
 #include "PowerSpiral.hpp"
 #include "Session.hpp"
 #include "SetupScreen.hpp"
+#include "SmoothProgressBar.hpp"
 #include "SynopsisScreen.hpp"
 #include "TestSupport.hpp"
 #include "Theme.hpp"
@@ -340,9 +341,22 @@ private slots:
         // (Up Next centered, as the blocks under it are)
         QCOMPARE(hud->upNextLabel()->alignment(), Qt::AlignCenter);
         QHash<QWidget*, QRect> placed;
+        // (the current block's parts make room for an interval's count going into and out of an interval, and nothing
+        // else moves, nor do they between the interval's blocks)
+        bool wasInterval = hud->blockCountLabel()->isVisible();
         const auto check = [&] {
             QApplication::processEvents();
             QApplication::processEvents();
+            if (hud->blockCountLabel()->isVisible() != wasInterval) {
+                wasInterval = !wasInterval;
+                placed.remove(hud->blockBar());
+                placed.remove(hud->blockRemainingLabel());
+                placed.remove(hud->blockLabel());
+                placed.remove(hud->blockCountLabel());
+                for (QLabel* label : hud->intervalLabels()) {
+                    placed.remove(label);
+                }
+            }
             for (QWidget* widget : hud->findChildren<QWidget*>()) {
                 if (!widget->isVisible()) {
                     continue;

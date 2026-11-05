@@ -96,7 +96,7 @@ using colors::fromOklch;
 using colors::mix;
 using colors::toOklch;
 
-const std::array<QString, kZones> kDefaultZones = {QStringLiteral("#e8a6d8"), QStringLiteral("#38813b"),
+const std::array<QString, kZones> kDefaultZones = {QStringLiteral("#7fd487"), QStringLiteral("#1f6b2c"),
                                                    QStringLiteral("#e0c200"), QStringLiteral("#f07000"),
                                                    QStringLiteral("#d11e14")};
 const QString kDefaultFree = QStringLiteral("#d9d9d9");

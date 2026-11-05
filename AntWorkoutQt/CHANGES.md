@@ -33,16 +33,18 @@ Python app's own results (`tests\golden\`).
   the chainring now slows to a stop over those 3 seconds, and when it starts it speeds up over them. Time without a
   heart rate isn't averaged in: through a dropout the heart keeps its rate, and rests once 3 seconds have gone with no
   reading. The Python app's spun and beat at the latest reading, and stopped at once.
-- **White is left to free ride: no gradient's zones fade to white any more.** Zone 0 had almost no hue in seven
-  gradients, so it faded to a grey or near-white much like free ride's grey to white. It has a hue now: Classic and the
-  default colors (`#d1d1d1` to `#e8a6d8`), Okabe-Ito (`#9aa3ab` to `#cc79a7`), Training Zones (`#8e9aa6` to `#c99ae0`),
-  Traffic Light (`#9e9e9e` to `#d9a0d0`), Earth Tones (`#8d8577` to `#9f779a`), Ember (`#a89f9b` to `#d8a8d8`) and Neon
-  Arcade (`#4a5568` to `#3d4588`). A theme file that sets its own zone colors keeps them. On any theme, fitting no
-  longer takes a zone's color or pale end close to white, whichever gradient it's from: on some themes it could land
-  there (`#f9f6f8` on Nordic Frost), and it now goes darker or stays nearer its color. The themes (colors and
-  gradients) now live in `themes\` here, as the Python app's are frozen. Parity scenes showing zone 0 in these colors (the default
-  colors, or the `_arctic` look) are meant to differ from the Python app's, and `tests\golden\colors.json` is only
-  compared on its colors for the palettes with a color or pale end close to white.
+- **White is left to free ride: no shipped gradient's zones fade to white any more.** Zone 0 faded to a grey or
+  near-white much like free ride's grey to white, so the first zones are new: Classic and the default colors (zones 0
+  and 1 `#d1d1d1`, `#38813b` to `#7fd487`, `#1f6b2c`), Okabe-Ito (`#9aa3ab`, `#3a9bd8` to `#4fd0ff`, `#0072b2`),
+  Training Zones (zone 0 `#8e9aa6` to `#6b3fa0`), Ember (zone 0 `#a89f9b` to `#ffe14d`) and Neon Arcade (`#4a5568`,
+  `#00b8d9` to `#00e0f8`, `#3f1fff`). Earth Tones is unchanged. The Traffic Light gradient is gone, so the
+  `theme_picker` scene's list is one shorter than the Python app's. A theme file that sets its own zone colors keeps
+  them. On any theme, fitting no longer takes a zone's color or pale end close to white, whichever gradient it's from:
+  on some themes it could land there (`#f9f6f8` on Nordic Frost), and it now goes darker or stays nearer its color.
+  The themes (colors and gradients) now live in `themes\` here, as the Python app's are frozen. Parity scenes showing
+  zones 0 and 1 in these colors (the default colors, or the `_arctic` look) are meant to differ from the Python app's,
+  and `tests\golden\colors.json` is only compared on its colors for the palettes with a color or pale end close to
+  white.
 
 - **The block grades take over the left column 30 s into a last block longer than that**, when "Up Next:" and its
   "last block" note go, instead of leaving the column empty until the workout ends. What's still being ridden shows a
