@@ -1122,19 +1122,24 @@ private slots:
         const BlockBubble* first = hud.blockBubbles().front();
         QCOMPARE(first->lines().size(), 2);
         // (the first block's readings, its 120 s up to where it ended)
-        const SavedValues& power = appState().savedPowerVals;
-        double sum = 0;
-        int count = 0;
-        for (qsizetype i = 0; i < power.times.size() && power.times[i] < first->end(); ++i) {
-            if (power.times[i] < first->end() - 120) {
-                continue;
+        const auto average = [first](const SavedValues& saved) {
+            double sum = 0;
+            int count = 0;
+            for (qsizetype i = 0; i < saved.times.size() && saved.times[i] < first->end(); ++i) {
+                if (saved.times[i] < first->end() - 120) {
+                    continue;
+                }
+                sum += saved.values[i];
+                ++count;
             }
-            sum += power.values[i];
-            ++count;
-        }
-        QVERIFY(count > 100);
-        QCOMPARE(first->lines()[0], QStringLiteral("Avg Pwr %1W").arg(py::fixed(sum / count, 0)));
-        QVERIFY(first->lines()[1].startsWith(QStringLiteral("Avg Cad ")) && first->lines()[1].endsWith(u"rpm"));
+            return count > 100 ? std::optional<double>(sum / count) : std::nullopt;
+        };
+        const std::optional<double> power = average(appState().savedPowerVals);
+        const std::optional<double> cadence = average(appState().savedCadenceVals);
+        QVERIFY(power && cadence);
+        // (power in whole watts, cadence to one decimal)
+        QCOMPARE(first->lines()[0], QStringLiteral("Avg Pwr %1W").arg(py::fixed(*power, 0)));
+        QCOMPARE(first->lines()[1], QStringLiteral("Avg Cad %1rpm").arg(py::fixed(*cadence, 1)));
         hud.restartWorkout();
         QVERIFY(hud.blockBubbles().isEmpty());
     }
@@ -1290,7 +1295,11 @@ private slots:
             if (!popped) {
                 QVERIFY(bubble->isVisible());
                 last = bubble->mapRectToScene(bubble->boundingRect()).adjusted(1, 1, -1, -1);
-                QVERIFY(std::abs(last.center().x() - (sceneX(bubble->start()) + sceneX(bubble->end())) / 2) <= 1);
+                // (held back from reaching too far past the time now just after its block ends)
+                const double middle = (sceneX(bubble->start()) + sceneX(bubble->end())) / 2;
+                const double reach = sceneX(appState().secondsPassed + BlockBubble::kMaxAheadSeconds);
+                const double center = std::min(middle, reach - bubble->placedRect().width() / 2);
+                QVERIFY(std::abs(last.center().x() - center) <= 1);
             }
         }
         QVERIFY(popped);

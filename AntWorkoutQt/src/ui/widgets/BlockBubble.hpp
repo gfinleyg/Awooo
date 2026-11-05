@@ -33,10 +33,11 @@ public:
     // how far past the time now (the graph's now line) it may reach
     static constexpr double kMaxAheadSeconds = 30;
 
-    // one line: "Avg Pwr 245W"; avg none without readings ("--")
+    // one line: "Avg Pwr 245W", its number to that many decimals ("Avg Cad 88.3rpm"); avg none without readings ("--")
     struct Row {
         QString name, unit;
         std::optional<double> avg;
+        int decimals = 0;
     };
 
     // start, end: the block's times; target: its target at its end; timeBox: a view of the graph to place it by;

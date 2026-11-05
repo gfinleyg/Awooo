@@ -146,7 +146,7 @@ Python app's own results (`tests\golden\`).
   ride and Musical Cadence screens' scenes are meant to differ for both of these.
 
 - **The workout screen's graph shows a completed block's stats in a bubble**: its average power and cadence
-  ("Avg Pwr 245W", "Avg Cad 88rpm"; no cadence line without a cadence sensor, "--" for one with no readings in the
+  ("Avg Pwr 245W", "Avg Cad 88.3rpm"; no cadence line without a cadence sensor, "--" for one with no readings in the
   block). One shows at a time: the latest block still on the graph with the same target as the block being ridden,
   or else the latest block. In the last 10 s of a block at least 10 s long, if a block on the graph has the next
   block's starting target (a free ride has none), it moves there ahead of time. It sits in the middle of its block with

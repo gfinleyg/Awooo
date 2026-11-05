@@ -1308,17 +1308,18 @@ void HudScreen::finishBlockBubble() {
     struct Sensor {
         QString name, label, unit;
         bool shown;
+        int decimals;
     };
     const QList<Sensor> sensors = {
-        {QStringLiteral("power"), QStringLiteral("Avg Pwr"), QStringLiteral("W"), true},
-        {QStringLiteral("cadence"), QStringLiteral("Avg Cad"), QStringLiteral("rpm"), state.showsCadence()},
+        {QStringLiteral("power"), QStringLiteral("Avg Pwr"), QStringLiteral("W"), true, 0},
+        {QStringLiteral("cadence"), QStringLiteral("Avg Cad"), QStringLiteral("rpm"), state.showsCadence(), 1},
     };
     for (const Sensor& sensor : sensors) {
         if (!sensor.shown) {
             continue;
         }
         const SavedValues& saved = savedValues(sensor.name);
-        BlockBubble::Row row{sensor.label, sensor.unit, std::nullopt};
+        BlockBubble::Row row{sensor.label, sensor.unit, std::nullopt, sensor.decimals};
         double sum = 0;
         int count = 0;
         for (qsizetype i = std::lower_bound(saved.times.begin(), saved.times.end(), start) - saved.times.begin();

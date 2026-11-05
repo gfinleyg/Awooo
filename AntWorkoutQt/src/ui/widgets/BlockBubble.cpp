@@ -15,8 +15,8 @@ namespace awo {
 
 namespace {
 
-QString value(std::optional<double> v, const QString& unit) {
-    return (v ? py::fixed(*v, 0) : QStringLiteral("--")) + unit;
+QString value(std::optional<double> v, int decimals, const QString& unit) {
+    return (v ? py::fixed(*v, decimals) : QStringLiteral("--")) + unit;
 }
 
 }  // namespace
@@ -29,7 +29,7 @@ BlockBubble::BlockBubble(double start, double end, const QList<Row>& rows, doubl
     setZValue(990);
     setVisible(false);
     for (const Row& row : rows_) {
-        cells_.append({row.name, value(row.avg, row.unit)});
+        cells_.append({row.name, value(row.avg, row.decimals, row.unit)});
     }
     fit();
 }
