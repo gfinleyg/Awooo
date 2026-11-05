@@ -1317,6 +1317,108 @@ private slots:
         }
     }
 
+    // a switch single leg block has no bubble and isn't matched: the bubble goes by the block before it through one,
+    // doesn't move ahead of one, and still moves in its last 10 s for the block after it
+    void blockBubbleSkipsSwitchLegBlocks() {
+        QVERIFY(loadWorkout({"T:Switch", "1:60,0.6", "1:60,1.0", "1:20,0.6,5", "1:60,0.6"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        const auto rideTo = [&](double seconds) {
+            while (hud.engine().workoutSecondsPassed() < seconds) {
+                tickSecond(hud, rider);
+            }
+        };
+        const auto stepped = [&](double now) {
+            QList<QRectF> avoid;
+            BlockBubble::stepAll(hud.blockBubbles(), hud.currentBubbleTarget(), now, avoid, hud.upcomingBubbleTarget());
+        };
+        // the last 10 s before the switch block, at the first block's target: no move
+        rideTo(115);
+        QVERIFY(!hud.upcomingBubbleTarget());
+        // through its first seconds: the second block's bubble, though the first's has the switch block's target
+        rideTo(125);
+        QVERIFY(hud.engine().ridingSwitchLeg());
+        QCOMPARE(hud.blockBubbles().size(), qsizetype(2));
+        const BlockBubble* first = hud.blockBubbles()[0];
+        const BlockBubble* second = hud.blockBubbles()[1];
+        QCOMPARE(hud.currentBubbleTarget(), second->target());
+        QVERIFY(!hud.upcomingBubbleTarget());
+        stepped(10);
+        QVERIFY(second->isVisible() && !second->popping());
+        QVERIFY(!first->isVisible());
+        // its last 10 s: on to the block after it's match
+        rideTo(135);
+        QCOMPARE(*hud.upcomingBubbleTarget(), first->target());
+        stepped(11);
+        QVERIFY(first->isVisible() && !first->popping());
+        // it ended without a bubble of its own
+        rideTo(145);
+        QVERIFY(!hud.engine().ridingSwitchLeg());
+        QCOMPARE(hud.blockBubbles().size(), qsizetype(2));
+        QCOMPARE(hud.currentBubbleTarget(), first->target());
+    }
+
+    // as the shipped workouts have them: a 10 s free ride after a single leg free ride. It goes by that block's target
+    // (none), and being 10 s long it's in its last 10 s from its start, moving to the next block's match at once
+    void blockBubbleSkipsAShippedSwitchLegBlock() {
+        QVERIFY(loadWorkout({"T:Switch", "1:60,0.6", "0:45,4", "0:10,5", "1:60,0.6"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        while (hud.engine().workoutSecondsPassed() < 95) {
+            tickSecond(hud, rider);
+        }
+        QVERIFY(!hud.upcomingBubbleTarget());
+        while (hud.engine().workoutSecondsPassed() < 110) {
+            tickSecond(hud, rider);
+        }
+        QVERIFY(hud.engine().ridingSwitchLeg());
+        QCOMPARE(hud.blockBubbles().size(), qsizetype(2));
+        QCOMPARE(hud.currentBubbleTarget(), hud.blockBubbles()[1]->target());
+        QCOMPARE(*hud.upcomingBubbleTarget(), hud.blockBubbles()[0]->target());
+        while (hud.engine().workoutSecondsPassed() < 120) {
+            tickSecond(hud, rider);
+        }
+        QVERIFY(!hud.engine().ridingSwitchLeg());
+        QCOMPARE(hud.blockBubbles().size(), qsizetype(2));
+    }
+
+    // the same for an interval's switch single leg blocks
+    void blockBubbleSkipsSwitchLegIntervalBlocks() {
+        QVERIFY(loadWorkout({"T:Switch", "3:2;1:30,0.6;1:10,0.7,5", "1:30,0.9"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        const auto rideTo = [&](double seconds) {
+            while (hud.engine().workoutSecondsPassed() < seconds) {
+                tickSecond(hud, rider);
+            }
+        };
+        rideTo(35);
+        QVERIFY(hud.engine().ridingSwitchLeg());
+        QCOMPARE(hud.blockBubbles().size(), qsizetype(1));
+        QCOMPARE(hud.currentBubbleTarget(), hud.blockBubbles()[0]->target());
+        rideTo(85);
+        QVERIFY(!hud.engine().ridingSwitchLeg());
+        QCOMPARE(hud.blockBubbles().size(), qsizetype(2));
+    }
+
     // no shown bubble ever touches a star or another bubble: over a whole ride, and with stars sliding along their
     // lines
     void bubblesNeverTouch() {

@@ -6,7 +6,8 @@
 // edge on the graph's bottom, and rides along with the block as the graph scrolls; once a long block's middle would take
 // it off the graph it stays at the graph's left edge, inside the block. A soap bubble, as the max bubbles are (MaxBubble):
 // one that's shown pops when another takes its place, or when the graph has scrolled so far that it no longer fits. One
-// a star touches pops and comes in again where it's clear of the stars, along or higher up in its block.
+// a star touches pops and comes in again where it's clear of the stars, along or higher up in its block. Switch single
+// leg blocks have no bubble, and aren't targets to pick one by: riding one goes by the block before it's target.
 
 #include <QFont>
 #include <QGraphicsItem>

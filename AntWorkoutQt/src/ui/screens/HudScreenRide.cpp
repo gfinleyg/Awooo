@@ -146,11 +146,15 @@ void HudScreen::showTickEvents(const WorkoutEngine::TickEvents& events) {
     if (events.running && (events.blockStarted || events.intervalBlockStarted)) {
         finishBlockBubble();
         blockStart_ = state.secondsPassed;
+        blockIsSwitchLeg_ = engine_->ridingSwitchLeg();
     }
     if (events.completed) {
         finishBlockBubble();
     }
     lastTarget_ = engine_->currentPower();
+    if (!engine_->ridingSwitchLeg()) {
+        bubbleTarget_ = lastTarget_;
+    }
     if (events.completed) {
         log::event(QStringLiteral("WORKOUT"), QStringLiteral("Workout complete at %1").arg(minimizedDuration(state.secondsPassed)));
         showWorkoutComplete(events);
@@ -1266,7 +1270,7 @@ void HudScreen::stepGraphMarkers(double now) {
         }
         trips += star->tripClearance(now);
     }
-    BlockBubble::stepAll(blockBubbles_, engine_->currentPower(), now, avoid, upcomingBubbleTarget(), trips);
+    BlockBubble::stepAll(blockBubbles_, bubbleTarget_, now, avoid, upcomingBubbleTarget(), trips);
     for (MaxBubble* bubble : maxBubbles_) {
         QList<QRectF> keepOff = trips;
         for (const MaxBubble* other : maxBubbles_) {
@@ -1296,6 +1300,10 @@ void HudScreen::finishBlockBubble() {
     const double start = *blockStart_;
     const double end = state.secondsPassed;
     blockStart_.reset();
+    // (a switch single leg block has no bubble, as it has no grade)
+    if (blockIsSwitchLeg_) {
+        return;
+    }
     QList<BlockBubble::Row> rows;
     struct Sensor {
         QString name, label, unit;

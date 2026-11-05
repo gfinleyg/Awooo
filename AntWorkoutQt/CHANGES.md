@@ -145,7 +145,10 @@ Python app's own results (`tests\golden\`).
   block). One shows at a time: the latest block still on the graph with the same target as the block being ridden,
   or else the latest block. In the last 10 s of a block at least 10 s long, if a block on the graph has the next
   block's starting target (a free ride has none), it moves there ahead of time. It sits in the middle of its block with
-  its bottom edge on the graph's bottom, and scrolls along with its block. Once scrolling would take it off the graph
+  its bottom edge on the graph's bottom, and scrolls along with its block. Switch single leg blocks have no bubble
+  and no target to match: while one is being ridden the bubble goes by the block before it, and one coming up doesn't
+  move the bubble ahead of time (a switch block of at least 10 s still moves it in its own last 10 s, for the block
+  after it). Once scrolling would take it off the graph
   it stays at the left edge, moving right inside a long block, and pops as soon as it no longer fits inside the block
   there. One wider than its block stays in its block's middle, and pops when its left edge reaches the graph's. It's a
   soap bubble like the max bubbles (below), and pops when another block's bubble takes its place. The Python app has

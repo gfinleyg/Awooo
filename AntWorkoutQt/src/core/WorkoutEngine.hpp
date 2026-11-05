@@ -84,7 +84,10 @@ public:
     int currentIntervalBlockIndex() const { return currentIntervalBlockIndex_; }
     double blockDuration() const { return blockDuration_; }
     double blockSecondsPassed() const { return blockSecondsPassed_; }
-    // the target the block after the one being ridden starts at (none: it's a free ride, or there isn't one)
+    // whether the block being ridden (an interval's block, in an interval) is a switch single leg block
+    bool ridingSwitchLeg() const;
+    // the target the block after the one being ridden starts at (none: it's a free ride or a switch single leg block,
+    // or there isn't one)
     std::optional<int> nextBlockPower() const;
     // the workout's last block while it's being ridden, for a grade list shown before the end (none: not on it yet,
     // nothing in it is graded, or it's an FTP test)

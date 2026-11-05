@@ -663,6 +663,17 @@ std::pair<QList<double>, QList<double>> WorkoutEngine::upcomingGraph(double coll
     return {times, powers};
 }
 
+bool WorkoutEngine::ridingSwitchLeg() const {
+    if (!currentEventText_) {
+        return false;
+    }
+    if (currentEventText_->type != WorkoutEntry::Type::Interval) {
+        return currentEventText_->block.position == SwitchSingleLeg;
+    }
+    const QList<Block>& blocks = currentEventText_->intervalBlocks;
+    return currentIntervalBlockIndex_ < blocks.size() && blocks[currentIntervalBlockIndex_].position == SwitchSingleLeg;
+}
+
 std::optional<int> WorkoutEngine::nextBlockPower() const {
     const QList<WorkoutEntry>& list = appState().workoutList;
     for (qsizetype index = activeWorkout_ + 1; index < list.size(); ++index) {
@@ -671,7 +682,7 @@ std::optional<int> WorkoutEngine::nextBlockPower() const {
         if (entry.type == WorkoutEntry::Type::RampStep || entry.type == WorkoutEntry::Type::Interval) {
             continue;
         }
-        if (entry.block.type == BlockType::FreeRide) {
+        if (entry.block.type == BlockType::FreeRide || entry.block.position == SwitchSingleLeg) {
             return std::nullopt;
         }
         return entry.block.power[activeDifficulty_];

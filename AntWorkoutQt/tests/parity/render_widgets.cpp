@@ -720,7 +720,7 @@ QWidget* hudSceneRidden(const QString& workoutPath, double seconds) {
     layout->addWidget(hud);
     layout::applyLayout(holder, {{QStringLiteral("Workout"), hud}}, 1.0);
     shown(holder, 1920, 1116);
-    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower(),
+    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->currentBubbleTarget(),
               hud->upcomingBubbleTarget());
     settle();
     return holder;
@@ -949,7 +949,7 @@ QWidget* sceneCadenceScreen() {
     layout->addWidget(hud);
     layout::applyLayout(holder, {{QStringLiteral("Workout"), hud}}, 1.0);
     shown(holder, 1920, 1116);
-    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower(),
+    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->currentBubbleTarget(),
               hud->upcomingBubbleTarget());
     settle();
     return holder;
@@ -1078,7 +1078,7 @@ QWidget* viewerScene(const QString& view, const ViewerLook& look = kViewerLooks.
     }
     hud->cadenceGauge()->chainring()->spinTimer()->stop();
     hud->heartRateGauge()->heart()->beatTimer()->stop();
-    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->engine().currentPower(),
+    restStars(hud->maxStars(), hud->maxBubbles(), hud->blockBubbles(), hud->currentBubbleTarget(),
               hud->upcomingBubbleTarget());
     auto* synopsis = qobject_cast<SynopsisScreen*>(display->view(QStringLiteral("Synopsis")));
     for (QTimer* timer : synopsis->findChildren<QTimer*>(Qt::FindDirectChildrenOnly)) {

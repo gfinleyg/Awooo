@@ -218,9 +218,12 @@ public:
     // each completed block's average power and cadence for the graph, oldest first (one shown at a time)
     const QList<BlockBubble*>& blockBubbles() const { return blockBubbles_; }
     // in the last kBubbleLeadSeconds of a block at least that long: the target the next block starts at, for the block
-    // bubbles to move to a block with that target ahead of it
+    // bubbles to move to a block with that target ahead of it (none when the next is a switch single leg block)
     static constexpr double kBubbleLeadSeconds = 10;
     std::optional<double> upcomingBubbleTarget() const;
+    // the target the block bubbles go by now: the one being ridden, or through a switch single leg block the one the
+    // block before it ended at
+    double currentBubbleTarget() const { return bubbleTarget_; }
     // the graph's stars and bubbles to where they are at now (seconds on their clock)
     void stepGraphMarkers(double now);
 
@@ -446,6 +449,8 @@ private:
     // when the block being ridden started, and the target it was at the tick before (where its bar ends)
     std::optional<double> blockStart_;
     double lastTarget_ = 0;
+    bool blockIsSwitchLeg_ = false;
+    double bubbleTarget_ = 0;
     QLabel* batteryWarningLabel_ = nullptr;
     PowerSpiral* spiralWorkoutProgress_ = nullptr;
     GradeOverlay* gradeOverlay_ = nullptr;
