@@ -1020,8 +1020,7 @@ void HudScreen::gaugeChooser() {
     wattGaugeDisplay_->gauge()->setValueColors(zones::zoneStops(zones::powerRanges()));
     // the cadence gauge's band by Musical Cadence Mode's cadence zones, whatever the mode
     if (cadenceGaugeDisplay_) {
-        cadenceGaugeDisplay_->gauge()->setValueColors(zones::zoneStops(
-            cadenceMode_ ? appState().ftpRanges : ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm)));
+        cadenceGaugeDisplay_->gauge()->setValueColors(zones::zoneStops(cadenceBandRanges()));
     }
 }
 
@@ -1051,10 +1050,13 @@ void HudScreen::refreshFtpColors() {
     }
 }
 
-// The cadence gauge's rings: the band's color at the target cadence (so they match the band's tip when riding on
-// target; free ride's color with no target), brightened on the music's beat (or at level, given). Outside Musical
-// Cadence Mode: the target power's color, brightened on each pedal stroke (the chainring coming round to where it
-// started)
+ftpcolors::ZoneRanges HudScreen::cadenceBandRanges() const {
+    return cadenceMode_ ? appState().ftpRanges : ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm);
+}
+
+// The cadence gauge's rings: the band's color at the needle (matching the band's tip), whatever the block's target and
+// paused or not, brightened on each pedal stroke (the chainring coming round to where it started), in Musical Cadence
+// Mode on the music's beat (or at level, given)
 void HudScreen::updateCenterRings(std::optional<double> level) {
     if (!cadenceGaugeDisplay_) {
         return;
@@ -1076,8 +1078,9 @@ void HudScreen::updateCenterRings(std::optional<double> level) {
             level = std::max(0.0, 1 - chainring->angle() / (chainring->rpm() * 6) / kBeatSeconds);
         }
     }
-    const QColor color(QStringLiteral("#") + zones::gaugeRing(currentPower_));
-    cadenceGaugeDisplay_->gauge()->setCenterRings(QList<QColor>{color.darker(130), color}, level.value_or(0.0));
+    AnalogGauge* gauge = cadenceGaugeDisplay_->gauge();
+    const QColor color = zones::zoneColor(gauge->displayValue(), cadenceBandRanges());
+    gauge->setCenterRings(QList<QColor>{color.darker(130), color}, level.value_or(0.0));
 }
 
 void HudScreen::updatePowerRings() {
@@ -1415,12 +1418,15 @@ void HudScreen::runSimulatedRide(double untilSeconds, SimulatedRider& rider,
     simulatedRevolutions_ = revolutions;
     showSimulatedReading(reading);
     updatePowerRings();
-    // the beat caught at its brightest
+    // the beat caught at its brightest, in the color of the needle at this reading (not on its way there)
+    if (cadenceGaugeDisplay_) {
+        cadenceGaugeDisplay_->gauge()->snapNeedle();
+    }
     updateCenterRings(1.0);
 }
 
 void HudScreen::showSimulatedReading(const RiderReading& reading) {
-    wattGaugeDisplay_->gauge()->setValue(reading.power);
+    showPower(reading.power);
     if (hrGaugeDisplay_) {
         hrGaugeDisplay_->gauge()->setValue(reading.heartRate);
     }

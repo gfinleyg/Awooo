@@ -120,6 +120,15 @@ Python app's own results (`tests\golden\`).
   same fades, from the theme's zone colors. The Python app's RPM gauge had no band outside Musical Cadence Mode, so the
   `cadence_gauge` parity scene, and the workout and free ride screens' scenes, are meant to differ.
 
+- **The RPM gauge's gear and circles are the band's color at the needle,** in every mode, with or without a target and
+  paused or not, so they sit on the same gradient as the band and the zone legend and change as the cadence does. They
+  used to be the target's color: the target power's, or in Musical Cadence Mode the target cadence's, and free ride's
+  grey in a block with no target, a color that's nowhere on the gradient.
+- **The glow behind the power gauge's center is the power's color from the start, and at no power too.** At 0 W it's
+  the start of the first zone, like the rest of the gauge. It used to be white until the first reading and free ride's
+  grey at 0 W. Simulated rides (LayoutViewer, the theme previews) now color it too; they left it white. The workout, free
+  ride and Musical Cadence screens' scenes are meant to differ for both of these.
+
 - **The workout screen's graph shows a completed block's stats in a bubble**: its average power and cadence
   ("Avg Pwr 245W", "Avg Cad 88rpm"; no cadence line without a cadence sensor, "--" for one with no readings in the
   block). One shows at a time: the latest block still on the graph with the same target as the block being ridden,

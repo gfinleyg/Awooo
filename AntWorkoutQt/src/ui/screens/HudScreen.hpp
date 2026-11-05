@@ -344,6 +344,8 @@ private:
     void sliderWheel(QWheelEvent* event);
     void spacePause();
     void gaugeChooser();
+    // the zones the cadence gauge's band and rings are colored by
+    ftpcolors::ZoneRanges cadenceBandRanges() const;
     void refreshFtpColors();
     void updateCenterRings(std::optional<double> level = std::nullopt);
     void updatePowerRingsTick();

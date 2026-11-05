@@ -376,6 +376,9 @@ HudScreen::HudScreen(ant::AntBridge* bridge, QWidget* parent, WorkoutEngine::Clo
         connect(smoothBarTimer_, &QTimer::timeout, this, &HudScreen::updateSmoothBars);
         smoothBarTimer_->setInterval(Performance::current().frameMs());
         smoothBarTimer_->start();
+    } else {
+        // (the chainring's turns stop with the pedals: the cadence gauge's rings still follow the needle down)
+        connect(timer_, &QTimer::timeout, this, [this] { updateCenterRings(); });
     }
     // the graph's max stars riding to a new max, or twinkling at rest
     starClock_.start();
@@ -551,8 +554,6 @@ void HudScreen::buildGauges() {
             w->setScalaCount(14);
             w->initialScaleFontsize = 13;
             w->gaugeColorInnerRadiusFactor = 0.95;
-            // (colored once there's a target)
-            w->setCenterRings(QList<QColor>{QColor(QStringLiteral("#ffffff")), QColor(QStringLiteral("#ffffff"))});
             hudLayout_->addWidget(cadenceGaugeDisplay_, 4, 7, 16, 15);
         } else if (state.workoutMode) {
             keepSideGaugeCell(cadenceGaugeDisplay_, QSize(200, 150), QSize(220, 165), 16, 6, 4, 3);
@@ -564,12 +565,14 @@ void HudScreen::buildGauges() {
             // the nested circles too, beating with each pedal stroke as the chainring comes round
             connect(cadenceGaugeDisplay_->chainring(), &RotatingSvgWidget::turned, this,
                     [this] { updateCenterRings(); });
-            updateCenterRings();
         }
+        updateCenterRings();
         w->rescale();
     }
     // (the cadence gauge's band, now it's there)
     gaugeChooser();
+    // (the ring behind the reading, before the first reading)
+    showPower(0);
     // the gauge showing the Ride At target's arc
     targetGauge_ = cadenceMode_ ? cadenceGaugeDisplay_ : wattGaugeDisplay_;
     rideAtLabel_ = centeredLabel();
@@ -1186,9 +1189,11 @@ void HudScreen::stopTimers() {
 
 void HudScreen::showPower(int watts) {
     wattGaugeDisplay_->gauge()->setValue(watts);
-    // the ring behind the reading in the power's zone color (power zones even in Musical Cadence Mode), see-through
+    // the ring behind the reading in the power's zone color (power zones even in Musical Cadence Mode; at no power the
+    // first zone's start, like the rest of the gauge), see-through
     wattGaugeDisplay_->gauge()->setOuterCircleBg(
-        {{0.25, QColor(0, 0, 0, 0)}, {0.18, QColor(QStringLiteral("#44") + zones::gaugeRing(watts, zones::powerRanges()))}});
+        {{0.25, QColor(0, 0, 0, 0)},
+         {0.18, QColor(QStringLiteral("#44") + zones::zoneHex(watts, zones::powerRanges()).mid(1))}});
 }
 
 void HudScreen::showHeartRate(int bpm) {

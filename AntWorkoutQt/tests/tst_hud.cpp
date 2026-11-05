@@ -323,8 +323,6 @@ private slots:
         AnalogGauge* w = hud.cadenceGauge()->gauge();
         RotatingSvgWidget* chainring = hud.cadenceGauge()->chainring();
         QVERIFY(w->centerRings());
-        const QColor free(QStringLiteral("#") + zones::gaugeRing(0));
-        QCOMPARE(w->centerRings()->first, (QList<QColor>{free.darker(130), free}));
         QCOMPARE(w->centerRings()->second, 0.0);
         w->setMaxValue(200);
         w->setValue(60);
@@ -336,6 +334,98 @@ private slots:
             ++frames;
         });
         QTRY_VERIFY(frames >= 5);
+    }
+
+    // outside Musical Cadence Mode the gear and circles are the band's color at the needle, whatever the block's target
+    void cadenceRingsFollowTheBandAtTheNeedle() {
+        AppState& state = appState();
+        state.workoutMode = false;
+        state.antCadence = true;
+        state.ftp = 200;
+        state.ftpRanges = zones::powerRanges();
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        AnalogGauge* w = hud.cadenceGauge()->gauge();
+        const auto ringsAt = [](double rpm) {
+            const QColor color = zones::zoneColor(rpm, ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm));
+            return QList<QColor>{color.darker(130), color};
+        };
+        // no pedaling: the band's start, not free ride's grey
+        QCOMPARE(w->centerRings()->first, ringsAt(0));
+        QVERIFY(w->centerRings()->first[1] != QColor(QStringLiteral("#") + zones::gaugeRing(0)));
+        w->setValue(60);
+        w->snapNeedle();
+        QTRY_COMPARE(w->centerRings()->first, ringsAt(60));
+        // just past a zone's start: that zone's color, the needle's and not the reading's while it's on its way
+        w->setValue(91);
+        w->snapNeedle();
+        QTRY_COMPARE(w->centerRings()->first, ringsAt(91));
+        QVERIFY(ringsAt(91) != ringsAt(89));
+    }
+
+    // standard and Musical Cadence workouts alike, with a target and paused: the gear's color is the band's at the
+    // needle, and the power gauge's center and the glow behind it are the power's
+    void gaugesFollowTheirReadingsNotTheWorkout_data() {
+        QTest::addColumn<bool>("music");
+        QTest::newRow("standard workout") << false;
+        QTest::newRow("Musical Cadence workout") << true;
+    }
+
+    void gaugesFollowTheirReadingsNotTheWorkout() {
+        QFETCH(bool, music);
+        QVERIFY(loadWorkout(kAppFlowWorkout));
+        AppState& state = appState();
+        state.cadenceMode = music;
+        const ftpcolors::ZoneRanges cadence = ftpcolors::cadenceRanges(ftpcolors::kCadenceScaleBottomRpm);
+        if (music) {
+            state.ftpRanges = cadence;
+        }
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        QCOMPARE(hud.cadenceMode(), music);
+        if (music) {
+            hud.simulateMusic(0.0);
+        }
+        AnalogGauge* gear = hud.cadenceGauge()->gauge();
+        const auto gearAt = [&](double rpm) {
+            const QColor color = zones::zoneColor(rpm, cadence);
+            return QList<QColor>{color.darker(130), color};
+        };
+        // on the band's gradient from the start, not white or free ride's grey
+        QCOMPARE(gear->centerRings()->first, gearAt(0));
+        const auto glowAt = [](int watts) {
+            return QColor(QStringLiteral("#44") + zones::zoneHex(watts, zones::powerRanges()).mid(1));
+        };
+        AnalogGauge* power = hud.powerGauge()->gauge();
+        QCOMPARE(power->outerCircleBg().back().second, glowAt(0));
+
+        const auto check = [&] {
+            gear->setValue(91);
+            gear->snapNeedle();
+            QTRY_COMPARE(gear->centerRings()->first, gearAt(91));
+            hud.showPower(230);
+            QCOMPARE(power->outerCircleBg().back().second, glowAt(230));
+            hud.updatePowerRings();
+            QCOMPARE(power->centerRings()->first.back(), zones::zoneColor(230, zones::powerRanges()));
+            gear->setValue(40);
+            gear->snapNeedle();
+            QTRY_COMPARE(gear->centerRings()->first, gearAt(40));
+            hud.showPower(100);
+            QCOMPARE(power->outerCircleBg().back().second, glowAt(100));
+        };
+        check();
+        QVERIFY(!QTest::currentTestFailed());
+        hud.startWorkout();
+        QVERIFY(hud.engine().started());
+        // (the first tick after START starts the workout's clock)
+        hud.processEvents(1.0);
+        hud.processEvents(1.0);
+        QVERIFY(hud.engine().currentPower() != 0);
+        check();
+        QVERIFY(!QTest::currentTestFailed());
+        hud.pauseButton()->click();
+        QVERIFY(!hud.engine().unpaused());
+        check();
+        QVERIFY(!QTest::currentTestFailed());
     }
 
     // outside Musical Cadence Mode the cadence gauge has a band too, colored by the cadence zones (not the power
