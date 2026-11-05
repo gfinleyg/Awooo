@@ -937,6 +937,51 @@ private slots:
         QCOMPARE(shown[0]->hatchBuilds(), builds);
     }
 
+    // an interval's count: a narrow column the block's full height, holding the most it can be; the rest beside it, in
+    // line, and the whole width again on a plain block
+    void intervalCountIsANarrowColumn() {
+        QVERIFY(loadWorkout({"1:10,0.5", "3:1000;1:20,0.8;1:20,0.6", "1:60,0.5"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        hud.resize(1920, 1116);
+        hud.show();
+        SimulatedRider rider;
+        hud.startWorkout();
+        QApplication::processEvents();
+        QLabel* time = hud.blockRemainingLabel();
+        QLabel* plain = hud.blockLabel();
+        const int wholeWidth = time->width();
+        const int left = time->x();
+        QVERIFY(!hud.blockCountLabel()->isVisible());
+        QCOMPARE(plain->x(), left);
+        QCOMPARE(plain->width(), wholeWidth);
+
+        while (hud.engine().currentKind() != 3) {
+            tickSecond(hud, rider);
+        }
+        QApplication::processEvents();
+        QLabel* count = hud.blockCountLabel();
+        QCOMPARE(count->text(), QStringLiteral("1000x"));
+        QVERIFY(count->isVisible());
+        const int textWidth = count->fontMetrics().horizontalAdvance(count->text());
+        QVERIFY2(count->width() >= textWidth + 8, qPrintable(QStringLiteral("%1 %2").arg(count->width()).arg(textWidth)));
+        QVERIFY2(count->width() < wholeWidth / 8, qPrintable(QString::number(count->width())));
+        QCOMPARE(count->x(), left);
+        QCOMPARE(count->y(), plain->y());
+        QCOMPARE(count->geometry().bottom(), time->geometry().bottom());
+        QVERIFY(time->x() > count->geometry().right());
+        QCOMPARE(time->x() + time->width(), left + wholeWidth);
+        int shown = 0;
+        for (QLabel* label : hud.intervalLabels()) {
+            if (label->isVisible()) {
+                ++shown;
+                QCOMPARE(label->x(), time->x());
+                QCOMPARE(label->width(), time->width());
+            }
+        }
+        QCOMPARE(shown, 2);
+    }
+
     // a last interval: each repeat's grade as it ends, each block's own once all its repeats have theirs
     void lastIntervalGradesFillIn() {
         QVERIFY(loadWorkout({"1:10,0.5", "3:2;1:20,0.8;1:20,0.6"}));

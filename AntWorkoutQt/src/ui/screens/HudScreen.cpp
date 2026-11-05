@@ -118,6 +118,24 @@ QLabel* hatchedCenteredLabel() {
     return label;
 }
 
+// An interval's repeat count: just wide enough for the most it can be (four digits and the x) and some room each side,
+// in whatever font and scale it has, whatever its text is now
+class BlockCountLabel : public QLabel {
+public:
+    BlockCountLabel() {
+        setAlignment(Qt::AlignCenter);
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    }
+    QSize sizeHint() const override {
+        ensurePolished();
+        constexpr int padding = 8;
+        return {fontMetrics().horizontalAdvance(QStringLiteral("0000x")) +
+                    2 * static_cast<int>(std::lround(padding * theme::widgetScale(this))),
+                QLabel::sizeHint().height()};
+    }
+    QSize minimumSizeHint() const override { return {sizeHint().width(), QLabel::minimumSizeHint().height()}; }
+};
+
 // what's left in the grid of something placed outside it: the same size to the layout, so the rows and columns stay as
 // they were
 class KeptCell : public QWidget {
@@ -462,21 +480,23 @@ void HudScreen::buildCurrentBlock() {
     currentBlockLayoutWidget_ = new QWidget;
     currentBlockLayoutWidget_->setFixedHeight(190);
     currentBlockLayoutWidget_->setMinimumWidth(810);
+    // an interval's repeat count is the first column, the full height, with everything else centered in the second; the
+    // first closes up while the count is hidden, so a plain block has the whole width
     auto* block = new QGridLayout;
-    blockMultiplierLabel_ = centeredLabel();
+    blockMultiplierLabel_ = new BlockCountLabel;
     theme::setSheet(blockMultiplierLabel_, QStringLiteral("font: 900 24pt 'Orbitron';"));
-    block->addWidget(blockMultiplierLabel_, 0, 0, 6, 2);
+    block->addWidget(blockMultiplierLabel_, 0, 0, 8, 1);
     for (int i = 0; i < 3; ++i) {
         blockInt3Label_[i] = hatchedCenteredLabel();
-        block->addWidget(blockInt3Label_[i], 2 * i, 2, 2, 14);
+        block->addWidget(blockInt3Label_[i], 2 * i, 1, 2, 1);
     }
     for (int i = 0; i < 2; ++i) {
         blockInt2Label_[i] = hatchedCenteredLabel();
-        block->addWidget(blockInt2Label_[i], 3 * i, 2, 3, 14);
+        block->addWidget(blockInt2Label_[i], 3 * i, 1, 3, 1);
     }
     blockNonIntLabel_ = centeredLabel(kPressStart);
     theme::setSheet(blockNonIntLabel_, QStringLiteral("font: 900 22pt 'Orbitron';"));
-    block->addWidget(blockNonIntLabel_, 0, 0, 6, 16);
+    block->addWidget(blockNonIntLabel_, 0, 1, 6, 1);
     for (QLabel* label : intervalLabels()) {
         label->hide();
     }
@@ -486,17 +506,16 @@ void HudScreen::buildCurrentBlock() {
     currentBlockProgressBar_->setRange(0, 100);
     currentBlockProgressBar_->setValue(0);
     currentBlockProgressBar_->setTextVisible(false);
-    block->addWidget(currentBlockProgressBar_, 6, 0, 1, 16);
+    block->addWidget(currentBlockProgressBar_, 6, 1);
     timeBlockRemainingValue_ = centeredLabel();
     // rounded like the timer boxes (see timerRadius_)
     constexpr int blockRemainingHeight = 26;
     blockRemainingRadius_ = blockRemainingHeight / 2 - 2;
     timeBlockRemainingValue_->setMinimumHeight(blockRemainingHeight);
-    block->addWidget(timeBlockRemainingValue_, 7, 0, 1, 16);
+    block->addWidget(timeBlockRemainingValue_, 7, 1);
     // each block's text mustn't widen the screen's columns (a block, an interval's, the other: only this box changes);
     // text too long for its label is made smaller to fit it
-    for (QLabel* label : intervalLabels() + QList<QLabel*>{blockMultiplierLabel_, blockNonIntLabel_,
-                                                           timeBlockRemainingValue_}) {
+    for (QLabel* label : intervalLabels() + QList<QLabel*>{blockNonIntLabel_, timeBlockRemainingValue_}) {
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     }
     currentBlockLayoutWidget_->setLayout(block);

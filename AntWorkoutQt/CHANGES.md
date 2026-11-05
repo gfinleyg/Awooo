@@ -209,6 +209,11 @@ Python app's own results (`tests\golden\`).
   bars ridden. The lines on the bars move along with them. The `hud_screen` parity scene and the other workout screens'
   are meant to differ on those bars; `hud_interval` is a new scene (C++ only) showing a live interval.
 
+- **An interval's repeat count is its own narrow column.** The count box runs the full height of the current block,
+  just wide enough for four digits and the x, and the interval's blocks, the progress bar and "Block time remaining"
+  sit beside it, so the blocks' text is centered over the time left (the count used to push it to the right of it).
+  Those shrink to make room only during an interval; a plain block still has the whole width.
+
 - **The workout graph's bubble text stays readable on small screens.** Its size follows the layout's scale but stops at
   9 pixels (it went down to 6), and a max bubble is kept tall enough to hold its line of text clear of its rim, which
   used to paint over the text once the bubble got as small as the line. A max bubble shown when the scale or theme font

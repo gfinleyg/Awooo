@@ -235,6 +235,7 @@ public:
     QLabel* rideAtLabel() const { return rideAtLabel_; }
     QLabel* workoutMessageLabel() const { return workoutMessageLabel_; }
     QLabel* blockLabel() const { return blockNonIntLabel_; }
+    QLabel* blockCountLabel() const { return blockMultiplierLabel_; }
     QLabel* upNextLabel() const { return upNextLabelDescription_; }
     QLabel* upNextHeader() const { return upNextLabelHeader_; }
     LongVLabels* remainingList() const { return remainingWorkoutList_; }
