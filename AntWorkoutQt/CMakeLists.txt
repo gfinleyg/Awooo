@@ -17,8 +17,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 # Qt 6.7 exactly: its GDI font engine is what the layouts and fonts were made with (PLAN.md, D2)
 find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets Svg SvgWidgets Concurrent Test)
 
-# The Python app, where the fonts, sounds, images, themes and workouts still live while both apps are kept
+# The Python app, where the fonts, sounds, images and workouts still live while both apps are kept
 set(AWO_PYTHON_APP "${CMAKE_CURRENT_SOURCE_DIR}/../AntWorkout")
+# The themes (colors and gradients) are this app's own: the Python app's are frozen
+set(AWO_THEMES "${CMAKE_CURRENT_SOURCE_DIR}/themes")
 
 # AntNative: antnative.dll and its header-only C++ wrapper (antnative.hpp), linked against the ANT SDK's ANT_LIB.lib
 # built in the same configuration (its Debug build uses the debug C++ runtime)
@@ -52,20 +54,20 @@ add_subdirectory(src/viewer)
 add_subdirectory(src/tools)
 add_subdirectory(hwtests)
 
-# The app's files from AntWorkout/, beside the exes: fonts, sounds and images it loads, and the themes and workouts
-# to pick from (dist\ gets them from here, see build_windows.ps1)
+# The app's files, beside the exes: from AntWorkout/ the fonts, sounds and images it loads and the workouts to pick
+# from, and from here the themes (dist\ gets them from here, see build_windows.ps1)
 set(AWO_BIN "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 add_custom_target(awo_assets ALL
     COMMAND "${CMAKE_COMMAND}" -E copy_directory_if_different "${AWO_PYTHON_APP}/fonts" "${AWO_BIN}/fonts"
     COMMAND "${CMAKE_COMMAND}" -E copy_directory_if_different "${AWO_PYTHON_APP}/sounds" "${AWO_BIN}/sounds"
-    COMMAND "${CMAKE_COMMAND}" -E copy_directory_if_different "${AWO_PYTHON_APP}/themes" "${AWO_BIN}/themes"
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory_if_different "${AWO_THEMES}" "${AWO_BIN}/themes"
     COMMAND "${CMAKE_COMMAND}" -E copy_directory_if_different "${AWO_PYTHON_APP}/awoWorkouts" "${AWO_BIN}/awoWorkouts"
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${AWO_BIN}/images"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
         "${AWO_PYTHON_APP}/Chainring.svg" "${AWO_PYTHON_APP}/Heart.svg" "${AWO_PYTHON_APP}/HeartSmaller.svg"
         "${AWO_PYTHON_APP}/Play.svg" "${AWO_PYTHON_APP}/Pause.svg" "${AWO_PYTHON_APP}/Stop.svg"
         "${AWO_BIN}/images/"
-    COMMENT "Copying the app's fonts, sounds, images, themes and workouts from AntWorkout/"
+    COMMENT "Copying the app's fonts, sounds, images, themes and workouts"
     VERBATIM
 )
 

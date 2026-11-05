@@ -36,6 +36,11 @@ inline QString pythonAppDir() {
     return QStringLiteral(AWO_PYTHON_APP_DIR);
 }
 
+// the themes the app ships (colors\ and gradients\)
+inline QString themesDir() {
+    return QStringLiteral(AWO_THEMES_DIR);
+}
+
 inline QJsonValue golden(const QString& name) {
     QFile file(QStringLiteral(AWO_GOLDEN_DIR "/") + name);
     if (!file.open(QIODevice::ReadOnly)) {

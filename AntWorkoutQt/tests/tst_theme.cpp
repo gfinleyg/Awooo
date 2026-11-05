@@ -24,7 +24,7 @@ void writeJson(const QString& path, const QJsonObject& data) {
 
 QStringList shippedFiles(const QString& folder) {
     QStringList files;
-    QDirIterator it(awotest::pythonAppDir() + QStringLiteral("/themes/") + folder, {QStringLiteral("*.json")}, QDir::Files);
+    QDirIterator it(awotest::themesDir() + u'/' + folder, {QStringLiteral("*.json")}, QDir::Files);
     while (it.hasNext()) {
         files << it.next();
     }
@@ -323,7 +323,7 @@ private slots:
 
     void adjustedForTheTheme() {
         QHash<QString, QString> dsa;
-        const QJsonObject map = theme::readFile(awotest::pythonAppDir() + QStringLiteral("/themes/colors/41-dsa.json"))
+        const QJsonObject map = theme::readFile(awotest::themesDir() + QStringLiteral("/colors/41-dsa.json"))
                                     .value(QStringLiteral("colors"))
                                     .toObject();
         for (auto it = map.begin(); it != map.end(); ++it) {

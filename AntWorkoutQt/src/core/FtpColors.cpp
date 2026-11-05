@@ -96,7 +96,7 @@ using colors::fromOklch;
 using colors::mix;
 using colors::toOklch;
 
-const std::array<QString, kZones> kDefaultZones = {QStringLiteral("#d1d1d1"), QStringLiteral("#38813b"),
+const std::array<QString, kZones> kDefaultZones = {QStringLiteral("#e8a6d8"), QStringLiteral("#38813b"),
                                                    QStringLiteral("#e0c200"), QStringLiteral("#f07000"),
                                                    QStringLiteral("#d11e14")};
 const QString kDefaultFree = QStringLiteral("#d9d9d9");
@@ -118,7 +118,13 @@ double nearest(const QString& color, const Backgrounds& backgrounds) {
     return std::min(difference(color, backgrounds[0]), difference(color, backgrounds[1]));
 }
 
-// color with its lightness moved (the least it takes) until it looks different enough from the backgrounds
+// white is free ride's: a zone's color or pale end isn't taken this close to it
+bool nearWhite(const QString& color) {
+    return difference(color, QStringLiteral("#ffffff")) < kWhiteMinDifference;
+}
+
+// color with its lightness moved (the least it takes, short of white) until it looks different enough from the
+// backgrounds
 QString standOut(const QString& color, const Backgrounds& backgrounds) {
     if (nearest(color, backgrounds) >= kColorMinDifference) {
         return color;
@@ -127,7 +133,7 @@ QString standOut(const QString& color, const Backgrounds& backgrounds) {
     for (int step = 1; step <= 100; ++step) {
         for (int direction : {1, -1}) {
             const QString moved = fromOklch(L + (direction * step) / 100.0, C, h);
-            if (nearest(moved, backgrounds) >= kColorMinDifference) {
+            if (nearest(moved, backgrounds) >= kColorMinDifference && !nearWhite(moved)) {
                 return moved;
             }
         }
@@ -137,7 +143,7 @@ QString standOut(const QString& color, const Backgrounds& backgrounds) {
     for (int step = -100; step <= 100; ++step) {
         const QString candidate = fromOklch(L + step / 100.0, C, h);
         const double d = nearest(candidate, backgrounds);
-        if (d > bestDifference) {
+        if (d > bestDifference && !nearWhite(candidate)) {
             best = candidate;
             bestDifference = d;
         }
@@ -269,7 +275,7 @@ Palette fittedPalette(const ZonePalette& rawColors, const Backgrounds& backgroun
     const int maxPull = static_cast<int>(py::round(kZoneMaxPull * kPaleSteps));
     const auto fits = [&](int zone, int step, const std::array<QList<QString>, kZones>& fades) {
         const QString pale = paleAt(brights[zone], static_cast<double>(step) / kPaleSteps);
-        if (nearest(pale, backgrounds) < kPaleMinDifference) {
+        if (nearest(pale, backgrounds) < kPaleMinDifference || nearWhite(pale)) {
             return false;
         }
         if (step >= maxPull) {

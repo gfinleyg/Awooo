@@ -16,7 +16,7 @@ Palette defaultPalette() {
 }
 
 QHash<QString, QString> themeColors(const QString& name) {
-    QFile file(awotest::pythonAppDir() + QStringLiteral("/themes/colors/") + name);
+    QFile file(awotest::themesDir() + QStringLiteral("/colors/") + name);
     if (!file.open(QIODevice::ReadOnly)) {
         return {};
     }
@@ -129,6 +129,46 @@ private slots:
         }
         // red starts red, not the peach orange has already shown
         QVERIFY(colors::toOklch(palette[4].pale).C > 0.1);
+    }
+
+    void whiteIsFreeRidesAlone() {
+        const auto readGradient = [](const QString& name) {
+            QFile file(awotest::themesDir() + QStringLiteral("/gradients/") + name);
+            file.open(QIODevice::ReadOnly);
+            return filePalette(QJsonDocument::fromJson(file.readAll()).object()[QStringLiteral("ftpColors")].toObject());
+        };
+        const QStringList themes = QDir(awotest::themesDir() + QStringLiteral("/colors"))
+                                       .entryList({QStringLiteral("*.json")}, QDir::Files);
+        const QStringList gradients = QDir(awotest::themesDir() + QStringLiteral("/gradients"))
+                                          .entryList({QStringLiteral("*.json")}, QDir::Files);
+        QVERIFY(themes.size() > 10);
+        QVERIFY(gradients.size() > 10);
+        // no zone gets close to white, on any shipped colors theme with any shipped gradient
+        const auto farFromWhite = [](const QString& where, const Palette& palette) {
+            for (int zone = 0; zone < kZones; ++zone) {
+                for (const QString& color : {palette[zone].pale, palette[zone].color}) {
+                    QVERIFY2(colors::difference(color, QStringLiteral("#ffffff")) >= kWhiteMinDifference,
+                             qPrintable(QStringLiteral("%1 zone %2: %3").arg(where).arg(zone).arg(color)));
+                }
+            }
+        };
+        for (const QString& theme : themes) {
+            const Backgrounds backgrounds = themeBackgrounds(themeColors(theme));
+            farFromWhite(theme + QStringLiteral("/default"), fittedPalette(kDefaultZones, backgrounds));
+            for (const QString& gradient : gradients) {
+                farFromWhite(theme + u'/' + gradient, fittedPalette(readGradient(gradient), backgrounds));
+            }
+        }
+        // and on the base theme every zone keeps a hue down to its pale end: grey is free ride's too
+        for (const QString& gradient : gradients) {
+            const Palette palette = fittedPalette(readGradient(gradient), themeBackgrounds());
+            for (int zone = 0; zone < kZones; ++zone) {
+                QVERIFY2(colors::toOklch(palette[zone].pale).C >= 0.02,  // (what blend() counts as a grey)
+                         qPrintable(QStringLiteral("%1 zone %2: %3").arg(gradient).arg(zone).arg(palette[zone].pale)));
+            }
+        }
+        // the default colors are the classic gradient's
+        QVERIFY(readGradient(QStringLiteral("00-classic.json")) == kDefaultZones);
     }
 
     void adjustedForTheTheme() {
@@ -260,7 +300,23 @@ private slots:
             }
             const Palette palette = fittedPalette(zones, backgrounds);
             const Palette expected = paletteFromJson(value[QStringLiteral("palette")].toArray());
+            // the Python app lets a color or pale end get close to white, which is free ride's here (CHANGES.md): a
+            // palette with one gets it moved, which can move its other pale ends, and only its other colors still match
+            const auto isNearWhite = [](const QString& color) {
+                return colors::difference(color, QStringLiteral("#ffffff")) < kWhiteMinDifference;
+            };
+            const bool nearWhite = std::any_of(expected.begin(), expected.end(), [&](const ZoneColors& zone) {
+                return isNearWhite(zone.pale) || isNearWhite(zone.color);
+            });
             for (int zone = 0; zone < kZones; ++zone) {
+                if (nearWhite) {
+                    QVERIFY(!isNearWhite(palette[zone].pale));
+                    QVERIFY(!isNearWhite(palette[zone].color));
+                    if (!isNearWhite(expected[zone].color)) {
+                        QCOMPARE(palette[zone].color, expected[zone].color);
+                    }
+                    continue;
+                }
                 QVERIFY2(palette[zone] == expected[zone],
                          qPrintable(QStringLiteral("%1 zone %2: %3 %4 %5, expected %6 %7 %8").arg(where).arg(zone)
                                         .arg(palette[zone].pale, palette[zone].color).arg(palette[zone].adjusted)

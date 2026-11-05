@@ -25,8 +25,8 @@ tests/         the Qt Test exes (tst_*.cpp), golden/ (the Python app's results, 
 hwtests/       the SimulANT+ hardware tests (simulant_test.py, app_test.py and their exes) and ant_console
 ```
 
-The fonts, sounds, images, themes and workouts aren't copied into this folder: the build takes them from
-`..\AntWorkout`.
+The fonts, sounds, images and workouts aren't copied into this folder: the build takes them from `..\AntWorkout`.
+The themes are this app's own, in `themes\`.
 
 ## Building
 
@@ -40,7 +40,7 @@ and Ninja in `C:\Qt\Tools`) and the ANT SDK at `..\..\antlib\ANT_LIB`, as for An
 ```
 
 `dist\AntWorkout\` runs on its own: the exes, `antnative.dll`, Qt, the C++ runtime, and the fonts, sounds, images,
-themes and workouts (copied from `..\AntWorkout`). Rebuilding never deletes anything there, and files in it that
+themes and workouts (the themes from `themes\`, the rest from `..\AntWorkout`). Rebuilding never deletes anything there, and files in it that
 are newer than the build's (settings, an edited theme or workout) are kept.
 
 The C++ runtime has to be at least as new as the compiler that built the app (14.40 for VS 2022 17.10): AntNative's

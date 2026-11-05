@@ -7,7 +7,8 @@ function(awo_add_test name)
     target_link_libraries(${name} PRIVATE Qt6::Test)
     target_compile_definitions(${name} PRIVATE
         AWO_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden"
-        AWO_PYTHON_APP_DIR="${AWO_PYTHON_APP}")
+        AWO_PYTHON_APP_DIR="${AWO_PYTHON_APP}"
+        AWO_THEMES_DIR="${AWO_THEMES}")
     awo_target_defaults(${name})
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES
@@ -51,7 +52,8 @@ target_link_libraries(tst_layout_viewer PRIVATE awo_viewer)
 # the side by side check against the Python app's widgets (parity/render_python.py renders the Python side)
 add_executable(render_widgets parity/render_widgets.cpp)
 target_link_libraries(render_widgets PRIVATE awo_viewer)
-target_compile_definitions(render_widgets PRIVATE AWO_PYTHON_APP_DIR="${AWO_PYTHON_APP}")
+target_compile_definitions(render_widgets PRIVATE AWO_PYTHON_APP_DIR="${AWO_PYTHON_APP}"
+    AWO_THEMES_DIR="${AWO_THEMES}")
 target_include_directories(render_widgets PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 awo_target_defaults(render_widgets)
 

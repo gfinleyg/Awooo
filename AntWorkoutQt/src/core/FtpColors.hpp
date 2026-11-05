@@ -6,8 +6,9 @@
 // own: pale where the zone starts (the same hue, washed out), its color where it ends (the top zone's at topOf()).
 //
 // The colors are fitted to the theme (fittedPalette): a color too close to the window's background behind the
-// gauges, spiral and graph has its lightness moved until it stands out, and a pale end too faint, or looking like
-// somewhere along another zone's fade (orange and red look alike washed out), is taken back toward its zone's color.
+// gauges, spiral and graph has its lightness moved until it stands out (short of white), and a pale end too faint, or looking like
+// somewhere along another zone's fade (orange and red look alike washed out), or too close to white (free ride's), is
+// taken back toward its zone's color.
 // The hue is kept. A palette whose colors moved noticeably for a theme is "adjusted" for it.
 
 #include <QColor>
@@ -42,7 +43,8 @@ namespace awo::ftpcolors {
 
 constexpr int kZones = 5;
 
-// the default colors of the zones, and of free ride (power 0: the block labels with no target)
+// the default colors of the zones, and of free ride (power 0: the block labels with no target). Grey fading to white
+// is free ride's alone: every zone has a hue, its pale end included (tst_ftp_colors checks the shipped gradients)
 extern const std::array<QString, kZones> kDefaultZones;
 extern const QString kDefaultFree;
 
@@ -87,6 +89,7 @@ extern const std::array<QString, 2> kWindowGradient;
 // sit around the middle, the graph toward the end
 constexpr double kColorMinDifference = 0.16;
 constexpr double kPaleMinDifference = 0.09;
+constexpr double kWhiteMinDifference = 0.07;
 constexpr double kZoneMinDifference = 0.08;
 constexpr double kZoneFadeFrom = 0.3;
 constexpr double kZoneMaxPull = 0.75;

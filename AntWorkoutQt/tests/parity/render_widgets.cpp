@@ -1002,7 +1002,7 @@ void copyTree(const QString& from, const QString& to) {
 // The theme picker over the shipped themes, the base theme picked, its workout screen preview drawn
 QWidget* sceneThemePicker() {
     writeSceneSettings();
-    copyTree(QStringLiteral(AWO_PYTHON_APP_DIR "/themes"), QStringLiteral("themes"));
+    copyTree(QStringLiteral(AWO_THEMES_DIR), QStringLiteral("themes"));
     QDir().mkpath(QStringLiteral("awoWorkouts"));
     QFile::copy(QStringLiteral(AWO_PYTHON_APP_DIR "/") + kPreviewWorkout, kPreviewWorkout);
     appState() = AppState();
@@ -1054,7 +1054,7 @@ QWidget* viewerScene(const QString& view, const ViewerLook& look = kViewerLooks.
             fonts.close();
             theme::loadFile(QStringLiteral("fonts.json"));
         } else {
-            theme::loadFile(QStringLiteral(AWO_PYTHON_APP_DIR "/themes/") + name);
+            theme::loadFile(QStringLiteral(AWO_THEMES_DIR "/") + name);
         }
     }
     auto* display = new viewer::DisplayWindow;
