@@ -14,8 +14,6 @@ namespace awo {
 
 namespace {
 
-// the box's rounded corners, as the app's sheet has them (design px)
-constexpr double kBoxRadius = 15;
 // past each end of the text: where the lines have fully come back, and how far they take to fade in, in design px
 constexpr double kClearPast = 13;
 constexpr double kFade = 9;

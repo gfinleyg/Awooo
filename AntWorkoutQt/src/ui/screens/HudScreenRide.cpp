@@ -17,6 +17,7 @@
 #include "AntBridge.hpp"
 #include "AppLayout.hpp"
 #include "BlockBubble.hpp"
+#include "BlockHighlight.hpp"
 #include "ConfirmEndWorkoutWindow.hpp"
 #include "GradeWidgets.hpp"
 #include "HatchedLabel.hpp"
@@ -218,6 +219,7 @@ void HudScreen::showWorkoutComplete(const WorkoutEngine::TickEvents& events) {
     }
     blockMultiplierLabel_->hide();
     blockNonIntLabel_->show();
+    blockHighlight_->setRows({});
     workoutBlinkDefault();
     blockBlinkDefault();
     pauseButton_->setEnabled(false);
@@ -272,6 +274,7 @@ void HudScreen::showBlock() {
         const int shownDifficulty = entry.block.type == BlockType::FreeRide ? 10 : difficulty;
         layout::setText(blockNonIntLabel_, blockText(entry, shownDifficulty, unit).front());
         setLabelColor(blockNonIntLabel_);
+        blockHighlight_->setRows({blockNonIntLabel_});
     } else {
         blockNonIntLabel_->hide();
         const QStringList text = blockText(entry, difficulty, unit);
@@ -284,6 +287,7 @@ void HudScreen::showBlock() {
             labels[i]->show();
             labels[i]->setEnabled(i == 0);
         }
+        blockHighlight_->setRows(QList<QLabel*>(labels, labels + entry.intervalBlocks.size()));
         blockBlinkDefault();
     }
     // the new block's spiral (an interval's: all its reps)
@@ -308,6 +312,8 @@ void HudScreen::showIntervalBlock() {
     for (qsizetype i = 0; i < count; ++i) {
         labels[i]->setEnabled(i == index);
     }
+    // (the lit box slides there from the block before's row)
+    blockHighlight_->setActive(index);
     layout::setText(timeBlockRemainingValue_, QStringLiteral("Block time remaining: ") +
                                                   minimizedDuration(static_cast<int>(engine_->blockDuration())));
     currentBlockProgressBar_->setRange(0, static_cast<int>(engine_->blockDuration() * 100));
@@ -431,6 +437,11 @@ void HudScreen::progressBlinkCheck(double sinceTick) {
         spiralWorkoutProgress_->setBlink(state == u"workout" ? PowerSpiral::Blink::Workout
                                          : state == u"block" ? PowerSpiral::Blink::Block
                                                              : PowerSpiral::Blink::Default);
+    }
+    // the lit block's slide, and its swell through the block's last seconds (as long as the block's long enough to blink)
+    if (blockHighlight_) {
+        blockHighlight_->setBlockTime(engine_->blockSecondsPassed() + sinceTick, blockLeft,
+                                      engine_->blockDuration() >= kBlinkMinDurationSeconds);
     }
 }
 

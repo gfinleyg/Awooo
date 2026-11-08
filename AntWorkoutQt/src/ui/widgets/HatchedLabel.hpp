@@ -14,6 +14,9 @@ class HatchedLabel : public QLabel {
     Q_OBJECT
 
 public:
+    // the box's rounded corners, as the app's sheet has them (design px)
+    static constexpr double kBoxRadius = 15;
+
     explicit HatchedLabel(const QString& text = {}, QWidget* parent = nullptr);
 
     // the (unthemed) color the lines have to stand out on: the middle of the box's dimmed background

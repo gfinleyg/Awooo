@@ -216,6 +216,17 @@ Python app's own results (`tests\golden\`).
   sit beside it, so the blocks' text is centered over the time left (the count used to push it to the right of it).
   Those shrink to make room only during an interval; a plain block still has the whole width.
 
+- **The lit interval block slides to its next row, and the current block swells through its last 10 seconds.** When
+  an interval's next block starts, the lit box glides down from the row before to the new one's over 0.35 s, easing in
+  and out and showing each row's own colors as it passes. When a new repeat starts, it slides back up from the last
+  row to the first over 0.7 s. In a block's last 10 seconds, the lit box (an interval's row, or a plain block's box)
+  swells by up to 2.5% and shrinks back once a second, with a faint glow around it. It never grows into the widgets
+  around it: each way (wider, taller) is held back so the box stays 2 px clear of them, so an interval's row, flush
+  with the rows above and below it, only widens, as far as its count column allows. It keeps the grey flash, and the
+  block bar and "Block time remaining" still flash grey. The Python app's lit row jumps to the next one, and its last
+  10 seconds only flash grey. Blocks too short to blink (under 2 s) don't swell. Parity scenes are taken at rest, so
+  they don't change.
+
 - **The workout graph's bubble text stays readable on small screens.** Its size follows the layout's scale but stops at
   9 pixels (it went down to 6), and a max bubble is kept tall enough to hold its line of text clear of its rim, which
   used to paint over the text once the bubble got as small as the line. A max bubble shown when the scale or theme font

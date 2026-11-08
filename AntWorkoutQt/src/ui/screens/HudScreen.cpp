@@ -21,6 +21,7 @@
 #include "AnalogGauge.hpp"
 #include "AntBridge.hpp"
 #include "AppLayout.hpp"
+#include "BlockHighlight.hpp"
 #include "ConfirmEndWorkoutWindow.hpp"
 #include "GradeWidgets.hpp"
 #include "HaloLabel.hpp"
@@ -520,6 +521,8 @@ void HudScreen::buildCurrentBlock() {
     }
     currentBlockLayoutWidget_->setLayout(block);
     hudLayout_->addWidget(currentBlockLayoutWidget_, 0, 6, 4, 16, Qt::AlignTop);
+    // (over the labels: the lit block sliding from one of an interval's rows to the next, and swelling at the end)
+    blockHighlight_ = new BlockHighlight(currentBlockLayoutWidget_, this);
 }
 
 QList<QLabel*> HudScreen::intervalLabels() const {

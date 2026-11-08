@@ -27,6 +27,7 @@
 #include "AnalogGauge.hpp"
 #include "AppLayout.hpp"
 #include "AppState.hpp"
+#include "BlockHighlight.hpp"
 #include "CustomTitleBar.hpp"
 #include "GradeWidgets.hpp"
 #include "HaloLabel.hpp"
@@ -100,8 +101,11 @@ private slots:
                 QVERIFY(display.workoutHud()->engine().workoutSecondsPassed() > 0);
                 // with the blocks ridden so far's bubbles on the graph
                 QVERIFY(!display.workoutHud()->blockBubbles().isEmpty());
+                // the lit block's slide and swell, as the app has them
+                QVERIFY(display.workoutHud()->blockHighlight());
             } else {
                 QVERIFY(display.workoutHud()->blockBubbles().isEmpty());
+                QVERIFY(!display.workoutHud()->blockHighlight());
                 QVERIFY(appState().secondsPassed >= kFreeRideSeconds * 0.4);
             }
             display.showView(QStringLiteral("Init"));
@@ -112,6 +116,16 @@ private slots:
             QCOMPARE(display.current(), workout);
             QVERIFY(display.workoutHud()->isVisibleTo(&display));
             QVERIFY(!display.setupScreen()->isVisibleTo(&display));
+            if (BlockHighlight* lit = display.workoutHud()->blockHighlight()) {
+                // over the block's labels, wherever the layout puts them (once the window's up: a hidden one's moves
+                // and resizes wait for it)
+                display.show();
+                QApplication::processEvents();
+                QCOMPARE(lit->parentWidget(), display.workoutHud());
+                QVERIFY(lit->isVisible());
+                QVERIFY(lit->geometry().contains(display.workoutHud()->blockLabel()->parentWidget()->geometry()));
+                display.hide();
+            }
         }
         // Musical Cadence Mode: the made up songs, the song playing in the title
         display.build(QStringLiteral("cadence"), kWorkoutFile, 40);

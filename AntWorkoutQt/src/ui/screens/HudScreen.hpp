@@ -48,6 +48,7 @@ class SolidColoredColumns;
 }  // namespace plot
 
 class BlockBubble;
+class BlockHighlight;
 class ConfirmEndWorkoutWindow;
 class Gauge;
 class GradeList;
@@ -236,6 +237,8 @@ public:
     QLabel* workoutMessageLabel() const { return workoutMessageLabel_; }
     QLabel* blockLabel() const { return blockNonIntLabel_; }
     QLabel* blockCountLabel() const { return blockMultiplierLabel_; }
+    // the lit block's slide and swell, drawn over the block's labels (none outside Workout Mode)
+    BlockHighlight* blockHighlight() const { return blockHighlight_; }
     QLabel* upNextLabel() const { return upNextLabelDescription_; }
     QLabel* upNextHeader() const { return upNextLabelHeader_; }
     LongVLabels* remainingList() const { return remainingWorkoutList_; }
@@ -421,6 +424,7 @@ private:
     QLabel* workoutGradesHeader_ = nullptr;
     GradeList* workoutGradeList_ = nullptr;
     QWidget* currentBlockLayoutWidget_ = nullptr;
+    BlockHighlight* blockHighlight_ = nullptr;
     QLabel* blockMultiplierLabel_ = nullptr;
     QLabel* blockInt3Label_[3] = {};
     QLabel* blockInt2Label_[2] = {};

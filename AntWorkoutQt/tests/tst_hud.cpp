@@ -23,6 +23,7 @@
 #include "AppState.hpp"
 #include "AwoParser.hpp"
 #include "BlockBubble.hpp"
+#include "BlockHighlight.hpp"
 #include "ConfirmEndWorkoutWindow.hpp"
 #include "FakeAnt.hpp"
 #include "FtpTest.hpp"
@@ -935,6 +936,155 @@ private slots:
         QVERIFY(builds >= 1);
         shown[0]->grab();
         QCOMPARE(shown[0]->hatchBuilds(), builds);
+    }
+
+    // the lit block (C++ only): still, nothing drawn over the labels; through a block's last 10 s it swells and shrinks
+    // once a second (at its biggest half way through each); an interval's next block slides down to its row, and a new
+    // repeat's first block slides back up from the last row, two rows taking twice as long
+    void litBlockSlidesAndSwells() {
+        QVERIFY(loadWorkout({"1:30,0.5", "3:2;1:20,0.8;1:20,0.6;1:20,0.7", "1:60,0.5"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        hud.resize(1920, 1116);
+        hud.show();
+        hud.startWorkout();
+        BlockHighlight* lit = hud.blockHighlight();
+        QVERIFY(lit);
+        const auto step = [&hud](int tenths) {
+            for (int i = 0; i < tenths; ++i) {
+                hud.processEvents(0.1);
+            }
+            QApplication::processEvents();
+        };
+        const auto drawsSomething = [lit] {
+            // (on its own: not the screen behind it)
+            QImage image(lit->size(), QImage::Format_ARGB32_Premultiplied);
+            image.fill(Qt::transparent);
+            lit->render(&image, QPoint(), QRegion(), QWidget::RenderFlags());
+            for (int y = 0; y < image.height(); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    if (qAlpha(image.pixel(x, y)) != 0) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        const WorkoutEngine& engine = hud.engine();
+        const auto left = [&engine] { return engine.blockDuration() - engine.blockSecondsPassed(); };
+        // the lit box (label) swollen about its middle, as it's drawn now
+        const auto swollen = [&hud, lit](QLabel* label) {
+            const QSizeF scale = lit->swellScale();
+            QRectF box(QPointF(), QSizeF(label->width() * scale.width(), label->height() * scale.height()));
+            box.moveCenter(QRectF(label->mapTo(&hud, QPoint()), QSizeF(label->size())).center());
+            return box;
+        };
+        // at its biggest it stays clear of every other widget shown on the screen that it doesn't lie over already (the
+        // interval's other rows, its count, the block bar, the gauges and the coming up list), and still swells some way
+        const auto keepsClear = [&hud, lit, &swollen](QLabel* label, bool widensOnly) {
+            const QSizeF room = lit->swellRoom();
+            QVERIFY2(room.width() > 0 && room.width() <= BlockHighlight::kSwellScale, qPrintable(QString::number(room.width())));
+            QVERIFY(room.height() >= 0 && room.height() <= BlockHighlight::kSwellScale);
+            QCOMPARE(room.height() == 0, widensOnly);
+            const QRectF rest(label->mapTo(&hud, QPoint()), QSizeF(label->size()));
+            const QRectF box = swollen(label).adjusted(-1, -1, 1, 1);
+            for (QWidget* other : hud.findChildren<QWidget*>()) {
+                if (other == label || other == lit || !other->isVisible() || other->isAncestorOf(label) ||
+                    label->isAncestorOf(other)) {
+                    continue;
+                }
+                const QRectF rect(other->mapTo(&hud, QPoint()), QSizeF(other->size()));
+                if (rect.isEmpty() || rect.intersects(rest)) {
+                    continue;
+                }
+                // (one it's flush with already, such as the row above or below, it mustn't go over)
+                const bool flush = rect.intersects(rest.adjusted(-1, -1, 1, 1));
+                QVERIFY2(!rect.intersects(flush ? swollen(label) : box), qPrintable(other->metaObject()->className()));
+            }
+        };
+
+        // the plain first block: still until its last 10 s, then a swell a second
+        step(5);
+        QVERIFY(!lit->drawing());
+        QVERIFY(!drawsSomething());
+        while (left() > 9.55) {
+            step(1);
+        }
+        QVERIFY2(lit->swell() > 0.95, qPrintable(QString::number(lit->swell())));
+        QVERIFY(!lit->sliding());
+        QVERIFY(drawsSomething());
+        keepsClear(hud.blockLabel(), false);
+        {
+            // swollen, it keeps the box's rounded corners (the label's grab fills them): its corner shows only the faint
+            // glow, its middle the label
+            QImage image(lit->size(), QImage::Format_ARGB32_Premultiplied);
+            image.fill(Qt::transparent);
+            lit->render(&image, QPoint(), QRegion(), QWidget::RenderFlags());
+            // (the highlight's a child of the screen)
+            const QRectF box = swollen(hud.blockLabel()).translated(-QPointF(lit->pos()));
+            const int corner = qAlpha(image.pixel((box.topLeft() + QPointF(1.5, 1.5)).toPoint()));
+            QVERIFY2(corner < 128, qPrintable(QString::number(corner)));
+            QCOMPARE(qAlpha(image.pixel(box.center().toPoint())), 255);
+        }
+        step(5);
+        QVERIFY2(lit->swell() < 0.05, qPrintable(QString::number(lit->swell())));
+
+        // an interval: its first block lit at once, then a slide down to the next
+        while (engine.currentKind() != 3) {
+            step(1);
+        }
+        QVERIFY(!lit->sliding());
+        QCOMPARE(lit->activeRow(), 0);
+        while (engine.currentIntervalBlockIndex() != 1) {
+            step(1);
+        }
+        QCOMPARE(lit->activeRow(), 1);
+        QVERIFY(lit->sliding());
+        step(1);
+        const double partWay = lit->slidePosition();
+        QVERIFY2(partWay > 0 && partWay < 1, qPrintable(QString::number(partWay)));
+        QVERIFY(drawsSomething());
+        step(3);
+        QVERIFY(!lit->sliding());
+        QCOMPARE(lit->slidePosition(), 1.0);
+        QVERIFY(!lit->drawing());
+        QVERIFY(!drawsSomething());
+
+        // the next repeat: from the last row back up to the first, over 0.7 s
+        while (engine.currentIntervalBlockIndex() != 0) {
+            step(1);
+        }
+        QCOMPARE(lit->activeRow(), 0);
+        step(4);
+        QVERIFY(lit->sliding());
+        QVERIFY2(lit->slidePosition() > 0 && lit->slidePosition() < 2, qPrintable(QString::number(lit->slidePosition())));
+        step(4);
+        QVERIFY(!lit->sliding());
+        QCOMPARE(lit->slidePosition(), 0.0);
+        // (the labels say the same: only the lit one enabled)
+        QList<QLabel*> shown;
+        for (QLabel* label : hud.intervalLabels()) {
+            if (label->isVisible()) {
+                shown.append(label);
+            }
+        }
+        std::sort(shown.begin(), shown.end(), [](auto* a, auto* b) { return a->y() < b->y(); });
+        QCOMPARE(shown.size(), 3);
+        QVERIFY(shown[0]->isEnabled() && !shown[1]->isEnabled() && !shown[2]->isEnabled());
+        // an interval's row, flush with the rows above and below it, only widens, as far as keeps it clear of its count
+        while (left() > 9.55) {
+            step(1);
+        }
+        QVERIFY2(lit->swell() > 0.95, qPrintable(QString::number(lit->swell())));
+        keepsClear(shown[0], true);
+        while (engine.currentIntervalBlockIndex() != 1) {
+            step(1);
+        }
+        while (left() > 9.55) {
+            step(1);
+        }
+        QVERIFY(!lit->sliding());
+        keepsClear(shown[1], true);
     }
 
     // an interval's count: a narrow column the block's full height, holding the most it can be; the rest beside it, in
