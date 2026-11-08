@@ -327,10 +327,10 @@ private slots:
         QCOMPARE(w->centerRings()->second, 0.0);
         w->setMaxValue(200);
         w->setValue(60);
-        // each frame the chainring turns: (60 rpm, 360 degrees a second) the time since it came round
+        // each frame the chainring turns: (rpm*6 degrees a second, as it speeds up to 60) the time since it came round
         int frames = 0;
         connect(chainring, &RotatingSvgWidget::turned, &hud, [&] {
-            const double level = std::max(0.0, 1 - chainring->angle() / 360 / kBeatSeconds);
+            const double level = std::max(0.0, 1 - chainring->angle() / (chainring->rpm() * 6) / kBeatSeconds);
             QVERIFY(std::abs(w->centerRings()->second - level) < 0.02);
             ++frames;
         });

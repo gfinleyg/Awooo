@@ -657,6 +657,10 @@ private slots:
         average.add(0, 15);
         QCOMPARE(average.at(16.5), 30.0);
         QCOMPARE(average.at(18), 0.0);
+        // a reading again starts it afresh, not slow from the zeros before it
+        average.add(60, 18.5);
+        QCOMPARE(average.at(18.5), 60.0);
+        QCOMPARE(average.at(19), 60.0);
         // not without zeroCounts: that time is left out, until there's no other reading left
         RecentAverage heart(false);
         heart.add(120, 10);
@@ -672,7 +676,46 @@ private slots:
         QCOMPARE(heart.at(17), 0.0);
     }
 
-    // the chainring spins at the last few seconds' cadence, slowing to a stop; the needle and reading go straight there
+    // picked up every 2 seconds (from nothing, at once), and eased into
+    void steadyReadingHoldsAndEases() {
+        SteadyReading held;
+        QCOMPARE(held.at(0), 0.0);
+        held.add(90, 1);
+        QCOMPARE(held.at(1), 90.0);
+        held.add(60, 2);
+        QCOMPARE(held.at(2.5), 90.0);
+        // 1 second of 90, 1 of 60, until 2 seconds later
+        QCOMPARE(held.at(3), 75.0);
+        QCOMPARE(held.at(4.9), 75.0);
+        QCOMPARE(held.at(5), 60.0);
+        SteadyReading eased(true, 1.0);
+        eased.add(90, 1);
+        QCOMPARE(eased.at(1), 0.0);
+        QCOMPARE(eased.at(1.5), 45.0);
+        QCOMPARE(eased.at(2), 90.0);
+        eased.add(30, 2);
+        QCOMPARE(eased.at(2.5), 90.0);
+        // (from 90 to 60 over a second)
+        QCOMPARE(eased.at(3), 90.0);
+        eased.add(30, 3);
+        QCOMPARE(eased.at(3.5), 75.0);
+        QCOMPARE(eased.at(4), 60.0);
+        // (and to 30)
+        QCOMPARE(eased.at(7), 60.0);
+        QCOMPARE(eased.at(8), 30.0);
+        // stopped: down to rest a step at a time, and from there the next reading starts it at once
+        eased.add(0, 8);
+        QCOMPARE(eased.at(9), 30.0);
+        QCOMPARE(eased.at(10), 20.0);
+        QCOMPARE(eased.at(11), 20.0);
+        QCOMPARE(eased.at(12), 0.0);
+        eased.add(60, 12.5);
+        QCOMPARE(eased.at(12.5), 0.0);
+        QCOMPARE(eased.at(13.5), 60.0);
+    }
+
+    // the chainring speeds up to the last few seconds' cadence, holding it 2 seconds at a time, slowing to a stop; the
+    // needle and reading go straight there
     void chainringSpinsAtTheRecentAverage() {
         Performance::current().setGaugeFps(0);
         Gauge gauge(QStringLiteral("Chainring.svg"), std::nullopt, true);
@@ -681,17 +724,17 @@ private slots:
         w->setMaxValue(200);
         QCOMPARE(chainring->rpm(), 0.0);
         w->setValue(90);
-        QCOMPARE(chainring->rpm(), 90.0);
-        QTest::qWait(300);
+        QVERIFY(chainring->rpm() < 90);
+        QTRY_COMPARE(chainring->rpm(), 90.0);
         w->setValue(0);
         QCOMPARE(w->reading(), 0.0);
         QCOMPARE(w->displayValue(), 0.0);
-        QTest::qWait(100);
-        QVERIFY(chainring->rpm() > 0 && chainring->rpm() < 90);
-        QTRY_COMPARE(chainring->rpm(), 0.0);
+        QCOMPARE(chainring->rpm(), 90.0);
+        QTRY_COMPARE_WITH_TIMEOUT(chainring->rpm(), 0.0, 8000);
     }
 
-    // the heart beats at the last few seconds' heart rate, and at a real one through a dropout, not a slow one
+    // the heart beats at the last few seconds' heart rate, held 2 seconds at a time, and at a real one through a
+    // dropout, not a slow one
     void heartBeatsAtTheRecentAverage() {
         Performance::current().setGaugeFps(0);
         Gauge gauge({}, Gauge::Beat{{{90, QColor(QStringLiteral("#ffb3c6"))}}});
@@ -706,14 +749,12 @@ private slots:
         QTest::qWait(300);
         w->setValue(180);
         QCOMPARE(w->value(), 180.0);
-        QTest::qWait(100);
-        QVERIFY(heart->bpm() > 120 && heart->bpm() < 180);
+        QCOMPARE(heart->bpm(), 120.0);
+        QTRY_VERIFY_WITH_TIMEOUT(heart->bpm() > 120, 4000);
+        QVERIFY(heart->bpm() < 180);
         w->setValue(0);
-        const double held = heart->bpm();
-        QVERIFY(held > 120 && held < 180);
-        QTest::qWait(100);
-        QCOMPARE(heart->bpm(), held);
-        QTRY_COMPARE(heart->bpm(), 0.0);
+        QVERIFY(heart->bpm() > 120);
+        QTRY_COMPARE_WITH_TIMEOUT(heart->bpm(), 0.0, 8000);
     }
 
     // a center heart's bottom is a right angle, its sides straight into the corner, not a thin point

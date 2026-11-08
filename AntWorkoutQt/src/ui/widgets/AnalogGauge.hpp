@@ -15,7 +15,7 @@
 //
 // Gauge: the gauge over a background image (a spinning chainring for cadence), or for heart rate with no background, its
 // center nested hearts pulsing with the heartbeat and colored by the heart rate. The spin and the beat go at the last 3
-// seconds' average (RecentAverage), the needle and the reading at each reading.
+// seconds' average, picked up every 2 seconds (SteadyReading), the needle and the reading at each reading.
 
 #include <QElapsedTimer>
 #include <QFont>
@@ -255,8 +255,9 @@ private:
 
 // the average of a reading over its last kSeconds, by how long each value held (so it doesn't matter how often readings
 // come, or whether they repeat); just the time since the first one, until there's that much. Readings of 0: with
-// zeroCounts they're averaged in like any other (a chainring slows to a stop); without, that time is left out (no heart
-// rate isn't a slow one), and it's 0 once there's no other reading left in the last kSeconds.
+// zeroCounts they're averaged in like any other (a chainring slows to a stop), until a reading comes again, which starts
+// the average afresh (pedaling again isn't slow pedaling); without, that time is left out (no heart rate isn't a slow
+// one), and it's 0 once there's no other reading left in the last kSeconds.
 class RecentAverage {
 public:
     static constexpr double kSeconds = 3.0;
@@ -273,6 +274,27 @@ private:
 
     bool zeroCounts_;
     std::deque<Sample> samples_;
+};
+
+// a RecentAverage that's picked up only every kHoldSeconds, so what follows it changes now and then rather than all the
+// time, and eased into over easeSeconds (0: straight to it); from nothing (0), the first reading is picked up at once
+class SteadyReading {
+public:
+    static constexpr double kHoldSeconds = 2.0;
+
+    explicit SteadyReading(bool zeroCounts = true, double easeSeconds = 0)
+        : average_(zeroCounts), easeSeconds_(easeSeconds) {}
+    void add(double value, double now) { average_.add(value, now); }
+    double at(double now);
+
+private:
+    double eased(double now) const;
+
+    RecentAverage average_;
+    double easeSeconds_;
+    double from_ = 0;
+    double to_ = 0;
+    std::optional<double> since_;
 };
 
 // a heartbeat at the rate bpmSource() returns (read again every beat, so it follows the heart rate as it changes):
@@ -356,9 +378,11 @@ public:
     struct Beat {
         QList<std::pair<double, QColor>> colors;
     };
+    static constexpr double kSpinEaseSeconds = 1.0;
 
     // svgFile: the background (none: no background); beat: no background, the center's nested hearts beat at the
-    // average of the gauge's recent values (heart rate); spin: spins at the average of its recent readings (cadence)
+    // average of the gauge's recent values (heart rate); spin: spins at the average of its recent readings (cadence),
+    // easing into each new speed over kSpinEaseSeconds
     explicit Gauge(const QString& svgFile = {}, const std::optional<Beat>& beat = std::nullopt, bool spin = false,
                    QWidget* parent = nullptr);
 
@@ -381,7 +405,7 @@ private:
     QList<std::pair<double, QColor>> heartColors_;
     double heartLevel_ = 0.0;
     // the readings the spin or the beat goes at
-    RecentAverage recent_;
+    SteadyReading steady_;
     QElapsedTimer recentClock_;
 };
 

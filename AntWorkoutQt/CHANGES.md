@@ -28,11 +28,12 @@ Python app's own results (`tests\golden\`).
 
 ## Screens
 
-- **The chainring's spin and the heart's beat go at the last 3 seconds' average,** so they stay steady when a cadence
-  or heart rate reading jumps about. The needle and the number still show each reading as it comes. When pedaling stops
-  the chainring now slows to a stop over those 3 seconds, and when it starts it speeds up over them. Time without a
-  heart rate isn't averaged in: through a dropout the heart keeps its rate, and rests once 3 seconds have gone with no
-  reading. The Python app's spun and beat at the latest reading, and stopped at once.
+- **The chainring's spin and the heart's beat go at the last 3 seconds' average, picked up every 2 seconds,** so they
+  stay steady when a cadence or heart rate reading jumps about. The chainring eases into each new speed over a second
+  rather than jumping to it. The needle and the number still show each reading as it comes. The first reading starts
+  them at once; when pedaling stops the chainring slows to a stop over the next few seconds. Time without a heart rate
+  isn't averaged in: through a dropout the heart keeps its rate, and rests once 3 seconds have gone with no reading.
+  The Python app's spun and beat at the latest reading, and stopped at once.
 - **White is left to free ride: no shipped gradient's zones fade to white any more.** Zone 0 faded to a grey or
   near-white much like free ride's grey to white, so the first zones are new: Classic and the default colors (zones 0
   and 1 `#d1d1d1`, `#38813b` to `#7fd487`, `#1f6b2c`), Okabe-Ito (`#9aa3ab`, `#3a9bd8` to `#4fd0ff`, `#0072b2`),
