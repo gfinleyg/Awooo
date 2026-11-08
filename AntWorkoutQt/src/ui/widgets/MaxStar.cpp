@@ -333,6 +333,14 @@ double MaxBubble::headroom() const {
     return std::max(star_->headroom(), above + 1 + MaxStar::kGap);
 }
 
+double MaxBubble::topRowHeight() {
+    return MaxStar::kRadius * theme::uiScale() * (1 + MaxStar::kBelow) + 2 * kGap + kClear;
+}
+
+bool MaxBubble::needsTopRow() const {
+    return star_->x && star_->onGraph && roomFor_.first && star_->x == roomFor_.first && star_->y == roomFor_.second;
+}
+
 void MaxBubble::step(double now, QList<QRectF>& avoid, const QList<QRectF>& keepOff) {
     MaxStar* star = star_;
     if (!star->x || !star->onGraph) {
@@ -352,8 +360,12 @@ void MaxBubble::step(double now, QList<QRectF>& avoid, const QList<QRectF>& keep
     const auto starAt = [&](const QPointF& point) {
         return QPointF(point.x(), std::max(point.y() - star->offset.value_or(star->restOffset()), area.top() + scale));
     };
-    // its rect at offset from level with that star, the star's height top to bottom
-    const auto rectAt = [&](const QPointF& point, const QPointF& offset) {
+    // its rect at offset from level with that star, the star's height top to bottom; in the top row: offset across
+    // from the star, kGap under the graph's top
+    const auto rectAt = [&](const QPointF& point, const QPointF& offset, bool topRow) {
+        if (topRow) {
+            return QRectF(point.x() + offset.x() - width_ / 2, area.top() + kGap, width_, height_);
+        }
         const QPointF center = starAt(point) + QPointF(0, scale * (MaxStar::kBelow - 1) / 2) + offset;
         return QRectF(center.x() - width_ / 2, center.y() - height_ / 2, width_, height_);
     };
@@ -364,7 +376,7 @@ void MaxBubble::step(double now, QList<QRectF>& avoid, const QList<QRectF>& keep
     if (state_ == State::Appearing || state_ == State::Shown) {
         // its max moved, the graph's edge reached, or a star or a bubble placed before it touching it: pops, and a new
         // one comes in clear of them
-        const QRectF rect = rectAt(star->vbox()->mapViewToScene(QPointF(*x_, *y_)), offset_);
+        const QRectF rect = rectAt(star->vbox()->mapViewToScene(QPointF(*x_, *y_)), offset_, topRow_);
         if (star->x != x_ || star->y != y_ || rect.left() <= area.left() || !inArea.contains(rect) || touches(rect, avoid)) {
             // (room for its spray while it pops)
             prepareGeometryChange();
@@ -383,7 +395,11 @@ void MaxBubble::step(double now, QList<QRectF>& avoid, const QList<QRectF>& keep
             return;
         }
         // the star has arrived: a new one over its max, beside the star if it can be, else over, under or to a corner
-        // of it (none clear of them: none, until there's one)
+        // of it, else further off, else in the graph's top row as near across as it can be (none clear of them: none,
+        // and the top row asked for, until there's one)
+        if (star->x != roomFor_.first || star->y != roomFor_.second) {
+            roomFor_ = {};
+        }
         const QPointF point = star->vbox()->mapViewToScene(QPointF(*star->x, *star->y));
         fit(format_.arg(py::fixed(*star->y, 0)));
         const double beside = star->halfWidth() + kGap + width_ / 2;
@@ -392,24 +408,42 @@ void MaxBubble::step(double now, QList<QRectF>& avoid, const QList<QRectF>& keep
         const double under = scale * MaxStar::kBelow * (1 + MaxStar::kTwinkle) + MaxStar::kEdgeWidth / 2 + kGap +
                              height_ / 2 - scale * (MaxStar::kBelow - 1) / 2;
         const double corner = height_ + kGap;
-        const QList<QPointF> offsets = {
-            {side_ * beside, 0},       {-side_ * beside, 0},      {0, -over},
-            {0, under},                {side_ * beside, -corner}, {side_ * beside, corner},
-            {-side_ * beside, -corner}, {-side_ * beside, corner},
+        QList<std::pair<QPointF, bool>> spots = {
+            {{side_ * beside, 0}, false},        {{-side_ * beside, 0}, false},      {{0, -over}, false},
+            {{0, under}, false},                 {{side_ * beside, -corner}, false}, {{side_ * beside, corner}, false},
+            {{-side_ * beside, -corner}, false}, {{-side_ * beside, corner}, false},
         };
+        // (further off, a half width or a row at a time)
+        for (int step = 1; step <= kFurthestSteps; ++step) {
+            const double across = beside + step * width_ / 2;
+            for (const double dy : {0.0, -corner, corner}) {
+                spots.append({{side_ * across, dy}, false});
+                spots.append({{-side_ * across, dy}, false});
+            }
+            spots.append({{0, -over - step * corner}, false});
+            spots.append({{0, under + step * corner}, false});
+        }
+        spots.append({{0, 0}, true});
+        for (double across = width_ / 2; across < area.width(); across += width_ / 2) {
+            spots.append({{side_ * across, 0}, true});
+            spots.append({{-side_ * across, 0}, true});
+        }
         const QList<QRectF> obstacles = avoid + keepOff;
         bool placed = false;
-        for (const QPointF& offset : offsets) {
-            const QRectF rect = rectAt(point, offset);
+        for (const auto& [offset, topRow] : spots) {
+            const QRectF rect = rectAt(point, offset, topRow);
             if (rect.left() > area.left() && inArea.contains(rect) &&
                 !touches(rect.adjusted(-kClear, -kClear, kClear, kClear), obstacles)) {
                 offset_ = offset;
+                topRow_ = topRow;
                 side_ = offset.x() < 0 ? -1 : offset.x() > 0 ? 1 : side_;
                 placed = true;
                 break;
             }
         }
         if (!placed) {
+            // (kept for this max: so the graph doesn't keep growing and shrinking)
+            roomFor_ = {star->x, star->y};
             setVisible(false);
             return;
         }
@@ -424,7 +458,7 @@ void MaxBubble::step(double now, QList<QRectF>& avoid, const QList<QRectF>& keep
 
     // (the old max's place while popping)
     const QPointF point = star->vbox()->mapViewToScene(QPointF(*x_, *y_));
-    rect_ = rectAt(point, offset_);
+    rect_ = rectAt(point, offset_, topRow_);
     // (one popping is on its way out: others needn't keep clear of it)
     if (state_ != State::Popping) {
         avoid.append(rect_);

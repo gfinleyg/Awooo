@@ -196,9 +196,13 @@ Python app's own results (`tests\golden\`).
   there, and a new one comes in on the star's right. Before the graph scrolls, nothing's moving toward the edge, so
   stars can sit against it.
 
-- **The workout graph's bubbles never touch a star or each other**: one that a star (sliding along its line or
-  scrolling into it) or another bubble touches pops, and a new one comes in where it's clear of them all, and of where
-  a sliding star is still to go. A max bubble goes beside its star if it can, else over, under or to a corner of it. A
+- **The workout graph's bubbles never touch a star, the target line or each other**: one that a star (sliding along
+  its line or scrolling into it), the target line (the tops of the expected power bars, or the expected cadence's in
+  Musical Cadence Mode, and the steps between them; a free ride has none) or another bubble touches pops, and a new one
+  comes in where it's clear of them all, and of where a sliding star is still to go. A block bubble whose block's
+  target is too low to sit under goes over it. A max bubble with no room next to its star goes further off (up to two
+  of its widths across, or four rows up or down), and failing that the graph's scale grows to leave a row clear along
+  its top, where it goes as near across from its star as it can; the row stays until that star's max moves. A max bubble goes beside its star if it can, else over, under or to a corner of it. A
   block bubble goes in the middle of its block on the graph's bottom if it can, else along the bottom of its block,
   else higher up in it; one wider than its block only in its middle. With no clear spot it stays away until there's
   one. Max bubbles used to change sides without popping. The `hud_graph` parity scene (and the workout screens' scenes)

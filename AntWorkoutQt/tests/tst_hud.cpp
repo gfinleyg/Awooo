@@ -1638,8 +1638,8 @@ private slots:
         QCOMPARE(hud.blockBubbles().size(), qsizetype(2));
     }
 
-    // no shown bubble ever touches a star or another bubble: over a whole ride, and with stars sliding along their
-    // lines
+    // no shown bubble ever touches a star, the target line or another bubble: over a whole ride, and with stars sliding
+    // along their lines
     void bubblesNeverTouch() {
         QVERIFY(loadWorkout({"T:Touch", "1:40,0.6", "1:60,1.0", "1:40,0.6", "1:90,1.3", "1:30,0.6", "1:400,0.9", "1:300,0.6"}));
         HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
@@ -1662,7 +1662,13 @@ private slots:
                     shown.append(bubble->placedRect());
                 }
             }
+            const QList<QRectF> line = hud.targetLineRects();
             for (qsizetype i = 0; i < shown.size(); ++i) {
+                for (const QRectF& part : line) {
+                    if (shown[i].intersects(part)) {
+                        return false;
+                    }
+                }
                 for (const auto& [star, name] : hud.maxStars()) {
                     if (star->isVisible() && shown[i].intersects(star->sceneBoundingRect())) {
                         return false;
@@ -1700,6 +1706,102 @@ private slots:
                 }
             }
         }
+    }
+
+    // a block bubble whose block's target is too low to sit under goes over it, still in its block
+    void blockBubbleKeepsClearOfTheTargetLine() {
+        QVERIFY(loadWorkout({"T:Low", "1:200,0.2", "1:400,1.2"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        while (hud.blockBubbles().isEmpty()) {
+            tickSecond(hud, rider);
+        }
+        tickSecond(hud, rider);
+        double now = 1000;
+        hud.stepGraphMarkers(now);
+        now += BlockBubble::kAppearSeconds + 0.1;
+        hud.stepGraphMarkers(now);
+        const BlockBubble* bubble = hud.blockBubbles().front();
+        QVERIFY(bubble->isVisible() && !bubble->popping());
+        const plot::ViewBox* vbox = hud.graph()->powerVBox();
+        const QRectF area = vbox->sceneBoundingRect();
+        const QRectF rect = bubble->placedRect();
+        // (on the graph's bottom it would have covered its block's target)
+        const double lineY = vbox->mapViewToScene(QPointF(0, bubble->target())).y();
+        QVERIFY(lineY > area.bottom() - rect.height());
+        QVERIFY(rect.bottom() < lineY - HudScreen::kTargetLineReach);
+        auto sceneX = [vbox](double t) { return vbox->mapViewToScene(QPointF(t, 0)).x(); };
+        QVERIFY(rect.left() >= sceneX(bubble->start()) && rect.right() <= sceneX(bubble->end()));
+        for (const QRectF& part : hud.targetLineRects()) {
+            QVERIFY(!rect.intersects(part));
+        }
+    }
+
+    // a max bubble with nowhere by its star gets a row cleared along the graph's top, and goes there
+    void maxBubbleGetsTheTopRow() {
+        QVERIFY(loadWorkout({"T:Top", "1:600,0.75"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.setAttribute(Qt::WA_DontShowOnScreen);
+        hud.resize(1920, 1116);
+        hud.show();
+        QCoreApplication::processEvents();
+        hud.stopTimers();
+        SimulatedRider rider(3);
+        hud.startWorkout();
+        while (appState().secondsPassed < 200) {
+            tickSecond(hud, rider);
+        }
+        double now = 1000;
+        hud.stepGraphMarkers(now);
+        now += MaxBubble::kAppearSeconds + 0.1;
+        hud.stepGraphMarkers(now);
+        MaxBubble* bubble = hud.maxBubbles().front();
+        QVERIFY(bubble->isVisible() && !bubble->popping());
+        QVERIFY(!bubble->needsTopRow());
+        const plot::ViewBox* vbox = bubble->star()->vbox();
+        const QRectF area = vbox->sceneBoundingRect();
+        // (all of the graph taken: it pops, and has nowhere to go)
+        QList<QRectF> avoid{area};
+        bubble->step(now, avoid);
+        QVERIFY(bubble->popping());
+        now += MaxBubble::kPopSeconds + 0.01;
+        avoid = {area};
+        bubble->step(now, avoid);
+        QVERIFY(!bubble->isVisible());
+        QVERIFY(bubble->needsTopRow());
+        // the next reading fits the graph with the row clear of the stars and the target line
+        tickSecond(hud, rider);
+        now += 0.1;
+        hud.stepGraphMarkers(now);
+        const double row = area.top() + MaxBubble::topRowHeight();
+        for (const auto& [star, name] : hud.maxStars()) {
+            if (star->isVisible()) {
+                QVERIFY2(star->sceneBoundingRect().top() >= row - 0.5, qPrintable(name));
+            }
+        }
+        for (const QRectF& part : hud.targetLineRects()) {
+            QVERIFY(part.top() >= row - 0.5);
+        }
+        // it's back, the row kept for it; and with everything under the row taken, it goes in the row
+        QVERIFY(bubble->isVisible() && !bubble->popping());
+        QVERIFY(bubble->needsTopRow());
+        const QRectF below = area.adjusted(0, MaxBubble::topRowHeight(), 0, 0);
+        avoid = {below};
+        bubble->step(now, avoid);
+        if (bubble->popping()) {
+            now += MaxBubble::kPopSeconds + 0.01;
+            avoid = {below};
+            bubble->step(now, avoid);
+        }
+        QVERIFY(bubble->isVisible() && !bubble->popping());
+        QVERIFY(bubble->placedRect().bottom() <= row);
+        QVERIFY(bubble->needsTopRow());
     }
 
     // a star touching a max bubble pops it, and a new one comes in clear of it

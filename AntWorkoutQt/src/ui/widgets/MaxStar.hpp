@@ -116,6 +116,8 @@ public:
     static constexpr double kAppearSeconds = 0.28;
     // pixels kept clear around it when it's placed (it grows in a little past its size)
     static constexpr double kClear = 3;
+    // how far off its star it may go, in half widths or rows past the spots next to it
+    static constexpr int kFurthestSteps = 4;
     // the smallest its text gets on a small screen, in pixels: it stays readable where the star goes on shrinking
     static constexpr int kMinTextPixels = 9;
     // pixels kept between its text's line and its top and bottom edges, clear of its rim
@@ -135,6 +137,10 @@ public:
     bool popping() const { return state_ == State::Popping; }
     // where it's placed (scene coordinates), at its full size
     QRectF placedRect() const { return rect_; }
+    // whether it found no spot by its star for the max it's over now: the graph's owner then keeps a row of
+    // topRowHeight() pixels along the graph's top clear (see MaxStar::topWithRoom's reserved) for it, until the max moves
+    bool needsTopRow() const;
+    static double topRowHeight();
     // how far above its max it and its star reach, in pixels (it at a pop's biggest)
     double headroom() const;
     // at now: pops if a rect in avoid (scene coordinates: the stars and the bubbles placed before it) touches it, and
@@ -164,6 +170,9 @@ private:
     int side_ = 1;
     // its center from level with its star, and its rect
     QPointF offset_;
+    bool topRow_ = false;
+    // the max it asked for the top row for
+    std::pair<std::optional<double>, std::optional<double>> roomFor_;
     QRectF rect_;
 };
 

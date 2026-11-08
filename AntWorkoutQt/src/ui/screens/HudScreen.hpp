@@ -227,6 +227,10 @@ public:
     double currentBubbleTarget() const { return bubbleTarget_; }
     // the graph's stars and bubbles to where they are at now (seconds on their clock)
     void stepGraphMarkers(double now);
+    // the target line on the graph, for the bubbles to keep clear of (scene coordinates): rects reaching
+    // kTargetLineReach pixels either side of it
+    static constexpr double kTargetLineReach = 1.5;
+    QList<QRectF> targetLineRects() const;
 
     // ---- What's on it (tests, LayoutViewer, the theme picker's preview) ----
 
@@ -404,6 +408,7 @@ private:
     int blockRemainingRadius_ = 11;
     int pastPowerIndex_ = 0;
     QList<double> timeGraphList_, powerGraphList_;
+    // each y range ("power", "hrCadence"): its top before the room for the stars, and its highest target (0: none)
     QMap<QString, std::pair<double, double>> graphTops_;
     QHash<QString, QString> plottedKeys_;
     int sliderWheelRemainder_ = 0;

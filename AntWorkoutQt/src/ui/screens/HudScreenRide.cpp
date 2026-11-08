@@ -1145,7 +1145,10 @@ void HudScreen::hudGraphDataUpdate() {
     if (hrCadenceMax == 0) {
         hrCadenceMax = 190;
     }
-    graphTops_ = {{QStringLiteral("power"), {powerMax + 100, 0}}, {QStringLiteral("hrCadence"), {hrCadenceMax + 20, 0}}};
+    // (and the highest target on each: none on the other)
+    const double targetTop = state.workoutMode ? maxTarget : 0;
+    graphTops_ = {{QStringLiteral("power"), {powerMax + 100, cadenceMode_ ? 0 : targetTop}},
+                  {QStringLiteral("hrCadence"), {hrCadenceMax + 20, cadenceMode_ ? targetTop : 0}}};
     fitGraphTops();
     if (state.workoutMode) {
         const ftpcolors::ZoneRanges ranges = state.ftpRanges;
@@ -1249,6 +1252,10 @@ void HudScreen::updateMaxStars(double graphStart) {
 
 // each y range up to its top, or higher where the stars and bubbles shown need room; again on every resize
 void HudScreen::fitGraphTops() {
+    // a row along the top clear of the stars and the target line, while a max bubble has nowhere by its star
+    const bool topRow = std::any_of(maxBubbles_.begin(), maxBubbles_.end(), [](const MaxBubble* bubble) {
+        return bubble->needsTopRow();
+    });
     for (const auto& [name, top] : graphTops_.asKeyValueRange()) {
         plot::ViewBox* vbox = name == u"power" ? progressGraph_->powerVBox() : progressGraph_->hrCadenceVBox();
         QList<std::pair<double, double>> rooms;
@@ -1257,7 +1264,10 @@ void HudScreen::fitGraphTops() {
                 rooms.append({bubble->headroom(), *bubble->star()->y});
             }
         }
-        vbox->setYRange(0, MaxStar::topWithRoom(vbox, top.first, rooms), 0.0);
+        if (topRow && top.second > 0) {
+            rooms.append({kTargetLineReach + MaxBubble::kClear, top.second});
+        }
+        vbox->setYRange(0, MaxStar::topWithRoom(vbox, top.first, rooms, topRow ? MaxBubble::topRowHeight() : 0.0), 0.0);
     }
 }
 
@@ -1265,16 +1275,62 @@ void HudScreen::stepMaxStars() {
     if (!isVisible()) {
         return;
     }
+    const bool topRow = std::any_of(maxBubbles_.begin(), maxBubbles_.end(), [](const MaxBubble* b) { return b->needsTopRow(); });
     stepGraphMarkers(steadySeconds(starClock_));
+    // (the graph's top row asked for or let go: the scale's fitted again now, not at the next reading)
+    if (std::any_of(maxBubbles_.begin(), maxBubbles_.end(), [](const MaxBubble* b) { return b->needsTopRow(); }) != topRow) {
+        fitGraphTops();
+    }
+}
+
+// the target bars' outline on the graph (the expected power, or cadence in Musical Cadence Mode): their tops, and the
+// steps between them; a free ride has none
+QList<QRectF> HudScreen::targetLineRects() const {
+    QList<QRectF> rects;
+    if (!appState().workoutMode) {
+        return rects;
+    }
+    const plot::ViewBox* vbox = cadenceMode_ ? progressGraph_->hrCadenceVBox() : progressGraph_->powerVBox();
+    const QRectF area = vbox->sceneBoundingRect();
+    auto scene = [vbox](double x, double y) { return vbox->mapViewToScene(QPointF(x, y)); };
+    // (left, right, top) of each column with a target, the ridden ones then the ones coming up
+    struct Top {
+        double left, right, y;
+    };
+    QList<Top> tops;
+    for (const plot::SolidColoredColumns* bars : {workoutPowerCompletedPlot_, workoutPowerPlot_}) {
+        const QList<double>& xs = bars->xData();
+        const QList<double>& ys = bars->yData();
+        for (qsizetype i = 0; i < ys.size() && i + 1 < xs.size(); ++i) {
+            if (ys[i] > 0) {
+                tops.append({scene(xs[i], 0).x(), scene(xs[i + 1], 0).x(), scene(0, ys[i]).y()});
+            }
+        }
+    }
+    constexpr double half = kTargetLineReach;
+    for (qsizetype i = 0; i < tops.size(); ++i) {
+        const Top& top = tops[i];
+        const double left = std::max(top.left, area.left()), right = std::min(top.right, area.right());
+        if (right > left) {
+            rects.append(QRectF(left - half, top.y - half, right - left + 2 * half, 2 * half));
+        }
+        // (the step up or down to the next, where they meet on the graph)
+        if (i + 1 < tops.size() && std::abs(tops[i + 1].left - top.right) < 1 && top.right >= area.left() &&
+            top.right <= area.right()) {
+            const double from = std::min(top.y, tops[i + 1].y), to = std::max(top.y, tops[i + 1].y);
+            rects.append(QRectF(top.right - half, from - half, 2 * half, to - from + 2 * half));
+        }
+    }
+    return rects;
 }
 
 void HudScreen::stepGraphMarkers(double now) {
     for (int phase = 0; phase < maxStars_.size(); ++phase) {
         maxStars_[phase].first->step(now, phase);
     }
-    // the block bubble, then the max bubbles: each pops if a star or a bubble before it touches it, and comes in again
-    // clear of the stars, the rest of their trips, and the other bubbles
-    QList<QRectF> avoid, trips;
+    // the block bubble, then the max bubbles: each pops if a star, the target line or a bubble before it touches it, and
+    // comes in again clear of the stars, the rest of their trips, the target line and the other bubbles
+    QList<QRectF> avoid = targetLineRects(), trips;
     for (const auto& [star, name] : maxStars_) {
         if (star->isVisible()) {
             avoid.append(star->sceneBoundingRect());
