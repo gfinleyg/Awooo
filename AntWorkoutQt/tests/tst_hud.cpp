@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLayout>
+#include <QPointer>
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QSlider>
@@ -32,6 +33,7 @@
 #include "HatchedLabel.hpp"
 #include "HudScreen.hpp"
 #include "KeyShortcuts.hpp"
+#include "LongVLabels.hpp"
 #include "MaxStar.hpp"
 #include "Performance.hpp"
 #include "PowerSpiral.hpp"
@@ -838,6 +840,80 @@ private slots:
         QCOMPARE(ramp.upNextHeader()->text(), QStringLiteral("Up Next:"));
         QVERIFY(!ramp.upNextLabel()->text().isEmpty());
         QCOMPARE(shortLast.upNextLabel()->text(), QStringLiteral("You're on the last block, way to go!"));
+    }
+
+    // a block done: the coming up list's top block (or interval) spirals, then slides up behind "Coming up..." into the
+    // Up Next box as the old box spirals and slides off to the right, rounded as it was, and the rest of the list follow
+    // it up (C++ only)
+    void upNextSlidesIntoPlace_data() {
+        QTest::addColumn<QStringList>("workout");
+        QTest::addColumn<bool>("interval");
+        QTest::newRow("block") << QStringList{"1:10,0.5", "1:10,0.6", "1:10,0.7", "1:10,0.8", "1:10,0.9"} << false;
+        QTest::newRow("interval") << QStringList{"1:10,0.5", "1:10,0.6", "3:2;1:20,0.8;1:20,0.6", "1:60,0.5"} << true;
+    }
+    void upNextSlidesIntoPlace() {
+        QFETCH(QStringList, workout);
+        QFETCH(bool, interval);
+        QVERIFY(loadWorkout(workout));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        hud.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&hud));
+        SimulatedRider rider;
+        hud.startWorkout();
+        tickSecond(hud, rider);
+        QTRY_VERIFY(!hud.upNextSlideRunning() && !hud.remainingList()->slideRunning());
+        const QRect box = hud.upNextLabel()->geometry();
+        const QString oldText = hud.upNextLabel()->text();
+        const QString oldSheet = theme::originalSheet(hud.upNextLabel());
+        for (int i = 0; i < 20 && hud.engine().activeWorkout() < 1; ++i) {
+            tickSecond(hud, rider);
+        }
+        QVERIFY(hud.upNextSlideRunning());
+        QCOMPARE(hud.upNextCap()->isVisibleTo(&hud), interval);
+        // (the real box and its cap out of sight while the block goes up to them)
+        QVERIFY(hud.upNextLabel()->graphicsEffect());
+        QVERIFY(hud.upNextCap()->graphicsEffect());
+        QPointer<QLabel> arriving = hud.upNextArriving();
+        QPointer<QLabel> leaving = hud.upNextLeaving();
+        QVERIFY(arriving && leaving);
+        QCOMPARE(arriving->text(), hud.upNextLabel()->text());
+        QCOMPARE(theme::originalSheet(arriving), theme::originalSheet(hud.upNextLabel()));
+        // (an interval's comes with its cap)
+        QCOMPARE(arriving->parentWidget()->findChildren<QLabel*>().size(), interval ? 2 : 1);
+        // (the old box drawn as it was, its corners rounded)
+        QCOMPARE(leaving->text(), oldText);
+        QCOMPARE(theme::originalSheet(leaving), oldSheet);
+        QPointer<QWidget> up = arriving->parentWidget();
+        QPointer<QWidget> off = leaving->parentWidget();
+        // (starting from the list's top rows, below the box, drawn over the list and under the header)
+        QVERIFY(up->y() > box.bottom());
+        if (interval) {
+            QVERIFY(up->height() > hud.remainingList()->labels()[0]->height() * 1.5);
+        }
+        QLabel* comingUp = nullptr;
+        for (QLabel* label : hud.upNextLabel()->parentWidget()->findChildren<QLabel*>(Qt::FindDirectChildrenOnly)) {
+            if (label->text() == u"Coming up...") {
+                comingUp = label;
+            }
+        }
+        QVERIFY(comingUp);
+        const QList<QObject*> siblings = hud.upNextLabel()->parentWidget()->children();
+        QVERIFY(siblings.indexOf(up) > siblings.indexOf(hud.remainingList()));
+        QVERIFY(siblings.indexOf(up) < siblings.indexOf(comingUp));
+        // the old box spirals where it is first (off its row up and down), then goes off to the right
+        QTRY_VERIFY(off && off->y() != box.y());
+        QTRY_VERIFY(off && off->x() > box.x() + box.width() / 4);
+        // the list's next block follows it up
+        QTRY_VERIFY(hud.remainingList()->slideRunning());
+        // (on its way: above where it started)
+        QTRY_VERIFY(up && up->y() < box.bottom());
+        // at rest: the box where it was, its block in it, the copies gone
+        QTRY_VERIFY_WITH_TIMEOUT(!hud.upNextSlideRunning(), spiralslide::kBlockDone.duration(10) * 3);
+        QVERIFY(!hud.upNextLabel()->graphicsEffect());
+        QVERIFY(!hud.upNextCap()->graphicsEffect());
+        QCOMPARE(hud.upNextLabel()->geometry(), box);
+        QTRY_VERIFY(!up && !off);
     }
 
     // the grades take over the left column as the note goes, the last block's a blinking question mark until it's set

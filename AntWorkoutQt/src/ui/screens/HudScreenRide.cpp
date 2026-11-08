@@ -1,13 +1,16 @@
 // The workout screen's ride (ClassHUDWindow.py's process_events and what it calls): each tick's workout events shown,
 // the blinking, pausing and restarting, the graph, the sliders and the END prompt. Building the screen is HudScreen.cpp.
 
+#include <QGraphicsOpacityEffect>
 #include <QGraphicsScene>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPointer>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSlider>
 #include <QTimer>
+#include <QVariantAnimation>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -34,6 +37,7 @@
 #include "SmoothProgressBar.hpp"
 #include "SolidColoredColumns.hpp"
 #include "SoundEffects.hpp"
+#include "SpiralSlide.hpp"
 #include "Theme.hpp"
 #include "WorkoutGraph.hpp"
 #include "WorkoutHelpers.hpp"
@@ -578,8 +582,182 @@ void HudScreen::setLabelColor(QLabel* label) {
     }
 }
 
+namespace {
+
+// a copy of the Up Next box as it looks now (its cap over its left side when it has one), drawn as the box is with its
+// rounded corners: the block going up into the box, or the old box going off
+class BoxGhost : public QWidget {
+public:
+    BoxGhost(QLabel* box, QLabel* cap, QWidget* parent) : QWidget(parent) {
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        const auto copy = [this](QLabel* from) {
+            auto* label = new QLabel(this);
+            label->setAlignment(from->alignment());
+            label->setProperty("awoFitPx", from->property("awoFitPx"));
+            theme::setSheet(label, theme::originalSheet(from));
+            label->setText(from->text());
+            return label;
+        };
+        box_ = copy(box);
+        if (cap && cap->isVisibleTo(cap->parentWidget()) && !cap->isHidden()) {
+            cap_ = copy(cap);
+            capWidth_ = cap->width();
+        }
+        setGeometry(box->geometry());
+    }
+    QLabel* box() const { return box_; }
+
+protected:
+    void resizeEvent(QResizeEvent*) override {
+        box_->setGeometry(rect());
+        if (cap_) {
+            cap_->setGeometry(0, 0, capWidth_, height());
+            cap_->raise();
+        }
+    }
+
+private:
+    QLabel* box_ = nullptr;
+    QLabel* cap_ = nullptr;
+    int capWidth_ = 0;
+};
+
+}  // namespace
+
+bool HudScreen::upNextSlideRunning() const {
+    return upNextSlide_ && upNextSlide_->state() == QAbstractAnimation::Running;
+}
+
+void HudScreen::finishUpNextSlide() {
+    if (upNextSlide_) {
+        upNextSlide_->stop();
+    }
+    for (QWidget* ghost : std::initializer_list<QWidget*>{upNextArriving_, upNextLeaving_}) {
+        if (ghost) {
+            ghost->hide();
+            ghost->deleteLater();
+        }
+    }
+    upNextArriving_ = nullptr;
+    upNextLeaving_ = nullptr;
+    for (QWidget* real : std::initializer_list<QWidget*>{upNextLabelDescription_, upNextCap_}) {
+        if (real && real->graphicsEffect()) {
+            real->setGraphicsEffect(nullptr);
+        }
+    }
+}
+
+QLabel* HudScreen::upNextArriving() const {
+    return upNextArriving_ ? static_cast<BoxGhost*>(upNextArriving_.data())->box() : nullptr;
+}
+
+QLabel* HudScreen::upNextLeaving() const {
+    return upNextLeaving_ ? static_cast<BoxGhost*>(upNextLeaving_.data())->box() : nullptr;
+}
+
+void HudScreen::startUpNextSlide(QWidget* leaving, const QRect& from) {
+    QWidget* parent = upNextLabelDescription_->parentWidget();
+    if (leaving) {
+        leaving->show();
+        leaving->raise();
+        upNextLeaving_ = leaving;
+        upNextLeaveFrom_ = leaving->geometry();
+        leaving->setGraphicsEffect(new QGraphicsOpacityEffect(leaving));
+    }
+    // the block going up: the Up Next box (and its cap) as it is now, starting as the list's top rows, over the old box
+    auto* arriving = new BoxGhost(upNextLabelDescription_, upNextCap_, parent);
+    arriving->setGeometry(from);
+    arriving->show();
+    arriving->raise();
+    upNextArriving_ = arriving;
+    upNextArriveFrom_ = from;
+    // (it passes behind "Coming up...")
+    remainingWorkoutHeader_->raise();
+    // the real box out of sight till the block's there
+    for (QWidget* real : std::initializer_list<QWidget*>{upNextLabelDescription_, upNextCap_}) {
+        auto* hidden = new QGraphicsOpacityEffect(real);
+        hidden->setOpacity(0.0);
+        real->setGraphicsEffect(hidden);
+    }
+
+    if (!upNextSlide_) {
+        upNextSlide_ = new QVariantAnimation(this);
+        upNextSlide_->setStartValue(0);
+        connect(upNextSlide_, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) {
+            const spiralslide::Motion& motion = spiralslide::kBlockDone;
+            const int time = value.toInt();
+            // (both spiral where they are first, then go)
+            const spiralslide::Step step = spiralslide::at(motion, time, theme::widgetScale(this));
+            const auto px = [](double v) { return static_cast<int>(std::lround(v)); };
+            if (upNextArriving_) {
+                const QRect to = upNextLabelDescription_->geometry();
+                const QRect& from = upNextArriveFrom_;
+                const auto mix = [&step](int a, int b) { return a + (b - a) * step.progress; };
+                upNextArriving_->setGeometry(px(mix(from.x(), to.x()) + step.offset.x()),
+                                             px(mix(from.y(), to.y()) + step.offset.y()),
+                                             px(mix(from.width(), to.width())), px(mix(from.height(), to.height())));
+            }
+            // the old box: off to the right (toward the current block), fading as it goes
+            if (upNextLeaving_) {
+                const QRect& from = upNextLeaveFrom_;
+                upNextLeaving_->move(px(from.x() + step.progress * from.width() * 0.6 + step.offset.x()),
+                                     px(from.y() + step.offset.y()));
+                const double q = std::clamp(static_cast<double>(time - motion.spiralMs) / motion.slideMs, 0.0, 1.0);
+                if (auto* fade = qobject_cast<QGraphicsOpacityEffect*>(upNextLeaving_->graphicsEffect())) {
+                    fade->setOpacity(1.0 - q);
+                }
+            }
+        });
+        connect(upNextSlide_, &QVariantAnimation::finished, this, &HudScreen::finishUpNextSlide);
+    }
+    const int duration = spiralslide::kBlockDone.duration(1);
+    upNextSlide_->setDuration(duration);
+    upNextSlide_->setEndValue(duration);
+    upNextSlide_->start();
+}
+
 // the up next box and the coming up list, at the difficulty set
 void HudScreen::updateUpNextRemaining() {
+    // a block finished, with the list at its top: the blocks that were at the top of it (a block, an interval's rows,
+    // or a song and its first block) go up into the Up Next box, the old box off to the right (its copy, and the top
+    // rows' place, taken before they change)
+    finishUpNextSlide();
+    QStringList oldLines;
+    QList<QRect> oldRows;
+    QPointer<BoxGhost> leaving;
+    QWidget* parent = upNextLabelDescription_->parentWidget();
+    if (remainingWorkoutList_->sliding() && isVisible() && upNextLabelDescription_->isVisible() && !workoutGraded_ &&
+        remainingWorkoutList_->scrollOffset() == 0) {
+        remainingWorkoutList_->finishSlide();
+        oldLines = remainingWorkoutList_->fullText().split(u'\n', Qt::SkipEmptyParts);
+        for (QLabel* row : remainingWorkoutList_->labels()) {
+            if (!row->isVisible() || row->text() == u"more...") {
+                break;
+            }
+            oldRows.append(QRect(row->mapTo(parent, QPoint(0, 0)), row->size()));
+        }
+        if (!oldRows.isEmpty() && !upNextLabelDescription_->text().isEmpty()) {
+            leaving = new BoxGhost(upNextLabelDescription_, upNextCap_, parent);
+            leaving->hide();
+        }
+    }
+    updateUpNextBoxes();
+    // (the list just its top lines fewer, all of them shown: they're what's up next now)
+    const QStringList newLines = remainingWorkoutList_->fullText().split(u'\n', Qt::SkipEmptyParts);
+    const qsizetype gone = oldLines.size() - newLines.size();
+    if (!oldRows.isEmpty() && gone >= 1 && gone <= oldRows.size() && oldLines.mid(gone) == newLines &&
+        upNextLabelDescription_->text() != kLastBlock) {
+        QRect from = oldRows.front();
+        for (qsizetype i = 1; i < gone; ++i) {
+            from |= oldRows[i];
+        }
+        startUpNextSlide(leaving, from);
+    } else if (leaving) {
+        leaving->deleteLater();
+    }
+}
+
+void HudScreen::updateUpNextBoxes() {
     QList<WorkoutEngine::UpcomingLine> lines = engine_->upcoming();
     upNextRepeats_.clear();
     upNextBlocks_.clear();
@@ -778,6 +956,7 @@ void HudScreen::fitBetweenGauges(QLabel* label, const QString& style, int points
 }
 
 void HudScreen::showWorkoutGrades(bool show) {
+    finishUpNextSlide();
     workoutGraded_ = show;
     for (QWidget* widget : std::initializer_list<QWidget*>{upNextLabelHeader_, upNextLabelDescription_,
                                                            remainingWorkoutHeader_, remainingWorkoutList_,

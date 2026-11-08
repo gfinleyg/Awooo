@@ -461,6 +461,8 @@ void HudScreen::buildUpNext() {
     upNext->addWidget(remainingWorkoutHeader_, 4, 0);
     remainingWorkoutList_ = new LongVLabels(appState().ftpRanges);
     remainingWorkoutList_->setPinnedStyle(kUpNextWidth);
+    // (its blocks spiral and slide up as one finishes, the top one into the Up Next box; they glide as it scrolls)
+    remainingWorkoutList_->setSliding(true);
     // (with the zone legend under it, as tall as the list alone was)
     remainingWorkoutList_->setFixedHeight(560 - ZoneLegend::kHeight - 6);
     // (right under "Coming up...", its blocks from the top of it)

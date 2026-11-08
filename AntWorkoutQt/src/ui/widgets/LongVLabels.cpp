@@ -4,11 +4,13 @@
 #include <QMouseEvent>
 #include <QRegularExpression>
 #include <QTimer>
+#include <QVariantAnimation>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 #include "AppLayout.hpp"
 #include "AppState.hpp"
@@ -28,7 +30,11 @@ const QString kIndent = QStringLiteral("      ");
 }  // namespace
 
 LongVLabels::LongVLabels(const ftpcolors::ZoneRanges& ranges, QWidget* parent)
-    : QWidget(parent), ftpRanges(ranges), labelLayout_(new QVBoxLayout), renderTimer_(new QTimer(this)) {
+    : QWidget(parent),
+      ftpRanges(ranges),
+      labelLayout_(new QVBoxLayout),
+      renderTimer_(new QTimer(this)),
+      slide_(new QVariantAnimation(this)) {
     // two layouts: one the widget's size, one holding the labels
     auto* main = new QVBoxLayout(this);
     // (the labels flush with the Up Next box)
@@ -60,6 +66,83 @@ LongVLabels::LongVLabels(const ftpcolors::ZoneRanges& ranges, QWidget* parent)
     connect(this, &LongVLabels::textChanged, renderTimer_, qOverload<>(&QTimer::start));
     // redrawn when the zone colors change
     connect(&zones::notifier(), &zones::Notifier::changed, this, &LongVLabels::renderLines);
+    // a slide: its clock (ms), the rows placed by it (their caps follow them)
+    slide_->setStartValue(0);
+    connect(slide_, &QVariantAnimation::valueChanged, this, [this](const QVariant& value) { placeSlide(value.toInt()); });
+}
+
+bool LongVLabels::slideRunning() const {
+    return slide_->state() == QAbstractAnimation::Running;
+}
+
+void LongVLabels::finishSlide() {
+    slide_->stop();
+    for (qsizetype i = 0; i < slideHomes_.size() && i < labels_.size(); ++i) {
+        labels_[i]->move(slideHomes_[i]);
+    }
+    slideHomes_.clear();
+}
+
+// the shift (in rows) that lines the rows up with the ones before: every pair that overlaps the same (the "more..."
+// rows aside, which stay at the ends), and one at least; the smallest that does
+int LongVLabels::rowShift(const QStringList& before, const QStringList& after, int direction) {
+    if (direction == 0) {
+        return 0;
+    }
+    const QStringList& from = direction > 0 ? before : after;
+    const QStringList& to = direction > 0 ? after : before;
+    for (qsizetype k = 1; k < from.size(); ++k) {
+        bool matched = false;
+        bool clash = false;
+        for (qsizetype i = 0; i + k < from.size() && i < to.size(); ++i) {
+            if (from[i + k] == kMoreText || to[i] == kMoreText) {
+                continue;
+            }
+            if (from[i + k] != to[i]) {
+                clash = true;
+                break;
+            }
+            matched = true;
+        }
+        if (matched && !clash) {
+            return static_cast<int>(direction > 0 ? k : -k);
+        }
+    }
+    return 0;
+}
+
+void LongVLabels::startSlide(int rows, double step, const spiralslide::Motion& motion, int time) {
+    slideHomes_.clear();
+    for (QLabel* label : labels_) {
+        if (label->isHidden()) {
+            break;
+        }
+        slideHomes_.append(label->pos());
+    }
+    if (slideHomes_.isEmpty()) {
+        return;
+    }
+    slideRows_ = rows;
+    slideStep_ = step;
+    slideMotion_ = motion;
+    // (going up, the rows wait their turn after the ones that were above them, the one gone from the top first)
+    const int duration = motion.duration(static_cast<int>(slideHomes_.size()) + std::max(rows, 0));
+    slide_->setDuration(duration);
+    slide_->setEndValue(duration);
+    slide_->start();
+    slide_->setCurrentTime(std::min(time, duration));
+    placeSlide(slide_->currentValue().toInt());
+}
+
+void LongVLabels::placeSlide(int time) {
+    const double scale = theme::widgetScale(this);
+    for (qsizetype i = 0; i < slideHomes_.size() && i < labels_.size(); ++i) {
+        const int wait = (static_cast<int>(i) + std::max(slideRows_, 0)) * slideMotion_.staggerMs;
+        const spiralslide::Step step = spiralslide::at(slideMotion_, time - wait, scale);
+        const double y = slideHomes_[i].y() + slideRows_ * slideStep_ * (1 - step.progress) + step.offset.y();
+        labels_[i]->move(static_cast<int>(std::lround(slideHomes_[i].x() + step.offset.x())),
+                         static_cast<int>(std::lround(y)));
+    }
 }
 
 void LongVLabels::setPinnedStyle(int labelWidth) {
@@ -124,6 +207,13 @@ QList<LongVLabels::Item> LongVLabels::items() const {
 // are scrolled out of view above or below; the furthest scroll leaves the last one at the bottom, beneath a top
 // "more..."
 void LongVLabels::renderLines() {
+    // (a slide under way: the rows back in their places before they're laid out again; it goes on from where it was
+    // if they're the same rows, and ends where it was going if not)
+    const bool wasSliding = slideRunning();
+    const int slideTime = slide_->currentTime();
+    finishSlide();
+    const int direction = std::exchange(slideDirection_, 0);
+    const spiralslide::Motion motion = slideMotion_;
     for (QLabel* label : labels_) {
         label->hide();
     }
@@ -132,6 +222,7 @@ void LongVLabels::renderLines() {
     }
     shownCaps_.clear();
     if (fullText_ == QLatin1String("DONE")) {
+        shownRows_.clear();
         const QRect geo = geometry();
         setFixedSize(geo.width(), geo.height());
         return;
@@ -225,6 +316,21 @@ void LongVLabels::renderLines() {
         layout()->activate();
     }
     placeCaps();
+    // the rows glide from where they were shown before (when they're the same rows, moved)
+    QStringList texts;
+    for (const Row& row : rows) {
+        texts.append(row.text);
+    }
+    const bool same = texts == shownRows_;
+    const int shift = sliding_ && isVisible() && !same ? rowShift(shownRows_, texts, direction) : 0;
+    shownRows_ = texts;
+    if (shift != 0) {
+        // (a row's height apart, as the layout has them)
+        const double step = rows.size() > 1 ? labels_[1]->y() - labels_[0]->y() : rowHeight();
+        startSlide(shift, step, motion);
+    } else if (wasSliding && same && isVisible()) {
+        startSlide(slideRows_, slideStep_, motion, slideTime);
+    }
 }
 
 void LongVLabels::placeCaps() {
@@ -254,6 +360,8 @@ bool LongVLabels::eventFilter(QObject* watched, QEvent* event) {
 void LongVLabels::scrollTo(int offset) {
     if (offset != scrollOffset_) {
         // (renderLines holds the bottom end)
+        slideDirection_ = offset > scrollOffset_ ? 1 : -1;
+        slideMotion_ = spiralslide::kScroll;
         scrollOffset_ = std::max(0, offset);
         renderLines();
     }
@@ -305,6 +413,11 @@ QString LongVLabels::labelColor(const QString& text) const {
 }
 
 void LongVLabels::setFullText(const QString& text) {
+    // (the same list again stays still; a new one's rows move up, if they're the ones there were, a block done)
+    if (text != fullText_) {
+        slideDirection_ = 1;
+        slideMotion_ = spiralslide::kBlockDone;
+    }
     fullText_ = text;
     // (a new list starts back at the top)
     scrollOffset_ = 0;

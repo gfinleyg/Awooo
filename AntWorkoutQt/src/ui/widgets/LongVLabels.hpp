@@ -13,9 +13,11 @@
 #include <optional>
 
 #include "FtpColors.hpp"
+#include "SpiralSlide.hpp"
 
 class QLabel;
 class QTimer;
+class QVariantAnimation;
 class QVBoxLayout;
 
 namespace awo {
@@ -59,6 +61,16 @@ public:
     // the lines shown now (the queued layout done)
     void renderLines();
 
+    // the workout screen's coming up list: when a block finishes, the rest each trace a small spiral and then slide up
+    // to their new places (spiralslide::kBlockDone), the one that's left the list going on up into the Up Next box
+    // (HudScreen); when the list scrolls they glide there (spiralslide::kScroll). Off by default: the setup screen's
+    // preview jumps
+    void setSliding(bool on) { sliding_ = on; }
+    bool sliding() const { return sliding_; }
+    // a slide under way, and the rows put straight where they go
+    bool slideRunning() const;
+    void finishSlide();
+
     QSize minimumSizeHint() const override;
 
 signals:
@@ -90,6 +102,11 @@ private:
     QList<Item> items() const;
     // the caps over their rows, wherever the layout has put them
     void placeCaps();
+    // how many rows the new ones moved by from the old (positive: up), going the way direction says (0: none found)
+    static int rowShift(const QStringList& before, const QStringList& after, int direction);
+    // the rows shown from rows rows lower (negative: higher), step px apart, to where they go, from time ms in
+    void startSlide(int rows, double step, const spiralslide::Motion& motion, int time = 0);
+    void placeSlide(int time);
 
     QString fullText_;
     QList<QLabel*> labels_;
@@ -103,6 +120,16 @@ private:
     // the lines are laid out once the widget has its size for the new text (and again on each resize): a render
     // queued for the event loop, however many changes come in before it runs
     QTimer* renderTimer_;
+    // sliding: the rows' text as last shown, the way the next render's rows are expected to move (1: up, a block done
+    // or scrolled down; -1: down) and how, and the rows' places as laid out, which a slide starts away from and ends at
+    bool sliding_ = false;
+    QStringList shownRows_;
+    int slideDirection_ = 0;
+    spiralslide::Motion slideMotion_;
+    QVariantAnimation* slide_;
+    QList<QPoint> slideHomes_;
+    int slideRows_ = 0;
+    double slideStep_ = 0.0;
 };
 
 }  // namespace awo

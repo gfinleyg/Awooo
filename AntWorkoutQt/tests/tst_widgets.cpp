@@ -1020,6 +1020,73 @@ private slots:
         QVERIFY(!static_cast<ScrollingLabel*>(preview.labels()[0])->scrolling());
     }
 
+    // the workout screen's coming up list: a block done, the rest each trace a small spiral and then slide up a row to
+    // their places instead of jumping there, each a little after the one above, their caps with them; the setup
+    // screen's preview doesn't slide (C++ only)
+    void longLabelsSlideIntoPlace() {
+        LongVLabels labels;
+        labels.setPinnedStyle();
+        labels.setSliding(true);
+        labels.resize(LongVLabels::kLabelWidth, 400);
+        labels.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&labels));
+        labels.setFullText(QStringLiteral("100W 5m\n2x 300W 1m\n      150W 2m\n200W 3m\n"));
+        labels.renderLines();
+        QApplication::processEvents();
+        QVERIFY(!labels.slideRunning());
+        const QList<QLabel*>& rows = labels.labels();
+        const QPoint top = rows[0]->pos();
+        const QPoint second = rows[1]->pos();
+        labels.setFullText(QStringLiteral("2x 300W 1m\n      150W 2m\n200W 3m\n"));
+        labels.renderLines();
+        QVERIFY(labels.slideRunning());
+        // (starting where they were: the first a row down, where it was the second)
+        QCOMPARE(rows[0]->text(), QStringLiteral("300W 1m"));
+        QCOMPARE(rows[0]->pos(), second);
+        // (spiralling where it is first: off its place, but not along the way yet)
+        const spiralslide::Motion& motion = spiralslide::kBlockDone;
+        bool wobbled = false;
+        QTRY_VERIFY_WITH_TIMEOUT((wobbled = wobbled || rows[0]->pos() != second, rows[0]->y() < second.y() - 10),
+                                 motion.duration(6) * 3);
+        QVERIFY(wobbled);
+        QVERIFY(rows[0]->y() > top.y());
+        // (the interval's cap over its rows as they go)
+        QLabel* cap = labels.caps()[0];
+        QCOMPARE(cap->y(), rows[0]->y());
+        QTRY_VERIFY_WITH_TIMEOUT(!labels.slideRunning(), motion.duration(6) * 3);
+        QCOMPARE(rows[0]->pos(), top);
+        QCOMPARE(rows[1]->pos(), second);
+        QCOMPARE(cap->y(), top.y());
+        // the same list again, or a different one (a difficulty change), stays put
+        labels.setFullText(QStringLiteral("2x 300W 1m\n      150W 2m\n200W 3m\n"));
+        labels.renderLines();
+        QVERIFY(!labels.slideRunning());
+        labels.setFullText(QStringLiteral("2x 330W 1m\n      160W 2m\n220W 3m\n"));
+        labels.renderLines();
+        QVERIFY(!labels.slideRunning());
+        // scrolling slides too, either way
+        QStringList lines;
+        for (int i = 0; i < 20; ++i) {
+            lines.append(QStringLiteral("%1W 1m").arg(100 + i));
+        }
+        labels.setFullText(lines.join(u'\n'));
+        labels.renderLines();
+        labels.finishSlide();
+        labels.scrollTo(2);
+        QVERIFY(labels.slideRunning());
+        labels.finishSlide();
+        labels.scrollTo(1);
+        QVERIFY(labels.slideRunning());
+        labels.finishSlide();
+        // a slide cut short by the next change ends where it was going
+        labels.scrollTo(2);
+        labels.finishSlide();
+        QCOMPARE(rows[0]->pos(), top);
+        // the preview's list jumps, as it always has
+        LongVLabels preview;
+        QVERIFY(!preview.sliding());
+    }
+
     // an interval: its blocks' rows without the repeat count or indent, making room on their left for a cap holding the
     // count, as tall as the rows and colored top to bottom through their colors (C++ only)
     void longLabelsIntervalsHaveCaps() {

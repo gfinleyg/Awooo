@@ -100,6 +100,19 @@ void settle() {
     for (int i = 0; i < 3; ++i) {
         QApplication::processEvents();
     }
+    // (taken at rest: the coming up list's rows and the Up Next box where they were sliding to)
+    for (QWidget* window : QApplication::topLevelWidgets()) {
+        for (LongVLabels* list : window->findChildren<LongVLabels*>()) {
+            list->finishSlide();
+        }
+        for (HudScreen* hud : window->findChildren<HudScreen*>()) {
+            hud->finishUpNextSlide();
+        }
+        if (auto* hud = qobject_cast<HudScreen*>(window)) {
+            hud->finishUpNextSlide();
+        }
+    }
+    QApplication::processEvents();
 }
 
 QWidget* shown(QWidget* widget, int width, int height) {

@@ -243,6 +243,17 @@ Python app's own results (`tests\golden\`).
   10 seconds only flash grey. Blocks too short to blink (under 2 s) don't swell. Parity scenes are taken at rest, so
   they don't change.
 
+- **The coming up list's blocks spiral, then slide into place.** When a block finishes, each block in the "Coming
+  up..." list traces a small outward spiral where it is (3 px at its widest, 2.5 turns clockwise, 0.35 s). Then it
+  slides up to its new row over 0.9 s, easing in and out. Each block starts 50 ms after the one above it, and interval
+  caps move with their rows. The top block passes behind "Coming up..." and grows into the Up Next box: a plain block,
+  an interval's rows with their cap, or a new song's header with its first block. The old Up Next box spirals the same
+  way, then slides off to the right toward the current block and fades, keeping its rounded corners. When the list is
+  scrolled down, the list still slides but the Up Next box changes in one step. Scrolling the list (wheel
+  or drag) glides it over 0.3 s, with no spiral. A list that changes for another reason, such as a difficulty change,
+  redraws in one step. The Python app's blocks jump to their new places. The setup screen's workout list doesn't
+  move. Parity scenes are taken once everything is at rest, so they don't change.
+
 - **The workout graph's bubble text stays readable on small screens.** Its size follows the layout's scale but stops at
   9 pixels (it went down to 6), and a max bubble is kept tall enough to hold its line of text clear of its rim, which
   used to paint over the text once the bubble got as small as the line. A max bubble shown when the scale or theme font

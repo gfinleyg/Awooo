@@ -28,6 +28,7 @@ class QLineEdit;
 class QPushButton;
 class QSlider;
 class QTimer;
+class QVariantAnimation;
 
 namespace awo {
 
@@ -248,6 +249,13 @@ public:
     QLabel* upNextCap() const { return upNextCap_; }
     QLabel* upNextHeader() const { return upNextLabelHeader_; }
     LongVLabels* remainingList() const { return remainingWorkoutList_; }
+    // a block finished: the old Up Next box sliding off to the right and the coming up list's top block going up behind
+    // "Coming up..." into its place (C++ only); finishing it puts the boxes straight where they go
+    bool upNextSlideRunning() const;
+    void finishUpNextSlide();
+    // (the copies going up into the box and off out of it while it runs, their box label; null when there's none)
+    QLabel* upNextArriving() const;
+    QLabel* upNextLeaving() const;
     ZoneLegend* zoneLegend() const { return zoneLegend_; }
     QLabel* workoutTimeLabel() const { return workoutTime_; }
     QLabel* remainingTimeLabel() const { return remainingWorkoutTime_; }
@@ -323,6 +331,7 @@ private:
     void blockBlinkDefault();
     void blockBlinkOn();
     void updateUpNextRemaining();
+    void updateUpNextBoxes();
     void hideLastBlockNote();
     void updateRequestedPowerDisplays();
     void updateWorkoutMessage();
@@ -381,6 +390,9 @@ private:
     QString intervalCapCss(const QStringList& blocks) const;
     // the Up Next box's cap: shown, and its box making room for it, while an interval is up next
     void colorUpNextCap();
+    // the Up Next slide from the list's top rows (rect in the Up Next box's parent), the old box's copy (if any) leaving
+    // from where it is
+    void startUpNextSlide(QWidget* leaving, const QRect& from);
     void hideUpNextCap();
     // the interval being ridden's repeat count, in its blocks' colors
     void colorBlockCount();
@@ -438,6 +450,13 @@ private:
     QString upNextRepeats_;
     QStringList upNextBlocks_;
     QLabel* remainingWorkoutHeader_ = nullptr;
+    // the Up Next slide: its clock (ms), the block going up and the old box's picture (over the real box, kept out of
+    // sight till it's done), and where they come from
+    QVariantAnimation* upNextSlide_ = nullptr;
+    QPointer<QWidget> upNextArriving_;
+    QPointer<QWidget> upNextLeaving_;
+    QRect upNextArriveFrom_;
+    QRect upNextLeaveFrom_;
     LongVLabels* remainingWorkoutList_ = nullptr;
     ZoneLegend* zoneLegend_ = nullptr;
     QLabel* workoutGradesHeader_ = nullptr;

@@ -104,6 +104,8 @@ private slots:
                 QVERIFY(!display.workoutHud()->blockBubbles().isEmpty());
                 // the lit block's slide and swell, as the app has them
                 QVERIFY(display.workoutHud()->blockHighlight());
+                // and the coming up list's blocks gliding up as one finishes
+                QVERIFY(display.workoutHud()->remainingList()->sliding());
             } else {
                 QVERIFY(display.workoutHud()->blockBubbles().isEmpty());
                 QVERIFY(!display.workoutHud()->blockHighlight());

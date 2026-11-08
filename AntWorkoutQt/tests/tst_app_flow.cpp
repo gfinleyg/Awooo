@@ -358,6 +358,11 @@ private slots:
                     placed.remove(label);
                 }
             }
+            // (the coming up list's rows and the Up Next box slide as a block finishes: they're checked where they
+            // come to rest)
+            hud->remainingList()->finishSlide();
+            hud->finishUpNextSlide();
+            QApplication::processEvents();
             for (QWidget* widget : hud->findChildren<QWidget*>()) {
                 // (the coming up list's interval caps go with their intervals' rows as the list moves up, as the
                 // rows' text does)

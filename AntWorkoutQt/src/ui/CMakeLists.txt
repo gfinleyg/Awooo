@@ -59,6 +59,7 @@ add_library(awo_ui STATIC
     widgets/HatchedLabel.hpp
     widgets/LongVLabels.cpp
     widgets/LongVLabels.hpp
+    widgets/SpiralSlide.hpp
     widgets/MaxStar.cpp
     widgets/MaxStar.hpp
     widgets/PowerSpiral.cpp
