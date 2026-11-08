@@ -82,6 +82,7 @@ struct Ride {
     bool cadenceSensor = false;
     bool speedCadence = false;
     double wheelCircumference = 0;  // meters
+    double distanceMiles = 0;       // what the workout screen showed for it
     std::optional<Ring> ring;  // what a workout's ring had, a free ride's from its readings (filled by the synopsis)
 };
 
@@ -102,8 +103,14 @@ RideStart startValues();
 // START on the setup screen: a new ride, not in the session until its synopsis opens
 void beginRide();
 RideKind rideKind();
-// The ride just ridden (the app's state and readings) joins the session, once; ring: the workout screen's spiral's
-void addCurrentRide(std::optional<Ring> ring = std::nullopt);
+// The ride just ridden (the app's state and readings) joins the session, once; ring: the workout screen's spiral's,
+// miles: the distance it showed
+void addCurrentRide(std::optional<Ring> ring = std::nullopt, double miles = 0);
+
+// The session's rides before the one being ridden (all of them but it, once it has joined): their times
+// (secondsPassed, as the synopsis's Total Time adds them) and distances, for the workout screen's totals
+double earlierSeconds();
+double earlierMiles();
 
 QString kindName(RideKind kind);
 // A ride's heading: its kind and name

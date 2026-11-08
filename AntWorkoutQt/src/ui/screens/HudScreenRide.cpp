@@ -105,7 +105,7 @@ void HudScreen::processEvents(double timeDelta) {
     engine_->advanceClock(timeDelta);
     // (a simulated second, or the real clock: the next real tick counts from here)
     lastTimestamp_ = steadySeconds(clock_);
-    layout::setText(timeElapsed_, minimizedDuration(state.secondsPassed));
+    layout::setText(timeElapsed_, minimizedDuration(session::earlierSeconds() + state.secondsPassed));
     if (graphUpdates_) {
         hudGraphDataUpdate();
     }
@@ -861,7 +861,7 @@ void HudScreen::restartWorkout() {
         showWorkoutGrades(false);
         layout::setText(pauseButton_, QStringLiteral("PAUSE"));
     }
-    layout::setText(timeElapsed_, QStringLiteral("0s"));
+    layout::setText(timeElapsed_, minimizedDuration(session::earlierSeconds()));
 }
 
 void HudScreen::endGrading() {

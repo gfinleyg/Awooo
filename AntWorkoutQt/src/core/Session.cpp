@@ -58,7 +58,7 @@ RideKind rideKind() {
     return state.cadenceMode ? RideKind::Cadence : RideKind::Workout;
 }
 
-void addCurrentRide(std::optional<Ring> ring) {
+void addCurrentRide(std::optional<Ring> ring, double miles) {
     AppState& state = appState();
     if (state.rideRecorded) {
         return;
@@ -121,10 +121,37 @@ void addCurrentRide(std::optional<Ring> ring) {
     ride.cadenceSensor = state.hasCadenceSensor();
     ride.speedCadence = state.anySpeedCadence();
     ride.wheelCircumference = state.wheelCircumference;
+    ride.distanceMiles = miles;
     if (state.workoutMode) {
         ride.ring = ring;
     }
     state.sessionRides.append(ride);
+}
+
+namespace {
+
+// the rides before the one being ridden
+qsizetype earlierCount() {
+    const qsizetype count = rides().size();
+    return appState().rideRecorded && count > 0 ? count - 1 : count;
+}
+
+}  // namespace
+
+double earlierSeconds() {
+    double total = 0;
+    for (qsizetype i = 0; i < earlierCount(); ++i) {
+        total += rides()[i].secondsPassed;
+    }
+    return total;
+}
+
+double earlierMiles() {
+    double total = 0;
+    for (qsizetype i = 0; i < earlierCount(); ++i) {
+        total += rides()[i].distanceMiles;
+    }
+    return total;
 }
 
 QString kindName(RideKind kind) {

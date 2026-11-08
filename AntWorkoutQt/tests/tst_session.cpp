@@ -83,6 +83,29 @@ private slots:
         QVERIFY(session::rides().isEmpty());
     }
 
+    // the workout screen's Elapsed Time and Dist. carry on from the rides before this one
+    void earlierRidesTotalsLeaveOutTheOneBeingRidden() {
+        QCOMPARE(session::earlierSeconds(), 0.0);
+        QCOMPARE(session::earlierMiles(), 0.0);
+        ridden(60);
+        session::addCurrentRide(std::nullopt, 1.25);
+        QCOMPARE(session::rides()[0].distanceMiles, 1.25);
+        // back on the workout screen with it already in the session: it isn't counted twice
+        QCOMPARE(session::earlierSeconds(), 0.0);
+        QCOMPARE(session::earlierMiles(), 0.0);
+        // the next ride's START
+        ridden(30);
+        QCOMPARE(session::earlierSeconds(), 60.0);
+        QCOMPARE(session::earlierMiles(), 1.25);
+        session::addCurrentRide(std::nullopt, 0.5);
+        ridden(10);
+        QCOMPARE(session::earlierSeconds(), 90.0);
+        QCOMPARE(session::earlierMiles(), 1.75);
+        session::clear();
+        QCOMPARE(session::earlierSeconds(), 0.0);
+        QCOMPARE(session::earlierMiles(), 0.0);
+    }
+
     void eachRideKeepsTheZonesFromItsStart() {
         ridden(60, true, false, {}, 200);
         const ftpcolors::ZoneRanges zones = ftpcolors::powerRanges(200);

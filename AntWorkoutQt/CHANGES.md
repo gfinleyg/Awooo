@@ -250,6 +250,10 @@ Python app's own results (`tests\golden\`).
   levels out of 255, which can't be seen.
 - **Resuming with Space lets the PAUSE button's color go.** The button stayed drawn pressed until something else
   repainted it. Resuming with the mouse was never affected. The Python app makes the same calls, so it has this too.
+- **The workout screen's Elapsed Time and Dist. (bottom right) are the session's.** They add up the rides already in
+  the session (as the synopsis's Total Time and Distance do) and carry on from them, instead of starting again at 0
+  for each ride. The first ride of a session, or one after Clear Session, still starts at 0. The Python app showed
+  only the current ride's.
 
 ## Musical Cadence Mode
 

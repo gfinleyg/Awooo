@@ -112,7 +112,7 @@ void MainWindow::generateSynopsis() {
     if (hud_ && hud_->spiral()) {
         ring = hud_->spiral()->ridden();
     }
-    session::addCurrentRide(ring);
+    session::addCurrentRide(ring, hud_ ? hud_->distanceMiles() : 0.0);
     synopsis_ = new SynopsisScreen(bridge_.get(), setup_);
     connect(synopsis_, &SynopsisScreen::returnToSetupRequested, this, &MainWindow::returnFromSynopsis);
     connect(synopsis_, &SynopsisScreen::exitRequested, this, &QWidget::close);

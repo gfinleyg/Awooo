@@ -1018,7 +1018,7 @@ void HudScreen::buildOtherInfo() {
     distLabel_ = new QLabel(QStringLiteral("Dist."));
     distLabel_->setAlignment(Qt::AlignVCenter | Qt::AlignRight);
     info->addWidget(distLabel_, row + 1, 0, 1, 1);
-    distValueLabel_ = centeredLabel(QStringLiteral("0"));
+    distValueLabel_ = centeredLabel(QString());
     info->addWidget(distValueLabel_, row + 1, 1, 1, 1);
     milesLabel_ = new QLabel(Units::current().distanceUnit());
     milesLabel_->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
@@ -1027,9 +1027,11 @@ void HudScreen::buildOtherInfo() {
     for (QLabel* label : {speedLabelTitle_, speedValueLabel_, mphLabel_, distLabel_, distValueLabel_, milesLabel_}) {
         label->setVisible(state.hasSpeedSensor());
     }
+    setDistance(distanceMiles_);
     timerLabel_ = centeredLabel(QStringLiteral("Elapsed Time:"));
     info->addWidget(timerLabel_, row + 2, 0, 1, 3);
-    timeElapsed_ = centeredLabel(QStringLiteral("0s"));
+    // the session's time and distance (the rides before this one added), not just this ride's
+    timeElapsed_ = centeredLabel(minimizedDuration(session::earlierSeconds()));
     info->addWidget(timeElapsed_, row + 3, 0, 1, 3);
     // a bubble behind each row (speed and distance's only with their text), rounded like the timer rows: as tall as
     // them at least, as Qt draws square corners when the radius is more than half the height
@@ -1240,9 +1242,11 @@ void HudScreen::setSpeed(double mph, bool reading) {
     layout::setText(speedValueLabel_, py::str(py::round(Units::current().speed(speedMph_), 1)));
 }
 
+// (the ride's own; the label shows the session's, the rides before it added)
 void HudScreen::setDistance(double miles) {
     distanceMiles_ = miles;
-    layout::setText(distValueLabel_, py::str(py::round(Units::current().distanceFromMiles(distanceMiles_), 2)));
+    const double total = session::earlierMiles() + distanceMiles_;
+    layout::setText(distValueLabel_, py::str(py::round(Units::current().distanceFromMiles(total), 2)));
 }
 
 void HudScreen::unitsChanged() {
