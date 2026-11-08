@@ -222,15 +222,36 @@ private slots:
             for (auto it = ride.songStarts.cbegin(); it != ride.songStarts.cend(); ++it) {
                 starts.insert(QString::number(it.key()), it.value());
             }
-            QCOMPARE(blocks, py[QStringLiteral("blocks")].toArray());
+            // (deliberately unlike the Python app: its blocks of 40-55 RPM are ridden at double here, see CHANGES.md)
+            QJsonArray pyBlocks;
+            QList<std::pair<double, double>> doubledSpans;  // playlist seconds
+            int edge = 0;
+            for (const QJsonValue& b : py[QStringLiteral("blocks")].toArray()) {
+                const int seconds = b[0].toInt(), rpm = b[1].toInt();
+                const bool doubled = rpm >= kMinRpm && rpm <= kDoubleUpToRpm;
+                if (doubled) {
+                    doubledSpans.append({edge - 1.0, edge + seconds + 1.0});
+                }
+                pyBlocks.append(QJsonArray{seconds, doubled ? rpm * 2 : rpm});
+                edge += seconds;
+            }
+            QCOMPARE(blocks, pyBlocks);
             QCOMPARE(tracks, py[QStringLiteral("tracks")].toArray());
             QCOMPARE(starts, py[QStringLiteral("songStarts")].toObject());
             QCOMPARE(headers, py[QStringLiteral("headers")].toArray());
+            // the Python app's pulses, and a pulse between each two of them in the doubled blocks
             const std::vector<double> pyPulses = doubles(py[QStringLiteral("pulses")]);
-            QCOMPARE(static_cast<std::size_t>(ride.pulses.size()), pyPulses.size());
-            for (std::size_t i = 0; i < pyPulses.size(); ++i) {
-                QCOMPARE(ride.pulses[static_cast<qsizetype>(i)], pyPulses[i]);
+            std::size_t matched = 0;
+            for (const double p : ride.pulses) {
+                if (matched < pyPulses.size() && p == pyPulses[matched]) {
+                    ++matched;
+                } else {
+                    QVERIFY2(std::any_of(doubledSpans.begin(), doubledSpans.end(),
+                                         [p](const auto& span) { return p > span.first && p < span.second; }),
+                             qPrintable(QStringLiteral("extra pulse at %1").arg(p)));
+                }
             }
+            QCOMPARE(matched, pyPulses.size());
         }
     }
 
@@ -693,7 +714,8 @@ private slots:
         QCOMPARE(mergeCloseCadences(freeBetween), freeBetween);
     }
 
-    // 112 and 108 BPM are separate tempos, but ridden at half speed they're 56 and 54 RPM: one block at 55
+    // 112 and 108 BPM are separate tempos, but ridden at half speed they're 56 and 54 RPM: one block at 55, which is
+    // slow enough to ride at double: 110
     void rideMergesCloseCadencesWithinASong() {
         std::vector<double> classes(15, std::log2(112 / 60.0));
         classes.insert(classes.end(), 15, std::log2(108 / 60.0));
@@ -701,7 +723,23 @@ private slots:
         QCOMPARE(songSegments(analysis).size(), std::size_t(2));
         const CadenceRide ride = buildWorkout({{QStringLiteral("s.wav"), QStringLiteral("S")}},
                                               {{QStringLiteral("s.wav"), analysis}}, 50);
-        QCOMPARE(ride.blocks, (QList<std::pair<int, int>>{{66, 55}}));
+        QCOMPARE(ride.blocks, (QList<std::pair<int, int>>{{66, 110}}));
+    }
+
+    // cadences of 40-55 RPM (rounded) are ridden at double, the rest as they are
+    void doublesSlowCadences() {
+        QCOMPARE(doubleSlowRpm(40), 80.0);
+        QCOMPARE(doubleSlowRpm(55.4), 110.8);
+        QCOMPARE(doubleSlowRpm(55.6), 55.6);
+        QCOMPARE(doubleSlowRpm(39.4), 39.4);
+        QCOMPARE(doubleSlowRpm(85), 85.0);
+        // a 100 BPM song folded towards a preferred 50 RPM: 50, ridden at 100, a pulse a beat
+        std::vector<double> classes(30, std::log2(100 / 60.0));
+        const CadenceRide ride = buildWorkout({{QStringLiteral("s.wav"), QStringLiteral("S")}},
+                                              {{QStringLiteral("s.wav"), analysisOf(classes)}}, 50);
+        QCOMPARE(ride.blocks.size(), qsizetype(1));
+        QCOMPARE(ride.blocks[0].second, 100);
+        QVERIFY(std::abs(*songCadence(analysisOf(classes), 50) - 100) < 1e-9);
     }
 
     // the player: the songs back to back on the device's clock (filled by hand here, no sound device)

@@ -266,6 +266,9 @@ Python app's own results (`tests\golden\`).
   ones joined first, so a slow drift doesn't all become one; free ride between them keeps them apart). Tempos far
   enough apart to be separate sections can still come out that close as cadences, mostly when ridden at half the
   beat (112 and 108 BPM as 56 and 54 RPM). In the same six bands' songs, 51 songs lost a block (1650 to 1558).
+- **Blocks of 40 to 55 RPM are ridden at double** (50 becomes 100), a pedal stroke a beat instead of one every two
+  beats, and their beat pulses double with them. It's done after close sections are joined, so 56 and 54 still ride
+  as one block (at 110). A song's cadence for Pick Random Songs counts those stretches at double too.
 - **Pick Random Songs picks the unchecked songs first.** The songs checked when it's pressed are picked only once
   none of the others fits, so pressing it again gives a new set of songs (as far as the list has them).
 

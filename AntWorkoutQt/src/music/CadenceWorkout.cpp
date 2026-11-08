@@ -245,6 +245,11 @@ double foldRpm(double bpm, std::optional<double> previous, double preferred, dou
     return best;
 }
 
+double doubleSlowRpm(double rpm) {
+    const double rounded = np::roundHalfEven(rpm);
+    return rounded >= kMinRpm && rounded <= kDoubleUpToRpm ? rpm * 2 : rpm;
+}
+
 std::vector<Segment> mergeCloseCadences(std::vector<Segment> sections, double within) {
     const auto rounded = [](const Segment& s) { return np::roundHalfEven(*s.bpm); };
     while (true) {
@@ -316,7 +321,7 @@ std::optional<double> songCadence(const Analysis& analysis, double preferred, do
     for (const Segment& segment : songSegments(analysis, minSegmentSeconds)) {
         if (segment.bpm) {
             previous = foldRpm(*segment.bpm, previous, preferred);
-            weighted += *previous * (segment.end - segment.start);
+            weighted += doubleSlowRpm(*previous) * (segment.end - segment.start);
             seconds += segment.end - segment.start;
         }
     }
@@ -350,7 +355,8 @@ CadenceRide buildWorkout(const QList<std::pair<QString, std::optional<QString>>>
         for (const Segment& segment : mergeCloseCadences(sections)) {
             int rpm = 0;
             if (segment.bpm) {
-                rpm = static_cast<int>(np::roundHalfEven(*segment.bpm));
+                // (after merging, so close sections either side of kDoubleUpToRpm still ride as one)
+                rpm = static_cast<int>(np::roundHalfEven(doubleSlowRpm(np::roundHalfEven(*segment.bpm))));
                 for (const double p : pulses(beats, segment.start, segment.end, rpm)) {
                     ride.pulses.append(start + p);
                 }

@@ -10,6 +10,7 @@
 //   - each segment's tempo is doubled/halved into kMinRpm..kMaxRpm, keeping to the previous segment's octave within a
 //     song, else the one nearest the preferred cadence; neighbors that end up within kMergeRpm of each other are
 //     ridden as one section at their average
+//   - a cadence that comes out at kMinRpm..kDoubleUpToRpm (rounded) is ridden at double that, a pedal stroke a beat
 
 #include <QHash>
 #include <QMap>
@@ -27,6 +28,8 @@ namespace awo::music {
 
 constexpr double kMinRpm = 40, kMaxRpm = 120;
 constexpr double kDefaultPreferredRpm = 85;
+// cadences this slow (rounded, from kMinRpm) are ridden at double (see doubleSlowRpm)
+constexpr double kDoubleUpToRpm = 55;
 constexpr double kDefaultMinSegmentSeconds = 8;
 // windows with less than this confidence have no clear beat...
 constexpr double kMinConfidence = 2.5;
@@ -59,6 +62,8 @@ void bridgeShortRuns(std::vector<bool>& labels, bool value, int minLength);
 // bpm doubled/halved into low..high: the octave nearest previous when there is one, else nearest preferred
 double foldRpm(double bpm, std::optional<double> previous = std::nullopt, double preferred = kDefaultPreferredRpm,
                double low = kMinRpm, double high = kMaxRpm);
+// rpm doubled when it rounds to kMinRpm..kDoubleUpToRpm, else as it is
+double doubleSlowRpm(double rpm);
 // a song's sections (bpm holding each one's cadence) with neighbors whose cadences (rounded) are within RPM of each
 // other joined into one at their average cadence over their time, the closest neighbors first; free ride sections
 // keep the ones either side of them apart
