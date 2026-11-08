@@ -21,6 +21,7 @@
 #include "GradeWidgets.hpp"
 #include "HudScreen.hpp"
 #include "KeyShortcuts.hpp"
+#include "LongVLabels.hpp"
 #include "MainWindow.hpp"
 #include "Performance.hpp"
 #include "PowerSpiral.hpp"
@@ -358,7 +359,9 @@ private slots:
                 }
             }
             for (QWidget* widget : hud->findChildren<QWidget*>()) {
-                if (!widget->isVisible()) {
+                // (the coming up list's interval caps go with their intervals' rows as the list moves up, as the
+                // rows' text does)
+                if (!widget->isVisible() || hud->remainingList()->caps().contains(qobject_cast<QLabel*>(widget))) {
                     continue;
                 }
                 const QRect rect(widget->mapTo(hud, QPoint(0, 0)), widget->size());

@@ -3,6 +3,10 @@
 // A column of colored block labels that fits the widget's height (ClassLongVerticalLabelSeries.py), scrollable by
 // wheel or drag, with a "more..." block at the top or bottom while blocks are scrolled out of view that way: the
 // workout screen's coming up list and the setup screen's workout preview.
+//
+// An interval ("3x <block>" and its other blocks' lines indented under it) shows as its blocks' rows with a cap down
+// their left side holding the repeat count, colored top to bottom through the blocks' colors; the list scrolls by
+// whole intervals (and blocks), so one is never cut in two by the edge.
 
 #include <QWidget>
 
@@ -24,6 +28,15 @@ public:
     // a block's width (design px): room for the longest block text there can be, "1000x 1 Leg ⇄ 2400-2400W 29m 59s",
     // in the labels' font (the default theme's; a wider font is made smaller to fit)
     static constexpr int kLabelWidth = 330;
+    // an interval's cap (design px): its width, and the gap between it and its rows (which make room for both)
+    static constexpr int kCapWidth = 46;
+    static constexpr int kCapGap = 3;
+    // its left corners, rounded as the blocks' are (the app's sheet)
+    static constexpr int kCapRadius = 15;
+    // a cap's sheet, for its blocks' colors top to bottom (the Up Next box's too)
+    static QString capSheet(const QList<std::pair<QString, QString>>& blockColors);
+    // what an interval's rows add to their sheets: room for its cap, and their left corners square facing it
+    static QString capRoomCss();
 
     explicit LongVLabels(const ftpcolors::ZoneRanges& ftpRanges = {}, QWidget* parent = nullptr);
 
@@ -38,6 +51,9 @@ public:
     // the zones the blocks are colored in
     ftpcolors::ZoneRanges ftpRanges;
     const QList<QLabel*>& labels() const { return labels_; }
+    // the intervals' caps (the ones in use shown)
+    const QList<QLabel*>& caps() const { return caps_; }
+    // how many blocks and intervals are scrolled out of view above
     int scrollOffset() const { return scrollOffset_; }
     void scrollTo(int offset);
     // the lines shown now (the queued layout done)
@@ -54,13 +70,31 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    // a block's line, or an interval's lines (its repeat count taken off the first, the indent off the others)
+    struct Item {
+        QStringList lines;
+        int repeats = 0;
+    };
+    // a cap shown: over which rows, for which interval
+    struct Cap {
+        int first = 0;
+        int last = 0;
+        int item = 0;
+    };
+
     double rowHeight() const;
     QString labelColor(const QString& text) const;
+    QList<Item> items() const;
+    // the caps over their rows, wherever the layout has put them
+    void placeCaps();
 
     QString fullText_;
     QList<QLabel*> labels_;
+    QList<QLabel*> caps_;
+    QList<Cap> shownCaps_;
     QVBoxLayout* labelLayout_;
     int scrollOffset_ = 0;
     int wheelRemainder_ = 0;

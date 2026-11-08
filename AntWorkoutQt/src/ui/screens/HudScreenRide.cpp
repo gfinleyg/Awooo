@@ -244,6 +244,7 @@ void HudScreen::showWorkoutComplete(const WorkoutEngine::TickEvents& events) {
     layout::setText(upNextLabelDescription_, QString());
     // (no light blue box: nothing is up next)
     theme::setSheet(upNextLabelDescription_, QString());
+    hideUpNextCap();
     remainingWorkoutList_->setFullText(QStringLiteral("DONE"));
     // the difficulty back to 0 and off (the volume stays as it's set)
     if (!cadenceMode_) {
@@ -336,6 +337,10 @@ void HudScreen::showDifficultyLabels() {
     for (qsizetype i = 0; i < entry.intervalBlocks.size(); ++i) {
         layout::setText(labels[i], text[i + 1]);
         setLabelColor(labels[i]);
+    }
+    // (a blinking count gets its colors back when it stops)
+    if (!blinkBlock_) {
+        colorBlockCount();
     }
 }
 
@@ -476,7 +481,7 @@ void HudScreen::blockBlinkDefault() {
     currentBlockProgressBar_->setBarColors(QColor(QStringLiteral("#1f15e1")), QColor(QStringLiteral("#bdd6de")));
     theme::setSheet(timeBlockRemainingValue_,
                     QStringLiteral("background-color:#9fc5d1; border-radius: %1px;").arg(blockRemainingRadius_));
-    theme::setSheet(blockMultiplierLabel_, QStringLiteral("background-color:#9fc5d1"));
+    colorBlockCount();
     setLabelColor(blockNonIntLabel_);
     for (QLabel* label : intervalLabels()) {
         setLabelColor(label);
@@ -513,7 +518,7 @@ void HudScreen::blockBlinkOn() {
 
 // a block label's colors in its own sheet (it beats the screen's QLabel:disabled rule, so it carries its own: an
 // interval's blocks not being ridden dim, their background halfway to grey and their text its own color at 35%)
-QString HudScreen::labelColor(const QString& text) const {
+QString HudScreen::labelColor(const QString& text, const QString& extra) const {
     const QString css = labelColorCss(text);
     static const QRegularExpression background(QStringLiteral("background-color:[^;]*;"));
     static const QRegularExpression hex(QStringLiteral("#[0-9a-fA-F]{6}"));
@@ -533,7 +538,7 @@ QString HudScreen::labelColor(const QString& text) const {
     }
     const QString textColor = textColorIn(css);
     return QStringLiteral("QLabel{%1} QLabel:disabled{color:#59%2; %3}")
-        .arg(css, (textColor.isEmpty() ? QStringLiteral("#111111") : textColor).mid(1), dimmed);
+        .arg(css + extra, (textColor.isEmpty() ? QStringLiteral("#111111") : textColor).mid(1), dimmed);
 }
 
 QString HudScreen::labelColorCss(const QString& text) const {
@@ -553,6 +558,10 @@ QString HudScreen::labelColorCss(const QString& text) const {
 }
 
 void HudScreen::setLabelColor(QLabel* label) {
+    if (label == upNextLabelDescription_) {
+        colorUpNextCap();
+        return;
+    }
     theme::setSheet(label, labelColor(label->text()));
     if (auto* hatched = qobject_cast<HatchedLabel*>(label)) {
         // the lines go by the middle of the box as it's dimmed
@@ -572,6 +581,8 @@ void HudScreen::setLabelColor(QLabel* label) {
 // the up next box and the coming up list, at the difficulty set
 void HudScreen::updateUpNextRemaining() {
     QList<WorkoutEngine::UpcomingLine> lines = engine_->upcoming();
+    upNextRepeats_.clear();
+    upNextBlocks_.clear();
     if (lines.isEmpty()) {
         layout::setText(upNextLabelDescription_, kLastBlock);
         setLabelColor(upNextLabelDescription_);
@@ -586,8 +597,10 @@ void HudScreen::updateUpNextRemaining() {
         upNext = lines[1].front() + u'\n' + lines.front().front();
         lines.removeFirst();
     } else if (lines.front().size() > 1) {
-        // an interval
-        upNext = lines.front().front() + u' ' + lines.front().mid(1).join(QStringLiteral("\n      "));
+        // an interval: its blocks a line each, its repeat count in the cap beside them
+        upNextRepeats_ = lines.front().front();
+        upNextBlocks_ = lines.front().mid(1);
+        upNext = upNextBlocks_.join(u'\n');
     } else {
         upNext = lines.front().front();
     }
@@ -607,6 +620,56 @@ void HudScreen::updateUpNextRemaining() {
     remainingWorkoutList_->setFullText(comingUp);
 }
 
+QString HudScreen::intervalCapCss(const QStringList& blocks) const {
+    QList<std::pair<QString, QString>> colors;
+    for (const QString& block : blocks) {
+        colors.append(zones::lineColors(block));
+    }
+    return zones::intervalCapCss(colors);
+}
+
+// the Up Next box in its block's colors; an interval's with room on its left for its cap, the cap beside it
+void HudScreen::colorUpNextCap() {
+    const QString text = upNextLabelDescription_->text();
+    if (upNextBlocks_.isEmpty() || text.isEmpty()) {
+        theme::setSheet(upNextLabelDescription_, labelColor(text));
+        upNextCap_->hide();
+        return;
+    }
+    theme::setSheet(upNextLabelDescription_, labelColor(text, LongVLabels::capRoomCss()));
+    QList<std::pair<QString, QString>> colors;
+    for (const QString& block : upNextBlocks_) {
+        colors.append(zones::lineColors(block));
+    }
+    theme::setSheet(upNextCap_, LongVLabels::capSheet(colors));
+    layout::setText(upNextCap_, upNextRepeats_);
+    upNextCap_->setVisible(upNextLabelDescription_->isVisibleTo(this));
+}
+
+void HudScreen::hideUpNextCap() {
+    upNextRepeats_.clear();
+    upNextBlocks_.clear();
+    if (upNextCap_) {
+        upNextCap_->hide();
+    }
+}
+
+// the interval being ridden's repeat count in its blocks' colors, as its cap in the lists has them (light blue for a
+// block's, while it's hidden)
+void HudScreen::colorBlockCount() {
+    const auto& entry = engine_->currentEventText();
+    if (!entry || entry->type != WorkoutEntry::Type::Interval) {
+        theme::setSheet(blockMultiplierLabel_, QStringLiteral("background-color:#9fc5d1"));
+        return;
+    }
+    QLabel* const* labels = entry->intervalBlocks.size() == 2 ? blockInt2Label_ : blockInt3Label_;
+    QStringList blocks;
+    for (qsizetype i = 0; i < entry->intervalBlocks.size(); ++i) {
+        blocks.append(labels[i]->text());
+    }
+    theme::setSheet(blockMultiplierLabel_, intervalCapCss(blocks));
+}
+
 // the last block, kLastBlockNoteSeconds into it: "Up Next:" and its "last block" note go, the light blue box too (not
 // in a ramp test: its next block is only added just before this one ends), and the grades take over the column, with
 // the end of the list in view: the last block's grades are still to come (an FTP test isn't graded)
@@ -619,6 +682,7 @@ void HudScreen::hideLastBlockNote() {
     layout::setText(upNextLabelHeader_, QString());
     layout::setText(upNextLabelDescription_, QString());
     theme::setSheet(upNextLabelDescription_, QString());
+    hideUpNextCap();
     if (!workoutGraded_ && !engine_->ftpTest()) {
         showWorkoutGrades(true);
         workoutGradeList_->scrollTo(static_cast<int>(workoutGradeList_->rows().size()));
@@ -720,6 +784,7 @@ void HudScreen::showWorkoutGrades(bool show) {
                                                            zoneLegend_}) {
         widget->setVisible(!show);
     }
+    upNextCap_->setVisible(!show && !upNextBlocks_.isEmpty());
     workoutGradesHeader_->setVisible(show);
     workoutGradeList_->setVisible(show);
     if (show) {
@@ -1059,6 +1124,9 @@ void HudScreen::refreshFtpColors() {
         }
         for (QLabel* label : labels) {
             setLabelColor(label);
+        }
+        if (!blinkBlock_) {
+            colorBlockCount();
         }
         workoutPowerPlot_->recolor();
         workoutPowerCompletedPlot_->recolor();

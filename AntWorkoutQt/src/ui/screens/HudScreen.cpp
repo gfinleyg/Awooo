@@ -417,7 +417,8 @@ HudScreen::HudScreen(ant::AntBridge* bridge, QWidget* parent, WorkoutEngine::Clo
     connect(&Units::current(), &Units::changed, this, &HudScreen::unitsChanged);
     if (upNextLabelDescription_) {
         // (LayoutViewer lists them with the zone colored widgets)
-        QList<QWidget*> colored{blockNonIntLabel_, upNextLabelDescription_, spiralWorkoutProgress_};
+        QList<QWidget*> colored{blockNonIntLabel_, upNextLabelDescription_, upNextCap_, spiralWorkoutProgress_,
+                                blockMultiplierLabel_};
         colored += {blockInt2Label_[0], blockInt2Label_[1], blockInt3Label_[0], blockInt3Label_[1], blockInt3Label_[2]};
         for (QWidget* widget : colored) {
             widget->setProperty("awoFtpColored", true);
@@ -446,6 +447,13 @@ void HudScreen::buildUpNext() {
     upNextLabelDescription_->setMinimumWidth(kUpNextWidth);
     upNextLabelDescription_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     upNext->addWidget(upNextLabelDescription_, 1, 0, 3, 1);
+    // an interval up next: its repeat count in a cap down the box's left side, as the coming up list has them (over
+    // the box, which makes room for it; centered top to bottom as the box is)
+    upNextCap_ = new QLabel;
+    upNextCap_->setAlignment(Qt::AlignCenter);
+    upNextCap_->setFixedSize(LongVLabels::kCapWidth, 90);
+    upNextCap_->hide();
+    upNext->addWidget(upNextCap_, 1, 0, 3, 1, Qt::AlignLeft);
     remainingWorkoutHeader_ = new HaloLabel(QStringLiteral("Coming up..."));
     remainingWorkoutHeader_->setMaximumHeight(40);
     remainingWorkoutHeader_->setMinimumWidth(kUpNextWidth);

@@ -221,6 +221,17 @@ Python app's own results (`tests\golden\`).
   sit beside it, so the blocks' text is centered over the time left (the count used to push it to the right of it).
   Those shrink to make room only during an interval; a plain block still has the whole width.
 
+- **Intervals in the workout lists get a cap holding their repeat count.** In the coming up list, the setup screen's
+  workout list and the Up Next box, an interval's blocks show one row each (no "3x " in front, no indent), with a cap
+  down the left side of the rows holding the count. The cap is rounded on its left, as the blocks are, square on its right, and
+  the interval's rows are square on their left where they face it; it's colored
+  top to bottom through the blocks' colors (each block's color at the middle of its row). While the interval is being
+  ridden, the count's box in the current block uses the same colors instead of light blue. It still turns grey with
+  the block timer's blink when the count is 1x. The lists scroll a whole block or interval at a time, so an interval
+  is never cut in two at the edge; if the next interval doesn't fit, its rows stay empty until it scrolls into view.
+  The Python app showed "3x" in front of the first block and indented the others. `interval_caps` and
+  `hud_interval_caps` are new parity scenes (C++ only), and `hud_interval` now shows the colored count box.
+
 - **The lit interval block slides to its next row, and the current block swells through its last 10 seconds.** When
   an interval's next block starts, the lit box glides down from the row before to the new one's over 0.35 s, easing in
   and out and showing each row's own colors as it passes. When a new repeat starts, it slides back up from the last

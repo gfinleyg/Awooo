@@ -32,6 +32,7 @@
 #include "GradeWidgets.hpp"
 #include "HaloLabel.hpp"
 #include "HudScreen.hpp"
+#include "LongVLabels.hpp"
 #include "MaxStar.hpp"
 #include "MusicSelectDialog.hpp"
 #include "PreviewRide.hpp"
@@ -483,6 +484,30 @@ private slots:
         QCOMPARE(setupHeaders.size(), 2);
         QVERIFY(setupHeaders[0]->text().contains(QStringLiteral("Required Power Device")));
         QVERIFY(setupHeaders[1]->text().startsWith(QStringLiteral("Optional")));
+    }
+
+    // the workout's intervals with their caps in the setup screen's preview, the caps' zone colors left to the FTP
+    // Colors tab (C++ only)
+    void intervalCapsShowInThePreview() {
+        DisplayWindow display;
+        ControlWindow controls(&display, {});
+        controls.rebuild();
+        display.showView(QStringLiteral("Init"));
+        display.show();
+        QApplication::processEvents();
+        LongVLabels* preview = display.setupScreen()->workoutDisplay();
+        preview->renderLines();
+        QList<QLabel*> caps;
+        for (QLabel* cap : preview->caps()) {
+            if (cap->isVisibleTo(preview)) {
+                caps.append(cap);
+            }
+        }
+        QVERIFY(!caps.isEmpty());
+        QVERIFY2(caps.front()->text().endsWith(u'x'), qPrintable(caps.front()->text()));
+        QVERIFY(caps.front()->property("awoFtpColored").toBool());
+        QVERIFY(!controls.listedColors().contains(zones::zoneColors()[0].toLower()));
+        display.hide();
     }
 
     void fontsChangeTheTheme() {

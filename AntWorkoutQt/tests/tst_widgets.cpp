@@ -1020,6 +1020,117 @@ private slots:
         QVERIFY(!static_cast<ScrollingLabel*>(preview.labels()[0])->scrolling());
     }
 
+    // an interval: its blocks' rows without the repeat count or indent, making room on their left for a cap holding the
+    // count, as tall as the rows and colored top to bottom through their colors (C++ only)
+    void longLabelsIntervalsHaveCaps() {
+        LongVLabels labels;
+        labels.setPinnedStyle();
+        labels.resize(LongVLabels::kLabelWidth, 400);
+        labels.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&labels));
+        labels.setFullText(QStringLiteral("100W 5m\n3x 300W 1m\n      Free 30s\n      150W 2m\n2x 250W 1m\n      120W 1m\n"));
+        labels.renderLines();
+        QApplication::processEvents();
+        const QList<QLabel*>& rows = labels.labels();
+        QCOMPARE(rows[1]->text(), QStringLiteral("300W 1m"));
+        QCOMPARE(rows[2]->text(), QStringLiteral("Free 30s"));
+        QCOMPARE(rows[3]->text(), QStringLiteral("150W 2m"));
+        QCOMPARE(rows[4]->text(), QStringLiteral("250W 1m"));
+        QList<QLabel*> caps;
+        for (QLabel* cap : labels.caps()) {
+            if (cap->isVisibleTo(&labels)) {
+                caps.append(cap);
+            }
+        }
+        QCOMPARE(caps.size(), 2);
+        QCOMPARE(caps[0]->text(), QStringLiteral("3x"));
+        QCOMPARE(caps[1]->text(), QStringLiteral("2x"));
+        QCOMPARE(caps[0]->geometry().top(), rows[1]->geometry().top());
+        QCOMPARE(caps[0]->geometry().bottom(), rows[3]->geometry().bottom());
+        QCOMPARE(caps[0]->x(), rows[1]->x());
+        QCOMPARE(caps[0]->width(), LongVLabels::kCapWidth);
+        // (the rows' text and colors start past the cap; a block's row has the whole width)
+        QVERIFY(rows[1]->contentsRect().left() >= LongVLabels::kCapWidth + LongVLabels::kCapGap);
+        // (square on the left, facing the cap's square side; rounded on the right as the blocks are)
+        QVERIFY(theme::originalSheet(rows[1]).contains(QStringLiteral("border-top-left-radius:0px")));
+        QVERIFY(theme::originalSheet(rows[1]).contains(QStringLiteral("border-bottom-left-radius:0px")));
+        QVERIFY(!theme::originalSheet(rows[1]).contains(QStringLiteral("border-top-right-radius")));
+        QCOMPARE(rows[0]->contentsRect().left(), 0);
+        QVERIFY(!theme::originalSheet(rows[0]).contains(QStringLiteral("margin-left")));
+        // its colors: each block's middle color, top to bottom
+        const QString sheet = theme::originalSheet(caps[0]);
+        qsizetype at = -1;
+        for (const QString& line : {QStringLiteral("300W 1m"), QStringLiteral("Free 30s"), QStringLiteral("150W 2m")}) {
+            const auto [start, end] = zones::lineColors(line, labels.ftpRanges);
+            const qsizetype next = sheet.indexOf(colors::mix(start, end, 0.5), at + 1);
+            QVERIFY2(next > at, qPrintable(sheet));
+            at = next;
+        }
+        // the count drawn in the cap
+        const QImage image = caps[0]->grab().toImage();
+        QSet<QRgb> inked;
+        for (int x = 0; x < image.width(); ++x) {
+            inked.insert(image.pixel(x, image.height() / 2));
+        }
+        QVERIFY(inked.size() > 2);
+    }
+
+    // a long list scrolls by whole blocks and intervals: an interval is never cut in two by the edge
+    void longLabelsScrollByWholeIntervals() {
+        LongVLabels labels;
+        labels.setPinnedStyle();
+        labels.resize(LongVLabels::kLabelWidth, 300);
+        labels.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&labels));
+        QStringList lines;
+        for (int i = 0; i < 6; ++i) {
+            lines << QStringLiteral("%1W 1m").arg(100 + i) << QStringLiteral("3x 300W 30s") << QStringLiteral("      110W 30s")
+                  << QStringLiteral("      120W 30s");
+        }
+        labels.setFullText(lines.join(u'\n'));
+        QStringList shown;
+        const auto check = [&labels, &shown](int offset) {
+            labels.scrollTo(offset);
+            QApplication::processEvents();
+            shown.clear();
+            for (QLabel* row : labels.labels()) {
+                if (row->isVisibleTo(&labels)) {
+                    shown.append(row->text());
+                }
+            }
+            QVERIFY(shown.size() >= 3);
+            // every interval shown whole: its three blocks, each with the cap over them
+            for (qsizetype i = 0; i < shown.size(); ++i) {
+                if (shown[i] == u"300W 30s") {
+                    QVERIFY2(i + 2 < shown.size() && shown[i + 1] == u"110W 30s" && shown[i + 2] == u"120W 30s",
+                             qPrintable(shown.join(u'|')));
+                }
+                if (shown[i] == u"110W 30s") {
+                    QVERIFY2(i > 0 && shown[i - 1] == u"300W 30s", qPrintable(shown.join(u'|')));
+                }
+            }
+            int caps = 0;
+            for (QLabel* cap : labels.caps()) {
+                caps += cap->isVisibleTo(&labels);
+            }
+            QCOMPARE(caps, static_cast<int>(shown.count(QStringLiteral("300W 30s"))));
+        };
+        for (int offset = 0; offset < 14; ++offset) {
+            check(offset);
+            if (QTest::currentTestFailed()) {
+                return;
+            }
+        }
+        // a step is a block or an interval: one down from the top, the first interval comes next under "more..."
+        check(1);
+        QCOMPARE(shown.mid(0, 2), QStringList({"more...", "300W 30s"}));
+        QCOMPARE(labels.scrollOffset(), 1);
+        // the furthest: the last block and interval at the bottom, under "more..."
+        check(100);
+        QCOMPARE(shown.front(), QStringLiteral("more..."));
+        QCOMPARE(shown.back(), QStringLiteral("120W 30s"));
+    }
+
     // a line too long for it scrolls along to its end and back, pausing at each; one that fits stays put
     void scrollingLabelScrollsLongLines() {
         using L = ScrollingLabel;

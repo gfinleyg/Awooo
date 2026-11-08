@@ -77,6 +77,11 @@ std::pair<QString, QString> blockColors(double power0, double power1 = 0,
 QString blockCss(double power0, double power1 = 0, const std::optional<ZoneRanges>& ranges = std::nullopt);
 std::pair<QString, QString> freeRideColors();
 QString freeRideCss();
+// a workout list line's gradient (its first target's colors, a free ride's without one)
+std::pair<QString, QString> lineColors(const QString& text, const std::optional<ZoneRanges>& ranges = std::nullopt);
+// An interval's cap in the workout lists and its repeat count's box on the workout screen: top to bottom through its
+// blocks' colors (each block's middle color at the middle of its row), with the block labels' text color for them
+QString intervalCapCss(const QList<std::pair<QString, QString>>& blocks);
 QColor graphColor(double value, const ZoneRanges& ranges, GraphState state);
 // a graph's sensor line in color: (pen, halo pen), both cosmetic (as wide on screen whatever the graph's scale)
 std::pair<QPen, QPen> sensorPens(const QString& color, double width = ftpcolors::kSensorLinePx,

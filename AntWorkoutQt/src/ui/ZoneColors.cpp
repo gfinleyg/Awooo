@@ -4,9 +4,11 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <cmath>
 
 #include "AppState.hpp"
 #include "Theme.hpp"
+#include "WorkoutHelpers.hpp"
 
 namespace awo::zones {
 
@@ -184,6 +186,42 @@ QString freeRideCss() {
     const auto [start, end] = freeRideColors();
     return QStringLiteral("background-color:qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 %1 stop:1 %2); color:%3;")
         .arg(start, end, blockText(start, end));
+}
+
+std::pair<QString, QString> lineColors(const QString& text, const std::optional<ZoneRanges>& ranges) {
+    const auto targets = targetsFromText(text);
+    return targets ? blockColors(targets->first, targets->second, ranges) : freeRideColors();
+}
+
+QString intervalCapCss(const QList<std::pair<QString, QString>>& blocks) {
+    if (blocks.isEmpty()) {
+        return {};
+    }
+    QStringList middles;
+    double red = 0;
+    double green = 0;
+    double blue = 0;
+    for (const auto& [start, end] : blocks) {
+        const QString middle = colors::mix(start, end, 0.5);
+        middles.append(middle);
+        const QColor color(middle);
+        red += color.red();
+        green += color.green();
+        blue += color.blue();
+    }
+    const auto n = static_cast<double>(middles.size());
+    const QString average = QColor(static_cast<int>(std::lround(red / n)), static_cast<int>(std::lround(green / n)),
+                                   static_cast<int>(std::lround(blue / n)))
+                                .name();
+    const QString text = blockText(average, average);
+    if (middles.size() == 1) {
+        return QStringLiteral("background-color:%1; color:%2;").arg(middles.front(), text);
+    }
+    QString stops;
+    for (qsizetype i = 0; i < middles.size(); ++i) {
+        stops += QStringLiteral(" stop:%1 %2").arg((i + 0.5) / n, 0, 'f', 3).arg(middles[i]);
+    }
+    return QStringLiteral("background-color:qlineargradient(x1:0 y1:0, x2:0 y2:1,%1); color:%2;").arg(stops, text);
 }
 
 QColor graphColor(double value, const ZoneRanges& ranges, GraphState state) {

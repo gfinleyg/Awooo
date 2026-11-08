@@ -1147,6 +1147,47 @@ private slots:
         QCOMPARE(blocksSeen.size(), 2);
     }
 
+    // an interval up next: its blocks a line each in the box, its repeat count in a cap down the box's left side colored
+    // through its blocks' colors; ridden, its count's box has the same colors (C++ only)
+    void intervalCapsUpNextAndCount() {
+        QVERIFY(loadWorkout({"1:10,0.5", "3:4;1:20,1.1;1:20,0.6", "1:60,0.5"}));
+        HudScreen hud(bridge_.get(), nullptr, [] { return 1000.0; });
+        hud.stopTimers();
+        hud.resize(1920, 1116);
+        hud.show();
+        SimulatedRider rider;
+        hud.startWorkout();
+        // (into the first block: the interval up next)
+        tickSecond(hud, rider);
+        QApplication::processEvents();
+        QLabel* upNext = hud.upNextLabel();
+        QLabel* cap = hud.upNextCap();
+        QCOMPARE(upNext->text(), QStringLiteral("220W 20s\n120W 20s"));
+        QVERIFY(cap->isVisible());
+        QCOMPARE(cap->text(), QStringLiteral("4x"));
+        QCOMPARE(cap->x(), upNext->x());
+        QCOMPARE(cap->geometry().center().y(), upNext->geometry().center().y());
+        // (the box makes room for it)
+        QVERIFY(upNext->contentsRect().left() >= cap->width());
+        const QString capSheet = theme::originalSheet(cap);
+        const auto [high, highEnd] = zones::lineColors(QStringLiteral("220W 20s"));
+        const auto [low, lowEnd] = zones::lineColors(QStringLiteral("120W 20s"));
+        QVERIFY(capSheet.contains(QStringLiteral("x2:0 y2:1")));
+        QVERIFY(capSheet.contains(colors::mix(high, highEnd, 0.5)) && capSheet.contains(colors::mix(low, lowEnd, 0.5)));
+        QVERIFY(capSheet.contains(QStringLiteral("border-top-left-radius:15px")));
+        QVERIFY(capSheet.contains(QStringLiteral("border-top-right-radius:0px")));
+
+        // ridden: the count in the same colors (and a block up next: no cap)
+        while (hud.engine().currentKind() != 3) {
+            tickSecond(hud, rider);
+        }
+        QApplication::processEvents();
+        QCOMPARE(hud.blockCountLabel()->text(), QStringLiteral("4x"));
+        QCOMPARE(theme::originalSheet(hud.blockCountLabel()), zones::intervalCapCss({{high, highEnd}, {low, lowEnd}}));
+        QVERIFY(!cap->isVisible());
+        QVERIFY(!theme::originalSheet(upNext).contains(QStringLiteral("margin-left")));
+    }
+
     // a last interval: each repeat's grade as it ends, each block's own once all its repeats have theirs
     void lastIntervalGradesFillIn() {
         QVERIFY(loadWorkout({"1:10,0.5", "3:2;1:20,0.8;1:20,0.6"}));

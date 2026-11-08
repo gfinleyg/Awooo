@@ -244,6 +244,8 @@ public:
     // the lit block's slide and swell, drawn over the block's labels (none outside Workout Mode)
     BlockHighlight* blockHighlight() const { return blockHighlight_; }
     QLabel* upNextLabel() const { return upNextLabelDescription_; }
+    // an interval up next: its repeat count's cap, down the box's left side
+    QLabel* upNextCap() const { return upNextCap_; }
     QLabel* upNextHeader() const { return upNextLabelHeader_; }
     LongVLabels* remainingList() const { return remainingWorkoutList_; }
     ZoneLegend* zoneLegend() const { return zoneLegend_; }
@@ -371,9 +373,17 @@ private:
     static QString songTime(double seconds);
     void updateSongTitle();
     void recordSong();
-    QString labelColor(const QString& text) const;
+    // (extra: more of the label's own css, where it isn't dimmed)
+    QString labelColor(const QString& text, const QString& extra = {}) const;
     QString labelColorCss(const QString& text) const;
     void setLabelColor(QLabel* label);
+    // an interval's cap colors, for its blocks' text (see zones::intervalCapCss)
+    QString intervalCapCss(const QStringList& blocks) const;
+    // the Up Next box's cap: shown, and its box making room for it, while an interval is up next
+    void colorUpNextCap();
+    void hideUpNextCap();
+    // the interval being ridden's repeat count, in its blocks' colors
+    void colorBlockCount();
     void setStartButtonStyle();
 
     ant::AntBridge* bridge_;
@@ -423,6 +433,10 @@ private:
     QGridLayout* hudLayout_;
     QLabel* upNextLabelHeader_ = nullptr;
     QLabel* upNextLabelDescription_ = nullptr;
+    QLabel* upNextCap_ = nullptr;
+    // the interval up next: its repeat count and its blocks' text (none: a block)
+    QString upNextRepeats_;
+    QStringList upNextBlocks_;
     QLabel* remainingWorkoutHeader_ = nullptr;
     LongVLabels* remainingWorkoutList_ = nullptr;
     ZoneLegend* zoneLegend_ = nullptr;

@@ -2,6 +2,7 @@
 
 #include <QLabel>
 #include <QMouseEvent>
+#include <QRegularExpression>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -21,6 +22,8 @@ namespace awo {
 namespace {
 
 const QString kMoreText = QStringLiteral("more...");
+// an interval's other blocks are indented this much under its first (see workoutText)
+const QString kIndent = QStringLiteral("      ");
 
 }  // namespace
 
@@ -37,7 +40,18 @@ LongVLabels::LongVLabels(const ftpcolors::ZoneRanges& ranges, QWidget* parent)
         label->setProperty("awoFtpColored", true);
         labelLayout_->addWidget(label);
         label->hide();
+        // (its cap follows it as the layout moves it)
+        label->installEventFilter(this);
         labels_.append(label);
+    }
+    // an interval has two blocks at least: a cap for every two rows (over the rows, not in the layout)
+    for (int i = 0; i < kWidgetCount / 2; ++i) {
+        auto* cap = new QLabel(this);
+        cap->setAlignment(Qt::AlignCenter);
+        cap->setProperty("awoFtpColored", true);
+        cap->setAttribute(Qt::WA_TransparentForMouseEvents);
+        cap->hide();
+        caps_.append(cap);
     }
     main->addLayout(labelLayout_);
     renderTimer_->setSingleShot(true);
@@ -70,48 +84,171 @@ QSize LongVLabels::minimumSizeHint() const {
     return {QWidget::minimumSizeHint().width(), static_cast<int>(std::ceil(rowHeight()))};
 }
 
-// the window of lines from scrollOffset, with a "more..." block in the top or bottom slot whenever lines are scrolled
-// out of view above or below
+QString LongVLabels::capSheet(const QList<std::pair<QString, QString>>& blockColors) {
+    // (rounded on the left, as the blocks are; square where it meets them)
+    return zones::intervalCapCss(blockColors) +
+           QStringLiteral("border-top-left-radius:%1px; border-bottom-left-radius:%1px; border-top-right-radius:0px; "
+                          "border-bottom-right-radius:0px;")
+               .arg(kCapRadius);
+}
+
+QString LongVLabels::capRoomCss() {
+    // (square on the left, facing the cap's square side)
+    return QStringLiteral("margin-left:%1px; border-top-left-radius:0px; border-bottom-left-radius:0px;")
+        .arg(kCapWidth + kCapGap);
+}
+
+// the blocks and intervals in the text, in order
+QList<LongVLabels::Item> LongVLabels::items() const {
+    static const QRegularExpression repeats(QStringLiteral("^(\\d+)x (.+)$"));
+    QList<Item> found;
+    for (const QString& line : fullText_.split(u'\n')) {
+        if (line.trimmed().isEmpty()) {
+            continue;
+        }
+        if (line.startsWith(kIndent) && !found.isEmpty() && found.back().repeats > 0) {
+            found.back().lines.append(line.trimmed());
+            continue;
+        }
+        const QRegularExpressionMatch match = repeats.match(line);
+        if (match.hasMatch()) {
+            found.append({{match.captured(2)}, match.captured(1).toInt()});
+        } else {
+            found.append({{line}, 0});
+        }
+    }
+    return found;
+}
+
+// the window of blocks and intervals from scrollOffset, with a "more..." block in the top or bottom slot whenever any
+// are scrolled out of view above or below; the furthest scroll leaves the last one at the bottom, beneath a top
+// "more..."
 void LongVLabels::renderLines() {
     for (QLabel* label : labels_) {
         label->hide();
     }
-    const int maxLines = std::min(static_cast<int>(geometry().height() / rowHeight()), kWidgetCount);
-    QStringList lines;
-    for (const QString& line : fullText_.split(u'\n')) {
-        if (!line.trimmed().isEmpty()) {
-            lines.append(line);
-        }
+    for (QLabel* cap : caps_) {
+        cap->hide();
     }
-    QStringList shown;
+    shownCaps_.clear();
     if (fullText_ == QLatin1String("DONE")) {
         const QRect geo = geometry();
         setFixedSize(geo.width(), geo.height());
         return;
-    } else if (lines.size() <= maxLines || maxLines < 3) {
+    }
+    const int maxLines = std::min(static_cast<int>(geometry().height() / rowHeight()), kWidgetCount);
+    const QList<Item> all = items();
+    const auto count = static_cast<int>(all.size());
+    const auto size = [&](int item) { return static_cast<int>(all[item].lines.size()); };
+    int total = 0;
+    for (int i = 0; i < count; ++i) {
+        total += size(i);
+    }
+    // a row shown: its text, and the interval it's one of (-1: none)
+    struct Row {
+        QString text;
+        int item = -1;
+    };
+    QList<Row> rows;
+    // the whole blocks and intervals from first that fit in room rows (the first cut short if even it doesn't)
+    const auto take = [&](int first, int room) {
+        int used = 0;
+        for (int i = first; i < count && used + size(i) <= room; ++i) {
+            for (const QString& line : all[i].lines) {
+                rows.append({line, all[i].repeats > 0 ? i : -1});
+            }
+            used += size(i);
+        }
+        if (used == 0 && first < count) {
+            for (const QString& line : all[first].lines.mid(0, std::max(room, 0))) {
+                rows.append({line, all[first].repeats > 0 ? first : -1});
+            }
+        }
+    };
+    if (total <= maxLines || maxLines < 3) {
         // all the text fits (or there's no room for "more..." blocks): no scrolling
         scrollOffset_ = 0;
-        shown = lines.mid(0, maxLines);
+        take(0, maxLines);
     } else {
-        // the furthest scroll leaves the last line in the bottom slot, beneath a top "more..."
-        scrollOffset_ = std::max(0, std::min(scrollOffset_, static_cast<int>(lines.size()) - maxLines + 1));
+        // the furthest scroll: as many from the end as fit under a top "more..."
+        int furthest = count - 1;
+        for (int i = count - 1, used = 0; i >= 1; --i) {
+            used += size(i);
+            if (used > maxLines - 1) {
+                break;
+            }
+            furthest = i;
+        }
+        scrollOffset_ = std::clamp(scrollOffset_, 0, furthest);
         if (scrollOffset_ > 0) {
-            shown.append(kMoreText);
+            rows.append({kMoreText});
         }
-        const qsizetype available = maxLines - shown.size();
-        const QStringList remaining = lines.mid(scrollOffset_);
-        if (remaining.size() > available) {
-            shown.append(remaining.mid(0, available - 1));
-            shown.append(kMoreText);
+        const int room = maxLines - static_cast<int>(rows.size());
+        int remaining = 0;
+        for (int i = scrollOffset_; i < count; ++i) {
+            remaining += size(i);
+        }
+        if (remaining > room) {
+            take(scrollOffset_, room - 1);
+            rows.append({kMoreText});
         } else {
-            shown.append(remaining);
+            take(scrollOffset_, room);
         }
     }
-    for (qsizetype i = 0; i < shown.size(); ++i) {
-        theme::setSheet(labels_[i], labelColor(shown[i]));
-        layout::setText(labels_[i], shown[i]);
+    // an interval's rows make room on their left for its cap
+    const QString capRoom = capRoomCss();
+    for (qsizetype i = 0; i < rows.size() && i < labels_.size(); ++i) {
+        theme::setSheet(labels_[i], labelColor(rows[i].text) + (rows[i].item >= 0 ? capRoom : QString()));
+        layout::setText(labels_[i], rows[i].text);
         labels_[i]->show();
+        if (rows[i].item >= 0) {
+            if (!shownCaps_.isEmpty() && shownCaps_.back().item == rows[i].item && shownCaps_.back().last == i - 1) {
+                shownCaps_.back().last = static_cast<int>(i);
+            } else {
+                shownCaps_.append({static_cast<int>(i), static_cast<int>(i), rows[i].item});
+            }
+        }
     }
+    // each cap: the interval's repeat count, colored through its blocks' colors (the ones shown)
+    for (qsizetype c = 0; c < shownCaps_.size() && c < caps_.size(); ++c) {
+        const Cap& shown = shownCaps_[c];
+        QList<std::pair<QString, QString>> colors;
+        for (int row = shown.first; row <= shown.last; ++row) {
+            colors.append(zones::lineColors(rows[row].text, ftpRanges));
+        }
+        QLabel* cap = caps_[c];
+        theme::setSheet(cap, capSheet(colors));
+        layout::setText(cap, QStringLiteral("%1x").arg(all[shown.item].repeats));
+    }
+    // (the layout puts the rows where they go now, so the caps can go over them)
+    if (layout()) {
+        layout()->activate();
+    }
+    placeCaps();
+}
+
+void LongVLabels::placeCaps() {
+    const double scale = theme::widgetScale(this);
+    const int width = std::max(1, static_cast<int>(std::lround(kCapWidth * scale)));
+    for (qsizetype c = 0; c < caps_.size(); ++c) {
+        QLabel* cap = caps_[c];
+        if (c >= shownCaps_.size()) {
+            cap->hide();
+            continue;
+        }
+        const QRect first = labels_[shownCaps_[c].first]->geometry();
+        const QRect last = labels_[shownCaps_[c].last]->geometry();
+        cap->setGeometry(first.left(), first.top(), width, last.bottom() - first.top() + 1);
+        cap->raise();
+        cap->show();
+    }
+}
+
+bool LongVLabels::eventFilter(QObject* watched, QEvent* event) {
+    if ((event->type() == QEvent::Move || event->type() == QEvent::Resize) && !shownCaps_.isEmpty()) {
+        placeCaps();
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void LongVLabels::scrollTo(int offset) {
@@ -122,7 +259,7 @@ void LongVLabels::scrollTo(int offset) {
     }
 }
 
-// a line a wheel notch (120); touchpads send smaller steps that add up
+// a block or interval a wheel notch (120); touchpads send smaller steps that add up
 void LongVLabels::wheelEvent(QWheelEvent* event) {
     wheelRemainder_ += event->angleDelta().y();
     const int steps = wheelRemainder_ / 120;
@@ -133,7 +270,7 @@ void LongVLabels::wheelEvent(QWheelEvent* event) {
     event->accept();
 }
 
-// drag (mouse or touch) to scroll, a line a row height dragged
+// drag (mouse or touch) to scroll, a block or interval a row height dragged
 void LongVLabels::mousePressEvent(QMouseEvent* event) {
     dragStartY_ = event->position().y();
     dragStartOffset_ = scrollOffset_;

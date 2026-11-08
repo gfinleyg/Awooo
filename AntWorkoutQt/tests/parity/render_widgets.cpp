@@ -740,6 +740,31 @@ QWidget* sceneHudInterval() {
     return hudSceneRidden(QFileInfo(file).absoluteFilePath(), 110);
 }
 
+// Intervals coming up: Up Next's and the coming up list's caps (not the Python app's: it has none, see CHANGES.md)
+QWidget* sceneHudIntervalCaps() {
+    QFile file(QStringLiteral("hud_interval_caps.awo"));
+    file.open(QIODevice::WriteOnly | QIODevice::Text);
+    file.write("1:60,0.5\n3:4;1:60,1.1;1:60,0.6\n1:60,0.7\n3:3;1:30,1.3;1:30,0.9;1:30,0.5\n3:12;1:20,1.5;1:40,0.55\n"
+               "1:120,0.5\n");
+    file.close();
+    return hudSceneRidden(QFileInfo(file).absoluteFilePath(), 30);
+}
+
+// The coming up list with intervals, scrolled one down: whole intervals in view, each with its cap (not the Python
+// app's, see CHANGES.md)
+QWidget* sceneIntervalCaps() {
+    const QStringList lines = {"150W 5m",          "4x 300W 1m",       "      120W 2m",    "200-250W 3m",
+                               "3x Stand 350W 30s", "      230W 1m",    "      120W 2m",    "Free 5m",
+                               "2x 260W 2m",       "      140W 1m",    "90W 6m"};
+    auto* labels = new LongVLabels(appState().ftpRanges);
+    labels->setPinnedStyle();
+    labels->setFullText(lines.join(u'\n') + u'\n');
+    shown(labels, LongVLabels::kLabelWidth, 380);
+    labels->scrollTo(1);
+    settle();
+    return labels;
+}
+
 // The synopsis of the first shipped workout ridden start to finish by the simulated rider (seed 11) a second a tick,
 // its readings recorded as LayoutViewer records them, laid out at 1920x1116
 QWidget* sceneSynopsisScreen() {
@@ -1116,6 +1141,8 @@ const QList<std::pair<QString, std::function<QWidget*()>>> kScenes = {
     {QStringLiteral("workout_picker"), sceneWorkoutPicker},
     {QStringLiteral("hud_screen"), sceneHudScreen},
     {QStringLiteral("hud_interval"), sceneHudInterval},
+    {QStringLiteral("hud_interval_caps"), sceneHudIntervalCaps},
+    {QStringLiteral("interval_caps"), sceneIntervalCaps},
     {QStringLiteral("synopsis_screen"), sceneSynopsisScreen},
     {QStringLiteral("music_picker"), sceneMusicPicker},
     {QStringLiteral("cadence_screen"), sceneCadenceScreen},
