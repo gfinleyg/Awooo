@@ -106,6 +106,10 @@ private slots:
                 QVERIFY(display.workoutHud()->blockHighlight());
                 // and the coming up list's blocks gliding up as one finishes
                 QVERIFY(display.workoutHud()->remainingList()->sliding());
+                // (the ride shown at rest: no Up Next box held part way to the current block's place, whatever the
+                // point in the block it stops at; playing it, the boxes move ahead of each block's end as the app's do)
+                QVERIFY(!display.workoutHud()->upNextHandoffHeld());
+                QVERIFY(!display.workoutHud()->upNextLeaving());
             } else {
                 QVERIFY(display.workoutHud()->blockBubbles().isEmpty());
                 QVERIFY(!display.workoutHud()->blockHighlight());

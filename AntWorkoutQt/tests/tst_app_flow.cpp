@@ -365,8 +365,10 @@ private slots:
             QApplication::processEvents();
             for (QWidget* widget : hud->findChildren<QWidget*>()) {
                 // (the coming up list's interval caps go with their intervals' rows as the list moves up, as the
-                // rows' text does)
-                if (!widget->isVisible() || hud->remainingList()->caps().contains(qobject_cast<QLabel*>(widget))) {
+                // rows' text does; an interval's rows in the Up Next box share its height, two or three of them, the
+                // box holding still)
+                if (!widget->isVisible() || hud->remainingList()->caps().contains(qobject_cast<QLabel*>(widget)) ||
+                    hud->upNextRows().contains(qobject_cast<QLabel*>(widget))) {
                     continue;
                 }
                 const QRect rect(widget->mapTo(hud, QPoint(0, 0)), widget->size());

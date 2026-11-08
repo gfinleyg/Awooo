@@ -243,16 +243,33 @@ Python app's own results (`tests\golden\`).
   10 seconds only flash grey. Blocks too short to blink (under 2 s) don't swell. Parity scenes are taken at rest, so
   they don't change.
 
-- **The coming up list's blocks spiral, then slide into place.** When a block finishes, each block in the "Coming
-  up..." list traces a small outward spiral where it is (3 px at its widest, 2.5 turns clockwise, 0.35 s). Then it
-  slides up to its new row over 0.9 s, easing in and out. Each block starts 50 ms after the one above it, and interval
-  caps move with their rows. The top block passes behind "Coming up..." and grows into the Up Next box: a plain block,
-  an interval's rows with their cap, or a new song's header with its first block. The old Up Next box spirals the same
-  way, then slides off to the right toward the current block and fades, keeping its rounded corners. When the list is
-  scrolled down, the list still slides but the Up Next box changes in one step. Scrolling the list (wheel
-  or drag) glides it over 0.3 s, with no spiral. A list that changes for another reason, such as a difficulty change,
-  redraws in one step. The Python app's blocks jump to their new places. The setup screen's workout list doesn't
-  move. Parity scenes are taken once everything is at rest, so they don't change.
+- **The Up Next box is tall enough for a three block interval, and shows an interval's blocks as separate rows.** It
+  is 138 design px tall (90 in the Python app): three of the coming up list's 42 px rows, 6 px apart. It's that tall
+  whatever is up next, so it never changes size. The coming up list is 48 px shorter, so "Coming up..." and the list
+  start 48 px lower, the list shows one row fewer, and the zone legend and everything below it stay where they were.
+  An interval up next shows each of its blocks as its own row in its own colors, with the list's gap between rows and
+  its repeat count's cap down their left side. The rows share the box's height. A plain block, or a song with its
+  first block, fills the box. The Python app shows an interval's blocks as lines in a single box, colored by its first
+  block. The boxes flying in and out of the Up Next box carry the rows with them. The parity scenes with an interval
+  up next (`hud_interval`, `hud_interval_caps`) and `hud_screen` differ from the Python app's for this.
+
+- **The Up Next box slides into the current block's place, and the coming up list moves ahead of time.** The move
+  starts 1.25 s before a block ends, so the Up Next box lands in the current block's place just as the next block
+  starts there (the moment the Python app swaps the current block's labels). The Up Next box traces a small outward
+  spiral where it is (3 px at its widest, 2.5 turns clockwise, 0.35 s). Then, over 0.9 s and easing in and out, it
+  slides up into the current block's place and grows to fill the block's labels: the box stretches to their shape and
+  its text grows evenly. Once the next block starts under it, it fades out over 0.2 s. At the same moment, each block
+  in the "Coming up..." list spirals the same way, then slides up to its new row. Each block starts 50 ms after the one
+  above it, and interval caps move with their rows. The top block passes behind "Coming up..." and grows into the Up
+  Next box, landing as the block ends: a plain block, an interval's rows with their cap, or a new song's header with
+  its first block. The lower blocks finish their slides shortly after. Up to the block's end the move follows the
+  workout clock, so it waits while the ride is paused. An interval's reps and blocks before its last don't start a
+  move. A ramp test, whose next block isn't known in advance, and a list scrolled down still change when the block
+  ends. In a ramp test the list slides then and the old Up Next box slides off to the right and fades. In a scrolled
+  list the Up Next box changes in one step. A difficulty change during the move puts the boxes straight into place.
+  Scrolling the list (wheel or drag) glides it over 0.3 s, with no spiral. A list that changes for another reason
+  redraws in one step. The Python app's blocks jump to their new places when the block ends. The setup screen's
+  workout list doesn't move. Parity scenes are taken once everything is at rest, so they don't change.
 
 - **The workout graph's bubble text stays readable on small screens.** Its size follows the layout's scale but stops at
   9 pixels (it went down to 6), and a max bubble is kept tall enough to hold its line of text clear of its rim, which

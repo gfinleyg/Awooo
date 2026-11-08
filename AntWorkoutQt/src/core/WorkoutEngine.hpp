@@ -116,6 +116,11 @@ public:
     // the workout's entries after the one being ridden, as the lists show them at the difficulty set (a ramp test's
     // next block too, before it's added)
     QList<UpcomingLine> upcoming() const;
+    // the block (or interval) that starts as the one being ridden ends: its entry's index (none when an interval's next
+    // rep or block comes first, it's the workout's last, or it's a ramp test, whose next block isn't added until just
+    // before), and what's coming up once it has (upcoming() then)
+    std::optional<int> nextEntryIndex() const;
+    QList<UpcomingLine> upcomingAfterNext() const;
     // the upcoming targets for the graph's bars: (times, powers), times one more than powers, from secondsPassed,
     // collectionPeriod seconds of them at most
     std::pair<QList<double>, QList<double>> upcomingGraph(double collectionPeriod) const;
@@ -137,6 +142,7 @@ private:
     void rampTick(std::optional<double> power, TickEvents& events);
     void endRamp();
     std::optional<double> effortAverage() const;
+    QList<UpcomingLine> upcomingFrom(qsizetype first) const;
 
     Clock clock_;
     // the workout as built (a ramp test adds blocks as it goes; a restart starts from this again)

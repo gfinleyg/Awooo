@@ -72,7 +72,20 @@ LongVLabels::LongVLabels(const ftpcolors::ZoneRanges& ranges, QWidget* parent)
 }
 
 bool LongVLabels::slideRunning() const {
-    return slide_->state() == QAbstractAnimation::Running;
+    return slide_->state() != QAbstractAnimation::Stopped;
+}
+
+void LongVLabels::holdSlide(std::optional<int> time) {
+    slideHold_ = time;
+    if (slide_->state() == QAbstractAnimation::Stopped) {
+        return;
+    }
+    if (time) {
+        slide_->pause();
+        slide_->setCurrentTime(std::min(*time, slide_->duration()));
+    } else {
+        slide_->resume();
+    }
 }
 
 void LongVLabels::finishSlide() {
@@ -130,6 +143,10 @@ void LongVLabels::startSlide(int rows, double step, const spiralslide::Motion& m
     slide_->setDuration(duration);
     slide_->setEndValue(duration);
     slide_->start();
+    if (slideHold_) {
+        slide_->pause();
+        time = *slideHold_;
+    }
     slide_->setCurrentTime(std::min(time, duration));
     placeSlide(slide_->currentValue().toInt());
 }
@@ -159,6 +176,10 @@ void LongVLabels::setPinnedStyle(int labelWidth) {
 // a label's height and the layout's spacing, at the layout scale
 double LongVLabels::rowHeight() const {
     return labels_.front()->minimumHeight() + std::max(labelLayout_->spacing(), 0);
+}
+
+int LongVLabels::rowGap() const {
+    return std::max(labelLayout_->spacing(), 0);
 }
 
 // as many rows as fit, so it needs room for just one: the rows it shows mustn't keep it (and the screen) from getting

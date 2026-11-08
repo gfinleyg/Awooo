@@ -591,9 +591,46 @@ QString WorkoutEngine::message() const {
 
 QList<WorkoutEngine::UpcomingLine> WorkoutEngine::upcoming() const {
     const AppState& state = appState();
+    QList<UpcomingLine> lines = upcomingFrom(activeWorkout_ + 1);
+    // a ramp test's next block isn't added until just before this one ends: up next is what it will be
+    if (lines.isEmpty() && rampTest_ && notPedalingSeconds_ < ftptest::kNotPedalingEndSeconds) {
+        const WorkoutEntry next =
+            ftptest::rampBlock(state.ftpTestMode, static_cast<int>(state.workoutList.size()) - effortStartIndex_);
+        lines.append({blockText(next, activeDifficulty_, state.targetUnit()).front()});
+    }
+    return lines;
+}
+
+std::optional<int> WorkoutEngine::nextEntryIndex() const {
+    const AppState& state = appState();
+    if (!started_ || rampTest_ || activeWorkout_ < 0) {
+        return std::nullopt;
+    }
+    for (qsizetype index = activeWorkout_ + 1; index < state.workoutList.size(); ++index) {
+        switch (state.workoutList[index].type) {
+            case WorkoutEntry::Type::Block:
+            case WorkoutEntry::Type::Interval:
+                return static_cast<int>(index);
+            case WorkoutEntry::Type::RampStep:
+                // (the steps of the ramp being ridden)
+                continue;
+            default:
+                return std::nullopt;
+        }
+    }
+    return std::nullopt;
+}
+
+QList<WorkoutEngine::UpcomingLine> WorkoutEngine::upcomingAfterNext() const {
+    const std::optional<int> next = nextEntryIndex();
+    return next ? upcomingFrom(*next + 1) : upcoming();
+}
+
+QList<WorkoutEngine::UpcomingLine> WorkoutEngine::upcomingFrom(qsizetype first) const {
+    const AppState& state = appState();
     const QString unit = state.targetUnit();
     QList<UpcomingLine> lines;
-    for (qsizetype index = activeWorkout_ + 1; index < state.workoutList.size(); ++index) {
+    for (qsizetype index = first; index < state.workoutList.size(); ++index) {
         // Musical Cadence Mode: a line for each song as it starts
         if (cadenceMode_ && state.musicSongStarts.contains(static_cast<int>(index))) {
             lines.append({state.musicSongStarts.value(static_cast<int>(index))});
@@ -606,12 +643,6 @@ QList<WorkoutEngine::UpcomingLine> WorkoutEngine::upcoming() const {
         } else if (entry.type == WorkoutEntry::Type::Interval) {
             lines.append(blockText(entry, activeDifficulty_, unit));
         }
-    }
-    // a ramp test's next block isn't added until just before this one ends: up next is what it will be
-    if (lines.isEmpty() && rampTest_ && notPedalingSeconds_ < ftptest::kNotPedalingEndSeconds) {
-        const WorkoutEntry next =
-            ftptest::rampBlock(state.ftpTestMode, static_cast<int>(state.workoutList.size()) - effortStartIndex_);
-        lines.append({blockText(next, activeDifficulty_, unit).front()});
     }
     return lines;
 }

@@ -104,6 +104,48 @@ private slots:
         QCOMPARE(times[1] - times[0], 54.0);
     }
 
+    // what's coming up once the next block has started, known before it does (the workout screen's boxes move to it
+    // ahead of time): known through each block's last part (an interval's last rep's last block, a ramp's steps), and
+    // just what upcoming() is once that block starts
+    void upcomingAfterNextIsKnownAhead() {
+        AppState& state = appState();
+        state.ftp = 200;
+        AwoOptions options;
+        options.ftp = 200;
+        const AwoResult result =
+            parseAwoLines({"1:10,0.5", "3:2;1:5,0.8;1:5,0.6", "2:10,0.5,1.0", "1:10,0.7"}, options);
+        QVERIFY(result.ok());
+        state.workoutList = result.workout.entries;
+        state.workoutDurationSeconds = result.workout.seconds;
+        WorkoutEngine engine;
+        QVERIFY(!engine.nextEntryIndex());
+        engine.start();
+        engine.tick();
+        std::optional<QList<WorkoutEngine::UpcomingLine>> predicted;
+        int blocksStarted = 0;
+        int withoutNext = 0;
+        for (int i = 0; i < 80 && engine.started(); ++i) {
+            if (const std::optional<int> next = engine.nextEntryIndex()) {
+                const WorkoutEntry::Type type = state.workoutList[*next].type;
+                QVERIFY(type == WorkoutEntry::Type::Block || type == WorkoutEntry::Type::Interval);
+                predicted = engine.upcomingAfterNext();
+            } else {
+                // (an interval's rep or block before its last, or the workout's last block)
+                predicted.reset();
+                ++withoutNext;
+            }
+            engine.advanceClock(1.0);
+            const WorkoutEngine::TickEvents events = engine.tick();
+            if (events.blockStarted) {
+                ++blocksStarted;
+                QVERIFY(predicted);
+                QCOMPARE(engine.upcoming(), *predicted);
+            }
+        }
+        QCOMPARE(blocksStarted, 3);
+        QVERIFY(withoutNext > 0);
+    }
+
     void restartGoesBackToTheStart() {
         AppState& state = appState();
         state.ftp = 200;

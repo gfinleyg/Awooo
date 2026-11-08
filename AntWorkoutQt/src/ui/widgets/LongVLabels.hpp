@@ -53,6 +53,8 @@ public:
     // the zones the blocks are colored in
     ftpcolors::ZoneRanges ftpRanges;
     const QList<QLabel*>& labels() const { return labels_; }
+    // the space between rows, at the layout scale
+    int rowGap() const;
     // the intervals' caps (the ones in use shown)
     const QList<QLabel*>& caps() const { return caps_; }
     // how many blocks and intervals are scrolled out of view above
@@ -67,9 +69,12 @@ public:
     // preview jumps
     void setSliding(bool on) { sliding_ = on; }
     bool sliding() const { return sliding_; }
-    // a slide under way, and the rows put straight where they go
+    // a slide under way (or held), and the rows put straight where they go
     bool slideRunning() const;
     void finishSlide();
+    // the slide timed from outside (HudScreen: by the workout clock, so it waits while the ride's paused): held at
+    // time ms into it, a slide that starts later starting there too; none: it runs on by itself from where it is
+    void holdSlide(std::optional<int> time);
 
     QSize minimumSizeHint() const override;
 
@@ -130,6 +135,7 @@ private:
     QList<QPoint> slideHomes_;
     int slideRows_ = 0;
     double slideStep_ = 0.0;
+    std::optional<int> slideHold_;
 };
 
 }  // namespace awo

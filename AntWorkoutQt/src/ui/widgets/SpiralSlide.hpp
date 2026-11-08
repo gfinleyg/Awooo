@@ -22,10 +22,15 @@ struct Motion {
     int staggerMs = 50;
 
     int duration(int cells) const { return std::max(cells - 1, 0) * staggerMs + spiralMs + slideMs; }
+    // one block's whole move, its spiral and its slide
+    int lead() const { return spiralMs + slideMs; }
 };
 
-// a block finishing
+// a block finishing: it all starts a block's whole move (lead()) before the block ends, so the Up Next box lands in the
+// current block's place just as the next block starts there; the list's lower blocks, waiting their turns, land after
 inline constexpr Motion kBlockDone{};
+// (the Up Next box's picture fading over the new block once it's landed, ms)
+inline constexpr int kLandFadeMs = 200;
 // a scroll (wheel or drag): a quick glide, no spiral or stagger
 inline constexpr Motion kScroll{0.0, 0.0, 0, 300, 0};
 

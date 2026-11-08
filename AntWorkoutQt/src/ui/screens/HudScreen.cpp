@@ -420,6 +420,9 @@ HudScreen::HudScreen(ant::AntBridge* bridge, QWidget* parent, WorkoutEngine::Clo
         QList<QWidget*> colored{blockNonIntLabel_, upNextLabelDescription_, upNextCap_, spiralWorkoutProgress_,
                                 blockMultiplierLabel_};
         colored += {blockInt2Label_[0], blockInt2Label_[1], blockInt3Label_[0], blockInt3Label_[1], blockInt3Label_[2]};
+        for (QLabel* row : upNextRows_) {
+            colored.append(row);
+        }
         for (QWidget* widget : colored) {
             widget->setProperty("awoFtpColored", true);
         }
@@ -443,15 +446,24 @@ void HudScreen::buildUpNext() {
     upNextDescription->setScrolling(true);
     upNextDescription->setAlignment(Qt::AlignCenter);
     upNextLabelDescription_ = upNextDescription;
-    upNextLabelDescription_->setFixedHeight(90);
+    upNextLabelDescription_->setFixedHeight(kUpNextHeight);
     upNextLabelDescription_->setMinimumWidth(kUpNextWidth);
     upNextLabelDescription_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     upNext->addWidget(upNextLabelDescription_, 1, 0, 3, 1);
+    // an interval's blocks: a row each over the box, which only holds them (placed as it moves and resizes)
+    for (int i = 0; i < 3; ++i) {
+        auto* row = new ScrollingLabel(QString(), upNextLabelDescription_);
+        row->setScrolling(true);
+        row->setAlignment(Qt::AlignCenter);
+        row->hide();
+        upNextRows_.append(row);
+    }
+    upNextLabelDescription_->installEventFilter(this);
     // an interval up next: its repeat count in a cap down the box's left side, as the coming up list has them (over
     // the box, which makes room for it; centered top to bottom as the box is)
     upNextCap_ = new QLabel;
     upNextCap_->setAlignment(Qt::AlignCenter);
-    upNextCap_->setFixedSize(LongVLabels::kCapWidth, 90);
+    upNextCap_->setFixedSize(LongVLabels::kCapWidth, kUpNextHeight);
     upNextCap_->hide();
     upNext->addWidget(upNextCap_, 1, 0, 3, 1, Qt::AlignLeft);
     remainingWorkoutHeader_ = new HaloLabel(QStringLiteral("Coming up..."));
@@ -463,8 +475,8 @@ void HudScreen::buildUpNext() {
     remainingWorkoutList_->setPinnedStyle(kUpNextWidth);
     // (its blocks spiral and slide up as one finishes, the top one into the Up Next box; they glide as it scrolls)
     remainingWorkoutList_->setSliding(true);
-    // (with the zone legend under it, as tall as the list alone was)
-    remainingWorkoutList_->setFixedHeight(560 - ZoneLegend::kHeight - 6);
+    // (with the zone legend under it, and shorter by what the Up Next box gained, as tall as the list alone was)
+    remainingWorkoutList_->setFixedHeight(560 - (kUpNextHeight - kPythonUpNextHeight) - ZoneLegend::kHeight - 6);
     // (right under "Coming up...", its blocks from the top of it)
     upNext->addWidget(remainingWorkoutList_, 5, 0, 21, 1, Qt::AlignTop);
     // the zones' colors and where each ends, between the blocks and the graph

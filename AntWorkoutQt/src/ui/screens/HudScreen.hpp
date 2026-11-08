@@ -141,6 +141,10 @@ public:
     // the left column's width (design px): the block grades' when they take it over, so it's that wide from the
     // start and the screen doesn't move when they take it over
     static constexpr int kUpNextWidth = 490;
+    // the Up Next box's height (design px): a three block interval's rows as the coming up list has them (three 42 px
+    // rows, 6 px apart); the list under it is shorter by what it gained on the Python app's 90, so nothing below moves
+    static constexpr int kUpNextHeight = 3 * 42 + 2 * 6;
+    static constexpr int kPythonUpNextHeight = 90;
     // the lines a workout message under Ride At may use (a longer one is made smaller), kept for it whether there's a
     // message or not, so Ride At never moves
     static constexpr int kMessageLines = 2;
@@ -245,17 +249,25 @@ public:
     // the lit block's slide and swell, drawn over the block's labels (none outside Workout Mode)
     BlockHighlight* blockHighlight() const { return blockHighlight_; }
     QLabel* upNextLabel() const { return upNextLabelDescription_; }
-    // an interval up next: its repeat count's cap, down the box's left side
+    // an interval up next: its repeat count's cap, down the box's left side, and its blocks' rows in the box (each in
+    // its own colors, apart as the coming up list's are, sharing the box's height; the ones in use shown)
     QLabel* upNextCap() const { return upNextCap_; }
+    const QList<QLabel*>& upNextRows() const { return upNextRows_; }
     QLabel* upNextHeader() const { return upNextLabelHeader_; }
     LongVLabels* remainingList() const { return remainingWorkoutList_; }
-    // a block finished: the old Up Next box sliding off to the right and the coming up list's top block going up behind
-    // "Coming up..." into its place (C++ only); finishing it puts the boxes straight where they go
+    // a block finishing (C++ only): a block's whole move before it ends, the Up Next box's picture spirals and slides
+    // into the current block's place, landing as the next block starts there, while the coming up list's top block goes
+    // up behind "Coming up..." into the Up Next box and the rest of the list follow it up. Till the block ends it's timed
+    // by the workout clock (it waits while the ride's paused). Finishing it puts the boxes straight where they go
     bool upNextSlideRunning() const;
     void finishUpNextSlide();
-    // (the copies going up into the box and off out of it while it runs, their box label; null when there's none)
+    // held to the workout clock, waiting for the block to end
+    bool upNextHandoffHeld() const { return handoffHeld_; }
+    // (the copy going up into the box, its box label, and the old box's picture going out of it; null when there's none)
     QLabel* upNextArriving() const;
-    QLabel* upNextLeaving() const;
+    QWidget* upNextLeaving() const;
+    // where the old Up Next box's picture lands: the current block's labels, above its progress bar (screen coordinates)
+    QRect currentBlockArea() const;
     ZoneLegend* zoneLegend() const { return zoneLegend_; }
     QLabel* workoutTimeLabel() const { return workoutTime_; }
     QLabel* remainingTimeLabel() const { return remainingWorkoutTime_; }
@@ -330,8 +342,13 @@ private:
     void setWorkoutTimerColors(const QString& chunk, const QString& bar, const QString& label);
     void blockBlinkDefault();
     void blockBlinkOn();
-    void updateUpNextRemaining();
-    void updateUpNextBoxes();
+    // (blockStarted: a new block's what changed it)
+    void updateUpNextRemaining(bool blockStarted = false);
+    void updateUpNextBoxes(QList<WorkoutEngine::UpcomingLine> lines);
+    // the move for the block ending: started once it's a block's whole move from its end, then timed by its clock
+    // (sinceTick: how far past the last tick it is); and run on by itself once the block's ended
+    void stepUpNextHandoff(double sinceTick = 0.0);
+    void landUpNextHandoff();
     void hideLastBlockNote();
     void updateRequestedPowerDisplays();
     void updateWorkoutMessage();
@@ -390,10 +407,13 @@ private:
     QString intervalCapCss(const QStringList& blocks) const;
     // the Up Next box's cap: shown, and its box making room for it, while an interval is up next
     void colorUpNextCap();
-    // the Up Next slide from the list's top rows (rect in the Up Next box's parent), the old box's copy (if any) leaving
-    // from where it is
-    void startUpNextSlide(QWidget* leaving, const QRect& from);
+    // the Up Next slide from the list's top rows (rect in the Up Next box's parent; none: nothing goes up into it), the
+    // old box's picture (if any) leaving from where it is, into the current block's place (toBlock) or off to the right
+    void startUpNextSlide(QWidget* leaving, std::optional<QRect> from, bool toBlock);
+    void placeUpNextSlide(int time);
     void hideUpNextCap();
+    // the interval's rows over the box, wherever it is
+    void placeUpNextRows();
     // the interval being ridden's repeat count, in its blocks' colors
     void colorBlockCount();
     void setStartButtonStyle();
@@ -447,6 +467,7 @@ private:
     QLabel* upNextLabelDescription_ = nullptr;
     QLabel* upNextCap_ = nullptr;
     // the interval up next: its repeat count and its blocks' text (none: a block)
+    QList<QLabel*> upNextRows_;
     QString upNextRepeats_;
     QStringList upNextBlocks_;
     QLabel* remainingWorkoutHeader_ = nullptr;
@@ -457,6 +478,14 @@ private:
     QPointer<QWidget> upNextLeaving_;
     QRect upNextArriveFrom_;
     QRect upNextLeaveFrom_;
+    QRect upNextLeaveTo_;
+    bool upNextToBlock_ = false;
+    // the move for a block ending: the next block's entry it was started for (once each), whether it's held to the
+    // workout clock still (till the block ends; ms into it) and what's coming up it moved the boxes to
+    int handoffFor_ = -1;
+    bool handoffHeld_ = false;
+    int handoffTime_ = 0;
+    QList<WorkoutEngine::UpcomingLine> handoffLines_;
     LongVLabels* remainingWorkoutList_ = nullptr;
     ZoneLegend* zoneLegend_ = nullptr;
     QLabel* workoutGradesHeader_ = nullptr;

@@ -842,9 +842,10 @@ private slots:
         QCOMPARE(shortLast.upNextLabel()->text(), QStringLiteral("You're on the last block, way to go!"));
     }
 
-    // a block done: the coming up list's top block (or interval) spirals, then slides up behind "Coming up..." into the
-    // Up Next box as the old box spirals and slides off to the right, rounded as it was, and the rest of the list follow
-    // it up (C++ only)
+    // a block finishing: a block's whole move before it ends, the Up Next box's picture spirals and slides into the
+    // current block's place, landing as the next block starts there, while the coming up list's top block (or interval)
+    // goes up behind "Coming up..." into the Up Next box and the rest of the list follow it up. Till then it's timed by
+    // the workout clock: it waits while the ride does (C++ only)
     void upNextSlidesIntoPlace_data() {
         QTest::addColumn<QStringList>("workout");
         QTest::addColumn<bool>("interval");
@@ -859,33 +860,47 @@ private slots:
         hud.stopTimers();
         hud.show();
         QVERIFY(QTest::qWaitForWindowExposed(&hud));
-        SimulatedRider rider;
         hud.startWorkout();
-        tickSecond(hud, rider);
+        hud.processEvents(0.1);
         QTRY_VERIFY(!hud.upNextSlideRunning() && !hud.remainingList()->slideRunning());
         const QRect box = hud.upNextLabel()->geometry();
-        const QString oldText = hud.upNextLabel()->text();
-        const QString oldSheet = theme::originalSheet(hud.upNextLabel());
-        for (int i = 0; i < 20 && hud.engine().activeWorkout() < 1; ++i) {
-            tickSecond(hud, rider);
+        const QString blockText = hud.blockLabel()->text();
+        const int lead = spiralslide::kBlockDone.lead();
+        const auto left = [&hud] { return hud.engine().blockDuration() - hud.engine().blockSecondsPassed(); };
+        // (nothing moves till it's a block's whole move from the end)
+        while (left() * 1000 > lead + 100) {
+            hud.processEvents(0.1);
+            if (left() * 1000 > lead) {
+                QVERIFY(!hud.upNextHandoffHeld() && !hud.upNextSlideRunning());
+            }
         }
+        while (!hud.upNextHandoffHeld() && hud.engine().activeWorkout() < 1) {
+            hud.processEvents(0.1);
+        }
+        QVERIFY(hud.upNextHandoffHeld());
+        QVERIFY(left() * 1000 <= lead && left() > 0);
+        // (the block being ridden still shown)
+        QCOMPARE(hud.blockLabel()->text(), blockText);
+        QCOMPARE(hud.engine().activeWorkout(), 0);
         QVERIFY(hud.upNextSlideRunning());
+        // (the list's rows once it's laid them out, held where they are on their way)
+        QTRY_VERIFY(hud.remainingList()->slideRunning());
         QCOMPARE(hud.upNextCap()->isVisibleTo(&hud), interval);
         // (the real box and its cap out of sight while the block goes up to them)
         QVERIFY(hud.upNextLabel()->graphicsEffect());
         QVERIFY(hud.upNextCap()->graphicsEffect());
         QPointer<QLabel> arriving = hud.upNextArriving();
-        QPointer<QLabel> leaving = hud.upNextLeaving();
-        QVERIFY(arriving && leaving);
+        QPointer<QWidget> off = hud.upNextLeaving();
+        QVERIFY(arriving && off);
         QCOMPARE(arriving->text(), hud.upNextLabel()->text());
+        const QString upNextText = arriving->text();
         QCOMPARE(theme::originalSheet(arriving), theme::originalSheet(hud.upNextLabel()));
-        // (an interval's comes with its cap)
-        QCOMPARE(arriving->parentWidget()->findChildren<QLabel*>().size(), interval ? 2 : 1);
-        // (the old box drawn as it was, its corners rounded)
-        QCOMPARE(leaving->text(), oldText);
-        QCOMPARE(theme::originalSheet(leaving), oldSheet);
+        // (an interval's comes with its rows and its cap)
+        QCOMPARE(arriving->parentWidget()->findChildren<QLabel*>().size(), interval ? 4 : 1);
+        // (the old box's picture: something drawn, its corners see-through)
+        const QImage picture = off->grab().toImage();
+        QVERIFY(qAlpha(picture.pixel(picture.width() / 2, picture.height() / 2)) > 0);
         QPointer<QWidget> up = arriving->parentWidget();
-        QPointer<QWidget> off = leaving->parentWidget();
         // (starting from the list's top rows, below the box, drawn over the list and under the header)
         QVERIFY(up->y() > box.bottom());
         if (interval) {
@@ -901,19 +916,39 @@ private slots:
         const QList<QObject*> siblings = hud.upNextLabel()->parentWidget()->children();
         QVERIFY(siblings.indexOf(up) > siblings.indexOf(hud.remainingList()));
         QVERIFY(siblings.indexOf(up) < siblings.indexOf(comingUp));
-        // the old box spirals where it is first (off its row up and down), then goes off to the right
-        QTRY_VERIFY(off && off->y() != box.y());
-        QTRY_VERIFY(off && off->x() > box.x() + box.width() / 4);
-        // the list's next block follows it up
-        QTRY_VERIFY(hud.remainingList()->slideRunning());
-        // (on its way: above where it started)
-        QTRY_VERIFY(up && up->y() < box.bottom());
+        // held to the workout clock: still while it doesn't move (paused)
+        const QRect heldAt = off->geometry();
+        QTest::qWait(lead / 2);
+        QCOMPARE(off->geometry(), heldAt);
+        QVERIFY(hud.upNextHandoffHeld());
+        // up to the block's end: grown into the current block's place, the block still the one being ridden
+        while (left() > 0.05) {
+            hud.processEvents(0.1);
+            QCOMPARE(hud.engine().activeWorkout(), 0);
+        }
+        const QRect area = hud.currentBlockArea();
+        QVERIFY(off->width() > box.width());
+        QVERIFY((off->geometry().center() - area.center()).manhattanLength() <= 2);
+        QVERIFY(area.contains(off->geometry().adjusted(1, 1, -1, -1)));
+        QVERIFY(up->geometry() == box);
+        QCOMPARE(hud.blockLabel()->text(), blockText);
+        // the block ends: the next one in its place, under the picture, which fades; the list's lower blocks go on
+        while (hud.engine().activeWorkout() < 1) {
+            hud.processEvents(0.1);
+        }
+        QVERIFY(hud.blockLabel()->text() != blockText);
+        QVERIFY(!hud.upNextHandoffHeld());
+        QVERIFY(hud.upNextSlideRunning());
+        QVERIFY(off);
         // at rest: the box where it was, its block in it, the copies gone
         QTRY_VERIFY_WITH_TIMEOUT(!hud.upNextSlideRunning(), spiralslide::kBlockDone.duration(10) * 3);
+        QTRY_VERIFY_WITH_TIMEOUT(!hud.remainingList()->slideRunning(), spiralslide::kBlockDone.duration(10) * 3);
         QVERIFY(!hud.upNextLabel()->graphicsEffect());
         QVERIFY(!hud.upNextCap()->graphicsEffect());
         QCOMPARE(hud.upNextLabel()->geometry(), box);
         QTRY_VERIFY(!up && !off);
+        // (what it moved to is what's up next now)
+        QCOMPARE(hud.upNextLabel()->text(), upNextText);
     }
 
     // the grades take over the left column as the note goes, the last block's a blinking question mark until it's set
@@ -1245,6 +1280,23 @@ private slots:
         QCOMPARE(cap->geometry().center().y(), upNext->geometry().center().y());
         // (the box makes room for it)
         QVERIFY(upNext->contentsRect().left() >= cap->width());
+        // each block a row of its own in the box, in its own colors, apart as the coming up list's rows are; the box
+        // only holds them (C++ only)
+        const QList<QLabel*>& rows = hud.upNextRows();
+        QCOMPARE(rows.size(), 3);
+        QVERIFY(rows[0]->isVisible() && rows[1]->isVisible() && !rows[2]->isVisible());
+        QCOMPARE(rows[0]->text(), QStringLiteral("220W 20s"));
+        QCOMPARE(rows[1]->text(), QStringLiteral("120W 20s"));
+        QCOMPARE(rows[0]->y(), 0);
+        QCOMPARE(rows[1]->geometry().bottom(), upNext->height() - 1);
+        QCOMPARE(rows[1]->y() - rows[0]->geometry().bottom() - 1, hud.remainingList()->rowGap());
+        QVERIFY(theme::originalSheet(rows[0]) != theme::originalSheet(rows[1]));
+        QVERIFY(theme::originalSheet(rows[0]).contains(QStringLiteral("margin-left")));
+        QVERIFY(theme::originalSheet(upNext).contains(QStringLiteral("background-color: transparent")));
+        // (tall enough for three of the list's rows)
+        const int listRow = hud.remainingList()->labels()[0]->height();
+        QVERIFY(std::abs(upNext->height() - (3 * listRow + 2 * hud.remainingList()->rowGap())) <= 3);
+        QCOMPARE(cap->height(), upNext->height());
         const QString capSheet = theme::originalSheet(cap);
         const auto [high, highEnd] = zones::lineColors(QStringLiteral("220W 20s"));
         const auto [low, lowEnd] = zones::lineColors(QStringLiteral("120W 20s"));
@@ -1262,6 +1314,8 @@ private slots:
         QCOMPARE(theme::originalSheet(hud.blockCountLabel()), zones::intervalCapCss({{high, highEnd}, {low, lowEnd}}));
         QVERIFY(!cap->isVisible());
         QVERIFY(!theme::originalSheet(upNext).contains(QStringLiteral("margin-left")));
+        // (a block up next: the box its own again, no rows)
+        QVERIFY(!rows[0]->isVisible() && !rows[1]->isVisible());
     }
 
     // a last interval: each repeat's grade as it ends, each block's own once all its repeats have theirs
