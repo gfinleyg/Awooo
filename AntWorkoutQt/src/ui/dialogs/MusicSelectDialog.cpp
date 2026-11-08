@@ -148,7 +148,7 @@ MusicSelectDialog::MusicSelectDialog(QWidget* parent, bool savedSongs) : QDialog
         inBox.field = box;
         keys::add(ok_, keys::kEnter, inBox);
     }
-    // the settings: +/- the minutes (5 at a time), ,/. the preferred cadence, [/] the shortest block (keys neither the
+    // the settings: +/- the minutes (1 at a time), ,/. the preferred cadence, [/] the shortest block (keys neither the
     // list nor the boxes keep, so they work whatever's focused; Up/Down stay with the list)
     struct Stepper {
         QSpinBox* box;
@@ -157,7 +157,7 @@ MusicSelectDialog::MusicSelectDialog(QWidget* parent, bool savedSongs) : QDialog
         QString label;
     };
     const QList<Stepper> steppers = {
-        {randomMinutes_, 5, {Qt::Key_Plus, Qt::Key_Equal}, {Qt::Key_Minus, Qt::Key_Underscore}, QStringLiteral("+ −")},
+        {randomMinutes_, 1, {Qt::Key_Plus, Qt::Key_Equal}, {Qt::Key_Minus, Qt::Key_Underscore}, QStringLiteral("+ −")},
         {preferredRpm_, 1, {Qt::Key_Period, Qt::Key_Greater}, {Qt::Key_Comma, Qt::Key_Less}, QStringLiteral(", .")},
         {minSegment_, 1, {Qt::Key_BracketRight, Qt::Key_BraceRight}, {Qt::Key_BracketLeft, Qt::Key_BraceLeft}, QStringLiteral("[ ]")},
     };

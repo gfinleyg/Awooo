@@ -1472,13 +1472,13 @@ void HudScreen::trainerWattsEdited() {
     trainerWattsText_->setText(QString::number(difficultySlider_->value()));
 }
 
-// the wheel/Up/Down: steps of 2% FTP, or 5% volume or (free mode) 5 W, landing on a whole step or (free mode) one of
+// the wheel/Up/Down: steps of 2% FTP, or 1% volume or (free mode) 5 W, landing on a whole step or (free mode) one of
 // the slider's stops; nothing while it's off
 void HudScreen::nudgeSlider(int steps) {
     if (!steps || !difficultySlider_ || !difficultySlider_->isEnabled() || !isVisible()) {
         return;
     }
-    const int step = cadenceMode_ || !appState().workoutMode ? 5 : 1;
+    const int step = !cadenceMode_ && !appState().workoutMode ? 5 : 1;
     int value = difficultySlider_->value();
     for (int i = 0; i < std::abs(steps); ++i) {
         int next = 0;

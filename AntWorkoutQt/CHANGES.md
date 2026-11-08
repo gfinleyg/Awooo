@@ -315,6 +315,9 @@ Python app's own results (`tests\golden\`).
   as one block (at 110). A song's cadence for Pick Random Songs counts those stretches at double too.
 - **Pick Random Songs picks the unchecked songs first.** The songs checked when it's pressed are picked only once
   none of the others fits, so pressing it again gives a new set of songs (as far as the list has them).
+- **The song picker's +/− keys change the random ride's minutes by 1**, as its arrows do; the Python app's went 5 at
+  a time.
+- **The mouse wheel and Up/Down change the volume by 1%**; the Python app's went 5% at a time.
 
 ## LayoutViewer
 
