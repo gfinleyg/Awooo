@@ -1390,6 +1390,23 @@ private slots:
         // the leading edge's pixel blended
         const QColor edge = image.pixelColor(50, 5);
         QVERIFY(edge != QColor(Qt::blue) && edge != QColor(Qt::white));
+        // the leading edge rounded as the start is: a taller bar's fill reaches further along its middle than along
+        // its top and bottom rows
+        bar.resize(201, 40);
+        bar.setFraction(0.5);
+        QImage tall(bar.size(), QImage::Format_ARGB32);
+        tall.fill(Qt::transparent);
+        bar.render(&tall, QPoint(), QRegion(), QWidget::DrawChildren);
+        const int inset = static_cast<int>(bar.frameWidth()) + 1;
+        auto reach = [&tall](int y) {
+            int x = tall.width() / 4;  // (past the round start)
+            while (x + 1 < tall.width() && tall.pixelColor(x + 1, y).blue() > 200 && tall.pixelColor(x + 1, y).red() < 50) {
+                ++x;
+            }
+            return x;
+        };
+        QVERIFY(reach(20) > reach(inset) + 5);
+        QVERIFY(reach(20) > reach(39 - inset) + 5);
     }
 
 private:

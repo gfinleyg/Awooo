@@ -156,6 +156,12 @@ private:
     struct Piece {
         QBrush brush;
         QPainterPath area, line;
+        // (round ends, each in its end bin's color: the brush's colors run on round past North)
+        QPainterPath startCap, endCap;
+        QColor startColor, endColor;
+    };
+    struct Plot {
+        QPainterPath area, line, startCap, endCap;
     };
     using HeightOf = std::function<std::optional<double>(int)>;
     using RadiusAt = std::function<double(double)>;
@@ -165,8 +171,8 @@ private:
     QPainterPath ribbon(const Geometry& g, const RadiusAt& radiusAt, double start, double end, double width) const;
     QPainterPath fullRing(const Geometry& g, double width) const;
     HeightOf heights(const Geometry& g, const spiral::Timeline& timeline) const;
-    std::pair<QPainterPath, QPainterPath> plot(const Geometry& g, const RadiusAt& radiusAt, double start, double end,
-                                               const HeightOf& heightOf) const;
+    Plot plot(const Geometry& g, const RadiusAt& radiusAt, double start, double end, const HeightOf& heightOf,
+              bool roundStart = false, bool roundEnd = false) const;
     std::function<ftpcolors::ZoneRanges(int)> binRanges(const spiral::Timeline& timeline,
                                                         const ftpcolors::ZoneRanges& ranges) const;
     const QList<QColor>& binColors(const spiral::Timeline& timeline, const ftpcolors::ZoneRanges& ranges,
@@ -209,6 +215,7 @@ private:
         int turn;
         int done;
         ColorsKey colors;
+        bool roundEnd;
         bool operator==(const DoneKey&) const = default;
     };
     // the finished stretches, by name (-1 the ring, else the spiral's turn)
@@ -233,6 +240,8 @@ private:
         ColorsKey colors;
         QRgb track, line;
         QList<std::tuple<int, double, int, bool, double>> turns;
+        // (whether the turn being ridden has started: until it has, the one before's end is rounded)
+        bool activeStarted;
         bool operator==(const StillKey&) const = default;
     };
     std::optional<std::pair<StillKey, QPixmap>> still_;

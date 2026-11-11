@@ -162,7 +162,10 @@ private:
     void animateNeedle();
     double fittedValueFontsize();
     double fitValueFontsize() const;
-    QPolygonF createPolygonPie(double outerRadius, double innerRadius, double start, int length, bool barGraph = true);
+    // (roundEnds: its ends' corners rounded, as round as the band's width and length let them be; startTrim: degrees
+    // left off its start, the end staying put)
+    QPolygonF createPolygonPie(double outerRadius, double innerRadius, double start, int length, bool barGraph = true,
+                               bool roundEnds = false, double startTrim = 0);
 
     void drawFaceUnder();
     void drawFaceOver();
@@ -246,7 +249,7 @@ private:
     std::optional<QColor> halo_;
     // the parts of the widget they draw in, and the last frame did
     QRect faceRect_, centerRect_, textRect_, frameRect_;
-    std::map<std::tuple<double, double, double, int, double>, QPolygonF> pieCache_;
+    std::map<std::tuple<double, double, double, int, double, bool, double>, QPolygonF> pieCache_;
     std::optional<std::pair<std::tuple<double, double, double, int, double, QString, bool>, double>> fittedValueFontsize_;
     QTimer* needleTimer_;
     QElapsedTimer needleClock_;

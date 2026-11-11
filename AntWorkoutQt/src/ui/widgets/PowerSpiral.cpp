@@ -291,10 +291,12 @@ PowerSpiral::HeightOf PowerSpiral::heights(const Geometry& g, const Timeline& ti
     };
 }
 
-// (the shape under the line, the line) from angle start to end: a point at each bin's middle and at either end,
-// heightOf(bin) px out from the lane's inner edge, the lane's middle radiusAt(angle) from the center
-std::pair<QPainterPath, QPainterPath> PowerSpiral::plot(const Geometry& g, const RadiusAt& radiusAt, double start,
-                                                        double end, const HeightOf& heightOf) const {
+// the shape under the line and the line from angle start to end: a point at each bin's middle and at either end,
+// heightOf(bin) px out from the lane's inner edge, the lane's middle radiusAt(angle) from the center; roundStart,
+// roundEnd: that end carries on into a half circle as tall as the plot there (its own shape, a px over the plot's so
+// no seam shows), the line running on round it to its tip
+PowerSpiral::Plot PowerSpiral::plot(const Geometry& g, const RadiusAt& radiusAt, double start, double end,
+                                    const HeightOf& heightOf, bool roundStart, bool roundEnd) const {
     const QPointF center = g.center;
     const double half = g.lane / 2;
     auto at = [&](double theta, double offset) {
@@ -313,30 +315,72 @@ std::pair<QPainterPath, QPainterPath> PowerSpiral::plot(const Geometry& g, const
     }
     angles.append(end);
     bins.append(std::max(0, static_cast<int>(end / step - 1e-9)));
-    QPainterPath area, line;
+    Plot result;
     QList<double> heights;
     for (const int j : bins) {
         const std::optional<double> h = heightOf(j);
         if (!h) {
-            return {area, line};
+            return result;
         }
         heights.append(*h);
     }
     if (end <= start) {
-        return {area, line};
+        return result;
     }
     QPolygonF top;
     for (qsizetype i = 0; i < angles.size(); ++i) {
         top.append(at(angles[i], heights[i] - half));
     }
+    // the half circle as tall as the plot at angle theta (forward: past it, else before it): from the line's end round
+    // to the lane's inner edge (its first kCapSamples / 2 + 1 points the line's way round to its tip), then back a px
+    // into the plot
+    constexpr int kCapSamples = 16;
+    auto cap = [&](double theta, double height, bool forward) {
+        QPolygonF points;
+        if (height <= 0) {
+            return points;
+        }
+        const double radius = height / 2;
+        const QPointF middle = at(theta, radius - half);
+        const QPointF out(std::sin(theta), -std::cos(theta));
+        const QPointF along = QPointF(std::cos(theta), std::sin(theta)) * (forward ? 1 : -1);
+        for (int k = 0; k <= kCapSamples; ++k) {
+            const double phi = kPi / 2 - kPi * k / kCapSamples;
+            points.append(middle + (out * std::sin(phi) + along * std::cos(phi)) * radius);
+        }
+        points.append(middle - out * radius - along);
+        points.append(middle + out * radius - along);
+        return points;
+    };
     QPolygonF outline = top;
     for (auto it = angles.rbegin(); it != angles.rend(); ++it) {
         outline.append(at(*it, -half));
     }
-    area.addPolygon(outline);
-    area.closeSubpath();
-    line.addPolygon(top);
-    return {area, line};
+    result.area.addPolygon(outline);
+    result.area.closeSubpath();
+    QPolygonF topLine = top;
+    if (roundStart) {
+        const QPolygonF startCap = cap(start, heights.front(), false);
+        if (!startCap.isEmpty()) {
+            result.startCap.addPolygon(startCap);
+            result.startCap.closeSubpath();
+            for (int k = 1; k <= kCapSamples / 2; ++k) {
+                topLine.prepend(startCap[k]);
+            }
+        }
+    }
+    if (roundEnd) {
+        const QPolygonF endCap = cap(end, heights.back(), true);
+        if (!endCap.isEmpty()) {
+            result.endCap.addPolygon(endCap);
+            result.endCap.closeSubpath();
+            for (int k = 1; k <= kCapSamples / 2; ++k) {
+                topLine.append(endCap[k]);
+            }
+        }
+    }
+    result.line.addPolygon(topLine);
+    return result;
 }
 
 // rangesOf(bin): the power ranges a bin's colored by, the ride's it's in (the session's earlier rides keep the FTP
@@ -449,27 +493,53 @@ void PowerSpiral::paintRidden(QPainter& painter, int name, const Geometry& g, co
     const double doneEnd =
         doneCount >= kBins ? end : (doneCount ? std::min(end, start + (doneCount - 0.5) * step) : start);
     const HeightOf heightOf = heights(g, timeline);
+    // a bin's power's zone color (only worked out for the spiral's round ends)
+    auto binColor = [&](int bin) {
+        if (name < 0) {
+            return QColor();
+        }
+        const QList<QColor>& colors = binColors(timeline, ranges, colorsKey);
+        return colors.isEmpty() ? QColor() : colors[std::clamp(bin, 0, static_cast<int>(colors.size()) - 1)];
+    };
+    // the spiral's plot (not the ring's) is rounded where it starts and where it's got to: where one turn carries on
+    // into the next it goes straight on
+    const bool spiral = name >= 0;
+    const bool roundStart = spiral && turn == 0;
+    const bool roundEnd = spiral && (fraction < 1 || turn == kBlockTurns - 1 || turnFraction(turn + 1) <= 0);
     QList<Piece> pieces;
     if (done && doneEnd > start) {
-        const DoneKey key{g.key, timeline.serial(), timeline.duration(), turn, doneCount, colorsKey};
+        const bool doneRoundEnd = roundEnd && doneEnd >= end;
+        const DoneKey key{g.key, timeline.serial(), timeline.duration(), turn, doneCount, colorsKey, doneRoundEnd};
         auto found = donePieces_.find(name);
         if (found == donePieces_.end() || !(found->second.first == key)) {
-            auto [area, line] = plot(g, radiusAt, start, doneEnd, heightOf);
-            Piece piece{powerBrush(g, timeline, turn * kBins, 0, doneCount, ranges, colorsKey), area, line};
+            const Plot drawn = plot(g, radiusAt, start, doneEnd, heightOf, roundStart, doneRoundEnd);
+            Piece piece{powerBrush(g, timeline, turn * kBins, 0, doneCount, ranges, colorsKey),
+                        drawn.area,
+                        drawn.line,
+                        drawn.startCap,
+                        drawn.endCap,
+                        binColor(turn * kBins),
+                        binColor(turn * kBins + doneCount - 1)};
             found = donePieces_.insert_or_assign(name, std::pair(key, piece)).first;
         }
         pieces.append(found->second.second);
     }
     if (tip && doneEnd < end) {
-        auto [area, line] = plot(g, radiusAt, std::max(start, doneEnd - step), end, heightOf);
-        pieces.append({powerBrush(g, timeline, turn * kBins, doneCount - 2,
-                                  static_cast<int>(std::ceil(fraction * kBins)), ranges, colorsKey),
-                       area, line});
+        const double tipStart = std::max(start, doneEnd - step);
+        const int toBin = static_cast<int>(std::ceil(fraction * kBins));
+        const Plot drawn = plot(g, radiusAt, tipStart, end, heightOf, roundStart && tipStart <= start, roundEnd);
+        pieces.append({powerBrush(g, timeline, turn * kBins, doneCount - 2, toBin, ranges, colorsKey), drawn.area,
+                       drawn.line, drawn.startCap, drawn.endCap, binColor(turn * kBins),
+                       binColor(turn * kBins + toBin - 1)});
     }
     for (const Piece& piece : pieces) {
         painter.setPen(Qt::NoPen);
         painter.setBrush(piece.brush);
         painter.drawPath(piece.area);
+        painter.setBrush(piece.startColor);
+        painter.drawPath(piece.startCap);
+        painter.setBrush(piece.endColor);
+        painter.drawPath(piece.endCap);
         painter.setPen(linePen);
         painter.setBrush(Qt::NoBrush);
         painter.drawPath(piece.line);
@@ -551,7 +621,8 @@ void PowerSpiral::paintEvent(QPaintEvent*) {
     // changes
     const double ratio = devicePixelRatioF();
     const int active = std::min(kBlockTurns - 1, static_cast<int>(block_.fraction() * kBlockTurns));
-    StillKey stillKey{g.key, ratio, blink_, active, colorsKey, trackColor.rgba(), lineColor.rgba(), {}};
+    StillKey stillKey{g.key, ratio, blink_, active, colorsKey, trackColor.rgba(), lineColor.rgba(), {},
+                      turnFraction(active) > 0};
     for (int k = 0; k < kBlockTurns; ++k) {
         if (k != active) {
             const double fraction = turnFraction(k);

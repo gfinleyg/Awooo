@@ -86,7 +86,8 @@ Python app's own results (`tests\golden\`).
 - **The block and workout timer bars' fill sits inside a thin frame** of the bar's own color. The fill used to run to
   the bar's edges, where in the light themes (and with no theme) it was about the shade of the window behind it, so
   the filled part seemed to vanish into the background. Both bars and the "Block time remaining" box are rounded now,
-  like the workout timer boxes.
+  like the workout timer boxes, and the fill's leading edge is as round as its start as it slides along (the Python
+  app's was square). The `smooth_bar` parity scene and the workout screens' are meant to differ.
 
 - **The workout screen's zone legend shows both units, whatever the mode:** where each zone ends in RPM above its bar
   (the cadence zones, 40/65/90/115 rpm) and in watts below it (the FTP's power zones). The Python app's legend shows
@@ -127,6 +128,16 @@ Python app's own results (`tests\golden\`).
   the block info above when it pointed up. It's now drawn under the center, and on the RPM gauge it starts just under
   the gear, filling the gaps between the teeth. Scenes with an arc (`power_gauge`, `cadence_mode_gauge`, the workout and
   Musical Cadence screens', `ftp_colors_tab`, `ftp_mockup`) are meant to differ from the Python app's.
+
+- **The gauges' outer arcs and the power spiral's plot have round ends.** Each gauge's outer arc (filled up to the
+  needle) is rounded at both ends, as round as half its width, and starts a pixel clear of the 0 tick so the tick
+  doesn't hide its round start (the target arc is unchanged). The spiral's plot ends in a half circle as tall as the
+  plot is there (at the top cadence, filling the grey track's own round end), the line running round it: where the
+  block's first turn starts, at the point it has got to as it moves, and at the end of a finished turn until the next
+  one starts. Where one turn runs on into the next it carries straight on, and the outer ring stays square. The Python
+  app's were all cut off square. The `power_gauge`, `cadence_gauge`, `cadence_mode_gauge`, `hr_gauge`, `power_spiral`
+  and `grade_overlay` parity scenes, the workout, Musical Cadence and synopsis screens, `ftp_colors_tab` and
+  `ftp_mockup` are meant to differ from the Python app's.
 
 - **On the RPM gauge's beat the gear stays as it is, and the circles inside it pulse harder.** The Python app's gear
   swelled and brightened with the circles. Now only the circles do: they lose all their paleness instead of 60% of it,

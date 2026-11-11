@@ -81,14 +81,17 @@ void SmoothProgressBar::paintEvent(QPaintEvent*) {
     painter.setBrush(barColor());
     painter.drawRoundedRect(QRectF(rect()), radius, radius);
     // the fill sits inside a frame of the bar color, so it never touches the window behind (in a light theme the two
-    // can be the same shade), rounded at its start and square at its leading edge
+    // can be the same shade), rounded at its start and, as round, at its leading edge as it moves (a pill ending there,
+    // cut by the track: just started, only the sliver of it past the track's own round start shows)
     const double frame = frameWidth();
     const QRectF inner = QRectF(rect()).adjusted(frame, frame, -frame, -frame);
     const double innerRadius = std::max(0.0, radius - frame);
     QPainterPath track;
     track.addRoundedRect(inner, innerRadius, innerRadius);
     QPainterPath filled;
-    filled.addRect(QRectF(inner.x(), inner.y(), inner.width() * fraction, inner.height()));
+    filled.addRoundedRect(QRectF(inner.x() - 2 * innerRadius, inner.y(), inner.width() * fraction + 2 * innerRadius,
+                                 inner.height()),
+                          innerRadius, innerRadius);
     // (a path, not a clip, so the antialiasing blends the fractional pixel at the leading edge and the corners)
     painter.setBrush(chunkColor());
     painter.drawPath(track.intersected(filled));

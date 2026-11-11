@@ -18,6 +18,7 @@
 
 #include "HaloLabel.hpp"
 #include "Performance.hpp"
+#include "RoundedCorners.hpp"
 #include "PyCompat.hpp"
 #include "Theme.hpp"
 
@@ -27,6 +28,10 @@ namespace {
 
 double radians(double degrees) {
     return degrees * std::numbers::pi / 180;
+}
+
+double degrees(double radians) {
+    return radians * 180 / std::numbers::pi;
 }
 
 // a color in the theme's colors for it (its alpha kept)
@@ -461,32 +466,60 @@ int AnalogGauge::filledLength(int length) const {
 }
 
 QPolygonF AnalogGauge::createPolygonPie(double outerRadius, double innerRadius, double start, int length,
-                                        bool barGraph) {
+                                        bool barGraph, bool roundEnds, double startTrim) {
     // (one step a degree: other step sizes draw it wrong)
     constexpr double w = 360 / 360.;
     if (barGraph) {
         length = filledLength(length);
     }
-    const auto key = std::make_tuple(outerRadius, innerRadius, start, length, angleOffset_);
+    const auto key = std::make_tuple(outerRadius, innerRadius, start, length, angleOffset_, roundEnds, startTrim);
     if (const auto found = pieCache_.find(key); found != pieCache_.end()) {
         return found->second;
     }
     QPolygonF pie;
+    // the angles along it: from start (less startTrim) a degree at a time to start + length
+    QList<double> angles;
+    if (startTrim > 0) {
+        if (startTrim < length) {
+            angles.append(start + startTrim);
+        }
+        for (int i = 0; i <= length; ++i) {
+            if (w * i > startTrim + 1e-9) {
+                angles.append(w * i + start);
+            }
+        }
+    } else {
+        for (int i = 0; i <= length; ++i) {
+            angles.append(w * i + start);
+        }
+    }
+    if (angles.isEmpty()) {
+        return pie;
+    }
     double x = 0, y = 0;
     // the outer edge from start to start + length, then the inner one back
-    for (int i = 0; i <= length; ++i) {
-        const double t = w * i + start - angleOffset_;
+    for (const double angle : angles) {
+        const double t = angle - angleOffset_;
         x = outerRadius * std::cos(radians(t));
         y = outerRadius * std::sin(radians(t));
         pie.append(QPointF(x, y));
     }
-    for (int i = 0; i <= length; ++i) {
-        const double t = w * (length - i) + start - angleOffset_;
+    for (auto it = angles.rbegin(); it != angles.rend(); ++it) {
+        const double t = *it - angleOffset_;
         x = innerRadius * std::cos(radians(t));
         y = innerRadius * std::sin(radians(t));
         pie.append(QPointF(x, y));
     }
     pie.append(QPointF(x, y));
+    const int last = static_cast<int>(angles.size()) - 1;
+    if (roundEnds && last > 0) {
+        // all four corners alike, as round as half the band's width (a round end), or half its inner edge's length if
+        // that's shorter (a short band)
+        const double span = angles.back() - angles.front();
+        const double corner =
+            std::min(std::abs(outerRadius - innerRadius) / 2, std::min(outerRadius, innerRadius) * radians(span) / 2);
+        pie = rounded::corners(pie, {{0, corner}, {last, corner}, {last + 1, corner}, {2 * last + 1, corner}});
+    }
     // (a resize makes a new set of shapes; the old ones are dropped once there are plenty)
     if (pieCache_.size() >= 1000) {
         pieCache_.clear();
@@ -505,8 +538,14 @@ void AnalogGauge::drawFilledPolygon(int outlinePenWidth) {
         painter.setPen(pen_);
     }
     const double radius = widgetDiameter_ / 2 - pen_.width() / 2.0;
-    const QPolygonF band = createPolygonPie(radius * gaugeColorOuterRadiusFactor, radius * gaugeColorInnerRadiusFactor,
-                                            scaleAngleStartValue_, static_cast<int>(scaleAngleSize_));
+    const double outer = radius * gaugeColorOuterRadiusFactor;
+    const double inner = radius * gaugeColorInnerRadiusFactor;
+    // its round start begins just past the 0 tick (half the big ticks' 2 px pen, then a px gap), where the tick
+    // doesn't hide it: its tip, halfway across the band, that far round from the tick
+    constexpr double kTickClearPx = 2;
+    const double trim = degrees(kTickClearPx / ((outer + inner) / 2));
+    const QPolygonF band = createPolygonPie(outer, inner, scaleAngleStartValue_, static_cast<int>(scaleAngleSize_),
+                                            true, true, trim);
     QConicalGradient grad(QPointF(0, 0), -scaleAngleSize_ - scaleAngleStartValue_ + angleOffset_ - 1);
     for (const auto& [position, color] : scalePolygonColors_) {
         grad.setColorAt(position, color);
