@@ -142,7 +142,7 @@ private slots:
         // Workout Mode: the workout's name in the title on the workout screen and the synopsis
         display.build(QStringLiteral("workout"), kWorkoutFile, 40);
         display.showView(QStringLiteral("Synopsis"));
-        QCOMPARE(titleText(display), QStringLiteral("   Awooo Workout: ") + appState().workoutDisplayName());
+        QCOMPARE(titleText(display), QStringLiteral("   Awooo - ") + appState().workoutDisplayName());
         display.showView(QStringLiteral("Workout Picker"));
         QCOMPARE(titleText(display), QStringLiteral("   ") + display.view(QStringLiteral("Workout Picker"))->windowTitle().trimmed());
         // the pickers as screens of the window: no title bars of their own

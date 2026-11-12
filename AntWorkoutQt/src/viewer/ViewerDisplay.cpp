@@ -377,7 +377,7 @@ void DisplayWindow::showView(const QString& requested) {
     } else if (name == u"Workout" && !songTitle_.isEmpty()) {
         title = songTitle_;
     } else if ((name == u"Workout" || name == u"Synopsis") && mode_ != u"free" && !state.workoutDisplayName().isEmpty()) {
-        title = QStringLiteral("   %1: %2").arg(kAppTitle, state.workoutDisplayName());
+        title = QStringLiteral("   ") + state.workoutWindowTitle();
     } else {
         title = QStringLiteral("   ") + kAppTitle;
     }

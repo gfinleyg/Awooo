@@ -2172,10 +2172,10 @@ QString HudScreen::songTime(double seconds) {
     return QStringLiteral("%1:%2").arg(whole / 60).arg(whole % 60, 2, 10, QLatin1Char('0'));
 }
 
-// the title bar: <app>: Musical Cadence Mode: <song> : <time into it>/<its length> while the music plays
+// the title bar: Awooo - <workout>: <song> : <time into it>/<its length> while the music plays
 void HudScreen::updateSongTitle() {
     const AppState& state = appState();
-    QString text = QStringLiteral("Awooo Workout: ") + state.workoutDisplayName();
+    QString text = state.workoutWindowTitle();
     const std::optional<double> seconds = musicSeconds();
     if (seconds && !state.musicTracks.isEmpty()) {
         const MusicTrack& track = state.musicTracks[songAt(*seconds)];

@@ -110,6 +110,8 @@ struct AppState {
 
     // its title if the file has one, otherwise its filename
     QString workoutDisplayName() const { return workoutTitle.isEmpty() ? workoutFilenameShort : workoutTitle; }
+    // the title bar while a workout is loaded: "Awooo - <its name>"
+    QString workoutWindowTitle() const { return QStringLiteral("Awooo - ") + workoutDisplayName(); }
     // any speed and/or cadence source (combined 121, or discrete 122/123)
     bool anySpeedCadence() const { return antSpeedCadence || antCadence || antSpeed; }
     // the workout screen has a cadence gauge: a speed/cadence source, or Musical Cadence Mode (which falls back to

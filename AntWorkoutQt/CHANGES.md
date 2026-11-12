@@ -28,6 +28,10 @@ Python app's own results (`tests\golden\`).
 
 ## Screens
 
+- **The title bar reads "Awooo - <workout>"** while a workout is loaded (the workout and Synopsis screens, and the
+  LayoutViewer), where the Python app said "Awooo Workout: <workout>". The workout is its `T:` title, or its file name
+  when it has none; Musical Cadence Mode adds the song after it as before. With no workout it still says "Awooo
+  Workout".
 - **The chainring's spin and the heart's beat go at the last 3 seconds' average, picked up every 2 seconds,** so they
   stay steady when a cadence or heart rate reading jumps about. The chainring eases into each new speed over a second
   rather than jumping to it. The needle and the number still show each reading as it comes. The first reading starts

@@ -140,7 +140,7 @@ void MainWindow::setAppTitle(bool showWorkoutName) {
     const AppState& state = appState();
     const QString name = state.workoutDisplayName();
     const QString title =
-        showWorkoutName && state.workoutMode && !name.isEmpty() ? kAppTitle + QStringLiteral(": ") + name : kAppTitle;
+        showWorkoutName && state.workoutMode && !name.isEmpty() ? state.workoutWindowTitle() : kAppTitle;
     setWindowTitle(QStringLiteral("   ") + title);
     titleBar_->setTitle(QStringLiteral("   ") + title);
 }

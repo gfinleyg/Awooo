@@ -154,7 +154,7 @@ RidePreview::RidePreview(const QSize& size) : size_(size) {
         state.workoutDurationSeconds = workout->workout.seconds;
         state.workoutFilename = kPreviewWorkout;
         state.workoutFilenameShort = QFileInfo(kPreviewWorkout).fileName();
-        title = QStringLiteral("   %1: %2").arg(kAppTitle, state.workoutDisplayName());
+        title = QStringLiteral("   ") + state.workoutWindowTitle();
     } else {
         // (no workout file to show: the Free Ride screen)
         title = QStringLiteral("   ") + kAppTitle;
