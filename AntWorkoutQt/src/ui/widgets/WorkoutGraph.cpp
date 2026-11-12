@@ -7,6 +7,7 @@
 #include <QTime>
 
 #include <cmath>
+#include <utility>
 
 #include "PyCompat.hpp"
 #include "Theme.hpp"
@@ -80,6 +81,17 @@ WorkoutGraph::WorkoutGraph(QWidget* parent) : PlotWidget(parent) {
     plot->setLabel(AxisItem::Bottom, QStringLiteral("Time (minutes)"), axisStyles_);
     plot->showGrid(true, true);
 
+    // the bars' views first, under the lines' (z below theirs too), each following its scale's y range
+    const auto barsView = [this] {
+        auto* view = new plot::ViewBox;
+        view->setZValue(view->zValue() - 1);
+        view->setMouseEnabled(false, false);
+        scene()->addItem(view);
+        view->setXLink(vb());
+        return view;
+    };
+    powerBarsVBox_ = barsView();
+    hrCadenceBarsVBox_ = barsView();
     // the power, and the heart rate / cadence / speed, views over the plot's
     powerVBox_ = new plot::ViewBox;
     scene()->addItem(powerVBox_);
@@ -91,6 +103,11 @@ WorkoutGraph::WorkoutGraph(QWidget* parent) : PlotWidget(parent) {
     axis(AxisItem::Right)->linkToView(hrCadenceVBox_);
     hrCadenceVBox_->setXLink(vb());
     hrCadenceVBox_->setYRange(0, 220);
+    for (const auto& [scale, bars] : {std::pair{powerVBox_, powerBarsVBox_}, std::pair{hrCadenceVBox_, hrCadenceBarsVBox_}}) {
+        const auto follow = [bars](plot::ViewBox*, plot::Range range) { bars->setYRange(range.min, range.max, 0.0); };
+        connect(scale, &plot::ViewBox::yRangeChanged, bars, follow);
+        follow(scale, scale->yRange());
+    }
 
     connect(&Units::current(), &Units::changed, this, &WorkoutGraph::setSpeedLabel);
     connect(&theme::notifier(), &theme::Notifier::changed, this, &WorkoutGraph::applyTheme);
@@ -104,11 +121,15 @@ void WorkoutGraph::setSpeedLabel() {
 
 void WorkoutGraph::updateViews() {
     const QRectF geometry = vb()->sceneBoundingRect();
-    for (plot::ViewBox* view : {powerVBox_, hrCadenceVBox_}) {
+    for (plot::ViewBox* view : {powerBarsVBox_, hrCadenceBarsVBox_, powerVBox_, hrCadenceVBox_}) {
         view->setGeometry(geometry);
         // (the link again, now the two are the same shape)
         view->setXLink(vb());
     }
+}
+
+plot::ViewBox* WorkoutGraph::barsVBox(const plot::ViewBox* scale) const {
+    return scale == hrCadenceVBox_ ? hrCadenceBarsVBox_ : powerBarsVBox_;
 }
 
 // AppTheme.theme_graph: the title and axes ("Workout Stats", "Power (Watts)", the time ticks, ...) in the Text font

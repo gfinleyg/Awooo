@@ -203,6 +203,40 @@ private slots:
         QCOMPARE(graph.hrCadenceVBox()->xRange(), (plot::Range{200, 260}));
     }
 
+    // the bars' views follow their scale's y range, and every line shows over bars on either scale (a Musical Cadence
+    // Mode workout's targets are on the cadence axis, whose view is over the power line's)
+    void barsUnderEveryLine() {
+        WorkoutGraph graph;
+        graph.resize(800, 300);
+        graph.setBackground(QColor(Qt::black));
+        graph.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&graph));
+        graph.updateViews();
+        graph.setXRange(0, 100, 0.0);
+        graph.powerVBox()->setYRange(0, 400, 0.0);
+        graph.hrCadenceVBox()->setYRange(0, 200, 0.0);
+        QCOMPARE(graph.barsVBox(graph.powerVBox())->yRange(), graph.powerVBox()->yRange());
+        QCOMPARE(graph.barsVBox(graph.hrCadenceVBox())->yRange(), graph.hrCadenceVBox()->yRange());
+        QCOMPARE(graph.barsVBox(graph.powerVBox())->xRange(), graph.powerVBox()->xRange());
+        for (plot::ViewBox* scale : {graph.powerVBox(), graph.hrCadenceVBox()}) {
+            for (plot::ViewBox* lines : {graph.powerVBox(), graph.hrCadenceVBox()}) {
+                QVERIFY(graph.barsVBox(scale)->zValue() < lines->zValue());
+            }
+        }
+        // opaque cadence bars over the whole view, the power line through the middle of them
+        auto* bars = new plot::SolidColoredColumns;
+        bars->setData({0, 100}, {200}, {}, [](double, const QList<double>&) { return QColor(Qt::yellow); });
+        graph.barsVBox(graph.hrCadenceVBox())->addItem(bars);
+        auto* power = new plot::CurveItem;
+        power->setData({0, 100}, {200, 200}, plot::mkPen(Qt::blue, 6), std::nullopt);
+        graph.powerVBox()->addItem(power);
+        const QImage image = graph.grab().toImage();
+        const QPoint onLine = graph.mapFromScene(graph.powerVBox()->mapViewToScene(QPointF(50, 200)));
+        QCOMPARE(image.pixelColor(onLine * image.devicePixelRatio()), QColor(Qt::blue));
+        const QPoint offLine = graph.mapFromScene(graph.powerVBox()->mapViewToScene(QPointF(50, 100)));
+        QCOMPARE(image.pixelColor(offLine * image.devicePixelRatio()), QColor(Qt::yellow));
+    }
+
     // a click is offered to the clickable items under it, through the views over them, topmost first
     void clicksPassDownThroughViews() {
         WorkoutGraph graph;

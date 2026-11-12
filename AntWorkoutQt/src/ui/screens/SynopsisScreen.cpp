@@ -206,8 +206,9 @@ SynopsisScreen::SynopsisScreen(ant::AntBridge* bridge, SetupScreen* setup, Clock
     // (Segoe UI Black rather than Orbitron)
     theme::setSheet(stats_, QStringLiteral("background-color:#bdd6de; padding:8px; font: ") + kStatsFontSize +
                                 QStringLiteral(" 'Segoe UI Black';"));
+    // (under every line: in the bars' view for their axis)
     for (const TargetBar& bar : targetBars_) {
-        bar.vbox->addItem(bar.plot);
+        graph_->barsVBox(bar.vbox)->addItem(bar.plot);
     }
     graph_->powerVBox()->addItem(powerPlot_);
     if (showHr_) {

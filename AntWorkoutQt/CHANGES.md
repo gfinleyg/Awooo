@@ -197,6 +197,13 @@ Python app's own results (`tests\golden\`).
   over 3.5. A whole ride shares so few pixels that the thicker pens filled in the lines' wiggles, turning a noisy power
   line into a solid band. A highlighted line is still 4 over 8. The `synopsis_screen` parity scene is meant to differ.
 
+- **The power line shows over Musical Cadence Mode's target bars.** Those bars are cadences, so they're drawn on the
+  heart rate / cadence axis, whose layer of the graph was over the power line's. Wherever the power line ran inside a
+  bar, the bar covered it, leaving only a faint trace of its halo, and its current-reading diamond was hidden too. The
+  Python app (pyqtgraph, with the same layers) has the same problem. The target bars on either axis now have their own
+  layers, under every line, on the workout graph and the synopsis (a Musical Cadence Mode ride's bars). The
+  `cadence_screen` parity scene is meant to differ.
+
 - **The workout graph has no empty strips at its sides**: the power, heart rate and cadence lines start at its left
   edge (to within a reading: up to about a second, or 3 pixels) and the expected power runs to its right edge. The
   Python app's graph pads its 12 minutes by about 2% on each side (about 40 pixels at 1800 wide). The `hud_graph`

@@ -881,8 +881,10 @@ void HudScreen::buildGraph() {
     plot::AxisItem::Style styles = progressGraph_->axisStyles();
     styles[1].second = QStringLiteral("16px");
     progressGraph_->plotScreen()->setLabel(plot::AxisItem::Bottom, QStringLiteral("Time (minutes)"), styles);
-    // the workout's target bars; Musical Cadence Mode's targets are cadences, drawn on the cadence axis
-    plot::ViewBox* targetVBox = cadenceMode_ ? progressGraph_->hrCadenceVBox() : progressGraph_->powerVBox();
+    // the workout's target bars; Musical Cadence Mode's targets are cadences, drawn on the cadence axis (in the bars'
+    // view for it, under every line)
+    plot::ViewBox* targetVBox =
+        progressGraph_->barsVBox(cadenceMode_ ? progressGraph_->hrCadenceVBox() : progressGraph_->powerVBox());
     workoutPowerPlot_ = new plot::SolidColoredColumns;
     // (what's still to come, paused or not)
     workoutPowerPlot_->setHatched(true);

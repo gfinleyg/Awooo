@@ -155,9 +155,9 @@ QWidget* sceneHudGraph() {
     styles[1].second = QStringLiteral("16px");
     graph->plotScreen()->setLabel(plot::AxisItem::Bottom, QStringLiteral("Time (minutes)"), styles);
     auto* upcoming = new plot::SolidColoredColumns;
-    graph->powerVBox()->addItem(upcoming);
+    graph->barsVBox(graph->powerVBox())->addItem(upcoming);
     auto* completed = new plot::SolidColoredColumns;
-    graph->powerVBox()->addItem(completed);
+    graph->barsVBox(graph->powerVBox())->addItem(completed);
     auto* powerPlot = new plot::CurveItem;
     graph->powerVBox()->addItem(powerPlot);
     auto* hrPlot = new plot::CurveItem;

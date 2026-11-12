@@ -2,7 +2,8 @@
 
 // The graph of a workout (ClassWorkoutGraph.py), the HUD's progress graph and the synopsis graph: power on the left
 // axis; heart rate, cadence and speed on the right, over one time axis. Each scale has its own view box over the plot's,
-// x-linked to it. Its title and axes follow the theme's Text font row and colors (applyTheme, AppTheme.theme_graph),
+// x-linked to it, and under both of those a view box for that scale's target bars (barsVBox): a view box draws all its
+// items over the ones of a view box under it, so the bars on either scale stay under every sensor line. Its title and axes follow the theme's Text font row and colors (applyTheme, AppTheme.theme_graph),
 // again whenever the theme changes.
 
 #include <optional>
@@ -35,6 +36,9 @@ public:
     plot::PlotItem* plotScreen() const { return plotItem(); }
     plot::ViewBox* powerVBox() const { return powerVBox_; }
     plot::ViewBox* hrCadenceVBox() const { return hrCadenceVBox_; }
+    // the view box for bars on scale's axis (powerVBox or hrCadenceVBox): its y range follows scale's, and it's under
+    // both scales' view boxes, so their lines show over it
+    plot::ViewBox* barsVBox(const plot::ViewBox* scale) const;
     plot::AxisItem* axis(plot::AxisItem::Orientation orientation) const { return plotItem()->axis(orientation); }
 
     // the axis titles' style ("color", "font-size")
@@ -64,6 +68,8 @@ private:
     plot::AxisItem::Style axisStyles_;
     plot::ViewBox* powerVBox_;
     plot::ViewBox* hrCadenceVBox_;
+    plot::ViewBox* powerBarsVBox_;
+    plot::ViewBox* hrCadenceBarsVBox_;
     std::optional<TitleLook> titleLook_;
     std::optional<AxisLook> axisLooks_[4];
 };
